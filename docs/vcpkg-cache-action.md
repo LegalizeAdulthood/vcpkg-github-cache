@@ -638,17 +638,6 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Action Skeleton
-
-Create the action repository with:
-
-- `setup/action.yml`;
-- `analyze/action.yml`;
-- shared TypeScript source;
-- build step that emits checked-in `dist` files;
-- unit test framework;
-- lint and format checks.
-
 ### Slice 2: Setup Action
 
 Implement:

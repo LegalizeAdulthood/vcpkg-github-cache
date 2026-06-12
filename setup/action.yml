@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Copyright 2026 Richard Thomson
+
+name: Setup vcpkg GitHub Packages cache
+description: Prepare a GitHub Packages NuGet binary cache for vcpkg.
+inputs:
+  token:
+    description: GitHub token or PAT used for GitHub Packages.
+    required: true
+  token-kind:
+    description: "Token kind: github or pat."
+    default: github
+  username:
+    description: NuGet username. Defaults depend on token kind.
+  feed-owner:
+    description: GitHub owner that hosts the NuGet feed.
+  vcpkg-root:
+    description: Path to the vcpkg checkout.
+    default: vcpkg
+  bootstrap:
+    description: Bootstrap vcpkg before configuring the cache.
+    default: "false"
+  install-nuget:
+    description: Fetch NuGet with vcpkg when needed.
+    default: "true"
+  install-mono:
+    description: Install Mono when nuget.exe needs it on Unix.
+    default: "true"
+  source-name:
+    description: NuGet source name.
+    default: GitHubPackages
+  access:
+    description: vcpkg binary source access mode.
+    default: readwrite
+  debug:
+    description: Emit additional diagnostics.
+    default: "false"
+  trace:
+    description: Trace action decisions.
+    default: "false"
+outputs:
+  feed-url:
+    description: GitHub Packages NuGet feed URL.
+  binary-sources:
+    description: Value for VCPKG_BINARY_SOURCES.
+  nuget-command:
+    description: NuGet command selected by setup.
+  vcpkg-version:
+    description: Bootstrapped vcpkg tool version.
+  diagnosis:
+    description: Short setup diagnosis.
+runs:
+  using: node24
+  main: dist/index.js

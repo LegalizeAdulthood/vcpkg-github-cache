@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Copyright 2026 Richard Thomson
+
+name: Analyze vcpkg GitHub Packages cache
+description: Diagnose vcpkg GitHub Packages NuGet cache health.
+inputs:
+  token:
+    description: GitHub token or PAT used for GitHub Packages.
+    required: true
+  token-kind:
+    description: "Token kind: github or pat."
+    default: github
+  username:
+    description: NuGet username. Defaults depend on token kind.
+  feed-owner:
+    description: GitHub owner that hosts the NuGet feed.
+  vcpkg-root:
+    description: Path to the vcpkg checkout.
+    default: vcpkg
+  build-log:
+    description: Optional path to a captured build log.
+  package-config-glob:
+    description: Glob used to find packages.config files.
+    default: "**/packages.config"
+  fail-on:
+    description: Failure policy.
+    default: never
+  debug:
+    description: Emit additional diagnostics.
+    default: "false"
+  trace:
+    description: Trace action decisions.
+    default: "false"
+outputs:
+  cache-status:
+    description: High-level cache result.
+  diagnosis:
+    description: Short human-readable diagnosis.
+  requested-count:
+    description: Package count from packages.config, if known.
+  restored-count:
+    description: Restored package count, if known.
+  built-count:
+    description: vcpkg package build count, if known.
+  uploaded-count:
+    description: Successful binary cache upload count, if known.
+  failure-kind:
+    description: Normalized failure kind, if any.
+  diagnostics-artifact:
+    description: Diagnostics artifact name, when debug is enabled.
+runs:
+  using: node24
+  main: dist/index.js
