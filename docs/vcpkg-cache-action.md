@@ -50,6 +50,9 @@ Provide two JavaScript actions in one action repository:
 - `setup`: prepare NuGet, configure the feed, and emit cache outputs.
 - `analyze`: inspect cache health after the build.
 
+Action repository: `LegalizeAdulthood/vcpkg-github-cache.git`.
+Git URL: `https://github.com/LegalizeAdulthood/vcpkg-github-cache.git`.
+
 Do not wrap caller build commands.  That is too intrusive and slows
 adoption.  Callers keep their own checkout, bootstrap, build, test, and
 artifact steps.
@@ -81,7 +84,7 @@ steps:
 - run: ./vcpkg/bootstrap-vcpkg.sh
 
 - id: vc
-  uses: owner/vcpkg-github-cache/setup@v1
+  uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
   with:
     token: ${{ github.token }}
 
@@ -90,7 +93,7 @@ steps:
     VCPKG_BINARY_SOURCES: ${{ steps.vc.outputs.binary-sources }}
 
 - if: always()
-  uses: owner/vcpkg-github-cache/analyze@v1
+  uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
   with:
     token: ${{ github.token }}
     build-log: build.log
@@ -101,7 +104,7 @@ feeds outside the workflow repository.  It should be explicit:
 
 ```yaml
 - id: vc
-  uses: owner/vcpkg-github-cache/setup@v1
+  uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
   with:
     token-kind: pat
     token: ${{ secrets.PACKAGES_TOKEN }}
