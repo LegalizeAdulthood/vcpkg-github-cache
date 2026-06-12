@@ -646,15 +646,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Analyzer Package Discovery
-
-Implement:
-
-- `packages.config` discovery;
-- package identity parsing;
-- requested package count output.
-
-### Slice 2: Analyzer Live Probes
+### Slice 1: Analyzer Live Probes
 
 Implement:
 
@@ -663,7 +655,7 @@ Implement:
 - vcpkg NuGet command probe;
 - NuGet version and source list probes.
 
-### Slice 3: Analyzer Restore Probe
+### Slice 2: Analyzer Restore Probe
 
 Implement:
 
@@ -672,7 +664,7 @@ Implement:
 - restored package count output;
 - restore auth and tooling evidence.
 
-### Slice 4: Analyzer Build Log Parser
+### Slice 3: Analyzer Build Log Parser
 
 Implement:
 
@@ -680,7 +672,7 @@ Implement:
 - restore, build, and upload count extraction;
 - auth and quota pattern extraction.
 
-### Slice 5: Analyzer Diagnosis
+### Slice 4: Analyzer Diagnosis
 
 Implement:
 
@@ -688,46 +680,46 @@ Implement:
 - `cache-status` and `failure-kind` outputs;
 - `fail-on` policy.
 
-### Slice 6: Trace Logging
+### Slice 5: Trace Logging
 
 Implement:
 
 - trace logging.
 
-### Slice 7: Diagnostic Artifacts
+### Slice 6: Diagnostic Artifacts
 
 Implement:
 
 - sanitized diagnostic artifact assembly;
 - build log extracts.
 
-### Slice 8: GitHub Context Diagnostics
+### Slice 7: GitHub Context Diagnostics
 
 Implement:
 
 - safe GitHub context dump.
 
-### Slice 9: NuGet Config Diagnostics
+### Slice 8: NuGet Config Diagnostics
 
 Implement:
 
 - sanitized NuGet config dump.
 
-### Slice 10: Package Visibility Metadata
+### Slice 9: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 11: Package Quota Metadata
+### Slice 10: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 12: Documentation
+### Slice 11: Documentation
 
 Document:
 
@@ -735,7 +727,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 13: Examples
+### Slice 12: Examples
 
 Document:
 

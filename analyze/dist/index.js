@@ -31191,12 +31191,171 @@ function resolveUsername(input, tokenKind, feedOwner, actor) {
     return actor?.trim() || feedOwner;
 }
 
-;// CONCATENATED MODULE: external "node:fs"
-const external_node_fs_namespaceObject = require("node:fs");
 ;// CONCATENATED MODULE: external "node:fs/promises"
 const promises_namespaceObject = require("node:fs/promises");
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = require("node:path");
+;// CONCATENATED MODULE: ./src/shared/package-config.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+const DEFAULT_IGNORED_DIRECTORY_NAMES = new Set([
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+]);
+const DEFAULT_MAX_FILES = 100;
+function compareText(left, right) {
+    if (left < right) {
+        return -1;
+    }
+    if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+function normalizeGlobPath(value) {
+    return value.replaceAll("\\", "/").replace(/^\.\/+/, "");
+}
+function escapeRegex(value) {
+    return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+function globToRegex(glob) {
+    const normalized = normalizeGlobPath(glob.trim() || "**/packages.config");
+    let pattern = "";
+    for (let index = 0; index < normalized.length;) {
+        if (normalized.startsWith("**/", index)) {
+            pattern += "(?:.*/)?";
+            index += 3;
+        }
+        else if (normalized.startsWith("**", index)) {
+            pattern += ".*";
+            index += 2;
+        }
+        else if (normalized[index] === "*") {
+            pattern += "[^/]*";
+            index += 1;
+        }
+        else if (normalized[index] === "?") {
+            pattern += "[^/]";
+            index += 1;
+        }
+        else {
+            pattern += escapeRegex(normalized[index]);
+            index += 1;
+        }
+    }
+    return new RegExp(`^${pattern}$`, "i");
+}
+function packageIdentityKey(identity) {
+    return `${identity.id}@${identity.version}`;
+}
+function decodeXmlAttribute(value) {
+    return value.replace(/&(#x[0-9a-f]+|#[0-9]+|amp|apos|gt|lt|quot);/gi, (entity, body) => {
+        const normalizedBody = body.toLowerCase();
+        if (normalizedBody === "amp") {
+            return "&";
+        }
+        if (normalizedBody === "apos") {
+            return "'";
+        }
+        if (normalizedBody === "gt") {
+            return ">";
+        }
+        if (normalizedBody === "lt") {
+            return "<";
+        }
+        if (normalizedBody === "quot") {
+            return '"';
+        }
+        if (normalizedBody.startsWith("#x")) {
+            return String.fromCodePoint(Number.parseInt(normalizedBody.slice(2), 16));
+        }
+        if (normalizedBody.startsWith("#")) {
+            return String.fromCodePoint(Number.parseInt(normalizedBody.slice(1), 10));
+        }
+        return entity;
+    });
+}
+function parseXmlAttributes(value) {
+    const attributes = new Map();
+    const attributePattern = /([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(["'])(.*?)\2/g;
+    let match;
+    while ((match = attributePattern.exec(value)) !== null) {
+        attributes.set(match[1].toLowerCase(), decodeXmlAttribute(match[3]));
+    }
+    return attributes;
+}
+function parsePackagesConfig(content) {
+    const packages = [];
+    const packagePattern = /<package\b([^>]*)\/?>/gi;
+    let match;
+    while ((match = packagePattern.exec(content)) !== null) {
+        const attributes = parseXmlAttributes(match[1]);
+        const id = attributes.get("id")?.trim();
+        const version = attributes.get("version")?.trim();
+        if (id && version) {
+            packages.push({ id, version });
+        }
+    }
+    return packages;
+}
+async function discoverPackageConfigFiles(root, glob, options) {
+    const ignoredDirectoryNames = options.ignoredDirectoryNames ?? DEFAULT_IGNORED_DIRECTORY_NAMES;
+    const maxFiles = options.maxFiles ?? DEFAULT_MAX_FILES;
+    const matcher = globToRegex(glob);
+    const files = [];
+    async function visit(directory) {
+        if (files.length >= maxFiles) {
+            return;
+        }
+        const entries = await (0,promises_namespaceObject.readdir)(directory, { withFileTypes: true });
+        entries.sort((left, right) => compareText(left.name, right.name));
+        for (const entry of entries) {
+            if (files.length >= maxFiles) {
+                return;
+            }
+            const entryPath = external_node_path_namespaceObject.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (!ignoredDirectoryNames.has(entry.name)) {
+                    await visit(entryPath);
+                }
+            }
+            else if (entry.isFile()) {
+                const relativePath = normalizeGlobPath(external_node_path_namespaceObject.relative(root, entryPath));
+                if (matcher.test(relativePath)) {
+                    files.push(entryPath);
+                }
+            }
+        }
+    }
+    await visit(root);
+    return files.sort(compareText);
+}
+async function discoverPackageConfigs(root, glob, options = {}) {
+    const paths = await discoverPackageConfigFiles(root, glob, options);
+    const files = [];
+    const requestedPackages = new Map();
+    for (const filePath of paths) {
+        const packages = parsePackagesConfig(await (0,promises_namespaceObject.readFile)(filePath, "utf8"));
+        files.push({ packages, path: filePath });
+        for (const packageIdentity of packages) {
+            requestedPackages.set(packageIdentityKey(packageIdentity), packageIdentity);
+        }
+    }
+    return {
+        files,
+        requestedPackages: [...requestedPackages.values()].sort((left, right) => compareText(packageIdentityKey(left), packageIdentityKey(right))),
+    };
+}
+
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = require("node:fs");
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = require("node:child_process");
 ;// CONCATENATED MODULE: ./src/shared/command.ts
@@ -31365,12 +31524,13 @@ function buildNugetCommand(nugetPath, platform = process.platform) {
 
 
 
+
 const CACHE_STATUS = "unknown";
 const DIAGNOSIS = "analyzer skeleton: no cache probes were run";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
-async function writeSummary(feedUrl) {
+async function writeSummary(feedUrl, packageConfigCount, requestedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -31379,6 +31539,10 @@ async function writeSummary(feedUrl) {
         .addRaw(DIAGNOSIS)
         .addEOL()
         .addRaw(`Feed: ${feedUrl}`)
+        .addEOL()
+        .addRaw(`packages.config files: ${packageConfigCount}`)
+        .addEOL()
+        .addRaw(`Requested packages: ${requestedCount}`)
         .addEOL()
         .write();
 }
@@ -31395,9 +31559,11 @@ async function run() {
     const packageConfigGlob = optionalInput("package-config-glob", "**/packages.config");
     const failOn = optionalInput("fail-on", "never");
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
+    const packageConfigs = await discoverPackageConfigs(process.env.GITHUB_WORKSPACE ?? process.cwd(), packageConfigGlob);
+    const requestedCount = packageConfigs.requestedPackages.length;
     setOutput("cache-status", CACHE_STATUS);
     setOutput("diagnosis", DIAGNOSIS);
-    setOutput("requested-count", "");
+    setOutput("requested-count", requestedCount.toString());
     setOutput("restored-count", "");
     setOutput("built-count", "");
     setOutput("uploaded-count", "");
@@ -31407,6 +31573,8 @@ async function run() {
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
+    info(`packages.config files: ${packageConfigs.files.length}`);
+    info(`Requested packages: ${requestedCount}`);
     if (debug || trace) {
         info(`Debug: ${debug ? "enabled" : "disabled"}`);
         info(`Trace: ${trace ? "enabled" : "disabled"}`);
@@ -31418,8 +31586,11 @@ async function run() {
         info(`build-log: ${buildLog}`);
         info(`package-config-glob: ${packageConfigGlob}`);
         info(`fail-on: ${failOn}`);
+        for (const packageConfig of packageConfigs.files) {
+            info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
+        }
     }
-    await writeSummary(feedUrl);
+    await writeSummary(feedUrl, packageConfigs.files.length, requestedCount);
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));
