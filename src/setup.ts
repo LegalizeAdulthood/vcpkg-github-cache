@@ -14,7 +14,9 @@ import {
   resolveUsername,
 } from "./shared/inputs";
 import {
+  buildNugetCommand,
   bootstrapVcpkg,
+  fetchNuget,
   readVcpkgVersion,
   resolveVcpkgPaths,
   verifyVcpkgExecutable,
@@ -28,6 +30,7 @@ function optionalInput(name: string, defaultValue = ""): string {
 
 async function writeSummary(
   feedUrl: string,
+  nugetCommand: string,
   vcpkgRoot: string,
   vcpkgVersion: string,
 ): Promise<void> {
@@ -44,6 +47,8 @@ async function writeSummary(
     .addRaw(`vcpkg root: ${vcpkgRoot}`)
     .addEOL()
     .addRaw(`vcpkg version: ${vcpkgVersion}`)
+    .addEOL()
+    .addRaw(`NuGet command: ${nugetCommand}`)
     .addEOL()
     .write();
 }
@@ -66,6 +71,7 @@ export async function run(): Promise<void> {
   const feedUrl = buildFeedUrl(feedOwner);
   const bootstrap = parseBoolean(optionalInput("bootstrap", "false"));
   const debug = parseBoolean(optionalInput("debug", "false"));
+  const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
   const trace = parseBoolean(optionalInput("trace", "false"));
   const vcpkg = resolveVcpkgPaths(
     optionalInput("vcpkg-root", "vcpkg"),
@@ -80,6 +86,7 @@ export async function run(): Promise<void> {
   if (trace) {
     core.info(`Feed URL: ${feedUrl}`);
     core.info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
+    core.info(`Fetch NuGet: ${installNuget ? "true" : "false"}`);
     core.info(`vcpkg executable: ${vcpkg.executable}`);
     core.info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
   }
@@ -91,11 +98,14 @@ export async function run(): Promise<void> {
 
   await verifyVcpkgExecutable(vcpkg.executable);
   const vcpkgVersion = await readVcpkgVersion(vcpkg);
+  const nugetCommand = installNuget
+    ? buildNugetCommand(await fetchNuget(vcpkg)).display
+    : "";
   const binarySources = buildDisabledBinarySources();
 
   core.setOutput("feed-url", feedUrl);
   core.setOutput("binary-sources", binarySources);
-  core.setOutput("nuget-command", "");
+  core.setOutput("nuget-command", nugetCommand);
   core.setOutput("vcpkg-version", vcpkgVersion);
   core.setOutput("diagnosis", DIAGNOSIS);
 
@@ -108,10 +118,10 @@ export async function run(): Promise<void> {
 
   if (trace) {
     core.info(`binary-sources: ${binarySources}`);
-    core.info("nuget-command: ");
+    core.info(`nuget-command: ${nugetCommand}`);
   }
 
-  await writeSummary(feedUrl, vcpkg.root, vcpkgVersion);
+  await writeSummary(feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
 }
 
 void run().catch((error: unknown) => {

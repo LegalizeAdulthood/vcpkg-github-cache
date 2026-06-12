@@ -8,11 +8,17 @@ import { constants } from "node:fs";
 import { access } from "node:fs/promises";
 import * as path from "node:path";
 
-import { runCommand } from "./command";
+import { formatCommand, runCommand } from "./command";
 
 export interface BootstrapCommand {
   readonly args: readonly string[];
   readonly cwd: string;
+  readonly file: string;
+}
+
+export interface NugetCommand {
+  readonly args: readonly string[];
+  readonly display: string;
   readonly file: string;
 }
 
@@ -94,4 +100,45 @@ export async function readVcpkgVersion(vcpkg: VcpkgPaths): Promise<string> {
     cwd: vcpkg.root,
   });
   return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
+}
+
+export function extractFetchedNugetPath(output: string): string {
+  const pathLine = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => line.replace(/^"(.*)"$/, "$1"))
+    .filter((line) => line.length > 0)
+    .find((line) => /nuget\.exe$/i.test(line));
+
+  if (!pathLine) {
+    throw new Error("vcpkg fetch nuget did not report a nuget.exe path");
+  }
+
+  return pathLine;
+}
+
+export async function fetchNuget(vcpkg: VcpkgPaths): Promise<string> {
+  const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
+    cwd: vcpkg.root,
+  });
+  return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
+}
+
+export function buildNugetCommand(
+  nugetPath: string,
+  platform: NodeJS.Platform = process.platform,
+): NugetCommand {
+  if (platform === "win32") {
+    return {
+      args: [],
+      display: formatCommand(nugetPath, []),
+      file: nugetPath,
+    };
+  }
+
+  return {
+    args: [nugetPath],
+    display: formatCommand("mono", [nugetPath]),
+    file: "mono",
+  };
 }

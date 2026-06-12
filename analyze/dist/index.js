@@ -31206,8 +31206,14 @@ const external_node_child_process_namespaceObject = require("node:child_process"
  * Copyright 2026 Richard Thomson
  */
 
-function formatCommand(command, args) {
-    return [command, ...args].join(" ");
+function quoteCommandArgument(value) {
+    if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
+        return value;
+    }
+    return `"${value.replaceAll('"', '\\"')}"`;
+}
+function command_formatCommand(command, args) {
+    return [command, ...args].map(quoteCommandArgument).join(" ");
 }
 async function command_runCommand(command, args, options = {}) {
     return await new Promise((resolve, reject) => {
@@ -31235,7 +31241,7 @@ async function command_runCommand(command, args, options = {}) {
             const exitCode = code ?? 1;
             const detail = stderr.trim() || stdout.trim();
             const message = detail ? `: ${detail}` : "";
-            reject(new Error(`${formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
+            reject(new Error(`${command_formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
         });
     });
 }
@@ -31303,6 +31309,38 @@ async function readVcpkgVersion(vcpkg) {
         cwd: vcpkg.root,
     });
     return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
+}
+function extractFetchedNugetPath(output) {
+    const pathLine = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .map((line) => line.replace(/^"(.*)"$/, "$1"))
+        .filter((line) => line.length > 0)
+        .find((line) => /nuget\.exe$/i.test(line));
+    if (!pathLine) {
+        throw new Error("vcpkg fetch nuget did not report a nuget.exe path");
+    }
+    return pathLine;
+}
+async function fetchNuget(vcpkg) {
+    const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
+        cwd: vcpkg.root,
+    });
+    return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
+}
+function buildNugetCommand(nugetPath, platform = process.platform) {
+    if (platform === "win32") {
+        return {
+            args: [],
+            display: formatCommand(nugetPath, []),
+            file: nugetPath,
+        };
+    }
+    return {
+        args: [nugetPath],
+        display: formatCommand("mono", [nugetPath]),
+        file: "mono",
+    };
 }
 
 ;// CONCATENATED MODULE: ./src/analyze.ts

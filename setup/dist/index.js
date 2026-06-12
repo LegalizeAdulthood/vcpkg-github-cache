@@ -31206,8 +31206,14 @@ const external_node_child_process_namespaceObject = require("node:child_process"
  * Copyright 2026 Richard Thomson
  */
 
+function quoteCommandArgument(value) {
+    if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
+        return value;
+    }
+    return `"${value.replaceAll('"', '\\"')}"`;
+}
 function formatCommand(command, args) {
-    return [command, ...args].join(" ");
+    return [command, ...args].map(quoteCommandArgument).join(" ");
 }
 async function runCommand(command, args, options = {}) {
     return await new Promise((resolve, reject) => {
@@ -31304,6 +31310,38 @@ async function readVcpkgVersion(vcpkg) {
     });
     return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
 }
+function extractFetchedNugetPath(output) {
+    const pathLine = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .map((line) => line.replace(/^"(.*)"$/, "$1"))
+        .filter((line) => line.length > 0)
+        .find((line) => /nuget\.exe$/i.test(line));
+    if (!pathLine) {
+        throw new Error("vcpkg fetch nuget did not report a nuget.exe path");
+    }
+    return pathLine;
+}
+async function fetchNuget(vcpkg) {
+    const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
+        cwd: vcpkg.root,
+    });
+    return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
+}
+function buildNugetCommand(nugetPath, platform = process.platform) {
+    if (platform === "win32") {
+        return {
+            args: [],
+            display: formatCommand(nugetPath, []),
+            file: nugetPath,
+        };
+    }
+    return {
+        args: [nugetPath],
+        display: formatCommand("mono", [nugetPath]),
+        file: "mono",
+    };
+}
 
 ;// CONCATENATED MODULE: ./src/setup.ts
 /*
@@ -31319,7 +31357,7 @@ const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
-async function writeSummary(feedUrl, vcpkgRoot, vcpkgVersion) {
+async function writeSummary(feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -31333,6 +31371,8 @@ async function writeSummary(feedUrl, vcpkgRoot, vcpkgVersion) {
         .addEOL()
         .addRaw(`vcpkg version: ${vcpkgVersion}`)
         .addEOL()
+        .addRaw(`NuGet command: ${nugetCommand}`)
+        .addEOL()
         .write();
 }
 async function run() {
@@ -31344,6 +31384,7 @@ async function run() {
     const feedUrl = buildFeedUrl(feedOwner);
     const bootstrap = parseBoolean(optionalInput("bootstrap", "false"));
     const debug = parseBoolean(optionalInput("debug", "false"));
+    const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
     const trace = parseBoolean(optionalInput("trace", "false"));
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     if (debug || trace) {
@@ -31353,6 +31394,7 @@ async function run() {
     if (trace) {
         info(`Feed URL: ${feedUrl}`);
         info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
+        info(`Fetch NuGet: ${installNuget ? "true" : "false"}`);
         info(`vcpkg executable: ${vcpkg.executable}`);
         info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
     }
@@ -31362,10 +31404,13 @@ async function run() {
     }
     await verifyVcpkgExecutable(vcpkg.executable);
     const vcpkgVersion = await readVcpkgVersion(vcpkg);
+    const nugetCommand = installNuget
+        ? buildNugetCommand(await fetchNuget(vcpkg)).display
+        : "";
     const binarySources = buildDisabledBinarySources();
     setOutput("feed-url", feedUrl);
     setOutput("binary-sources", binarySources);
-    setOutput("nuget-command", "");
+    setOutput("nuget-command", nugetCommand);
     setOutput("vcpkg-version", vcpkgVersion);
     setOutput("diagnosis", DIAGNOSIS);
     info(DIAGNOSIS);
@@ -31376,9 +31421,9 @@ async function run() {
     info(`vcpkg version: ${vcpkgVersion}`);
     if (trace) {
         info(`binary-sources: ${binarySources}`);
-        info("nuget-command: ");
+        info(`nuget-command: ${nugetCommand}`);
     }
-    await writeSummary(feedUrl, vcpkg.root, vcpkgVersion);
+    await writeSummary(feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));

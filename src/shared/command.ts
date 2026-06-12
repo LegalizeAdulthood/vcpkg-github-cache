@@ -16,11 +16,19 @@ export interface CommandOptions {
   readonly env?: NodeJS.ProcessEnv;
 }
 
+export function quoteCommandArgument(value: string): string {
+  if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replaceAll('"', '\\"')}"`;
+}
+
 export function formatCommand(
   command: string,
   args: readonly string[],
 ): string {
-  return [command, ...args].join(" ");
+  return [command, ...args].map(quoteCommandArgument).join(" ");
 }
 
 export async function runCommand(

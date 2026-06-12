@@ -11,6 +11,8 @@ import { describe, expect, test } from "vitest";
 import {
   bootstrapScriptName,
   buildBootstrapCommand,
+  buildNugetCommand,
+  extractFetchedNugetPath,
   extractVcpkgVersion,
   resolveVcpkgPaths,
   vcpkgExecutableName,
@@ -61,5 +63,35 @@ describe("vcpkg helpers", () => {
     expect(extractVcpkgVersion("\r\nvcpkg package manager 2026\r\nmore")).toBe(
       "vcpkg package manager 2026",
     );
+  });
+
+  test("extracts fetched NuGet path from vcpkg output", () => {
+    expect(
+      extractFetchedNugetPath(
+        "Downloading NuGet\r\nC:\\vcpkg\\downloads\\tools\\nuget.exe\r\n",
+      ),
+    ).toBe("C:\\vcpkg\\downloads\\tools\\nuget.exe");
+    expect(extractFetchedNugetPath('"/tmp/downloads/nuget.exe"\n')).toBe(
+      "/tmp/downloads/nuget.exe",
+    );
+  });
+
+  test("rejects NuGet fetch output without a path", () => {
+    expect(() => extractFetchedNugetPath("Downloading NuGet\r\n")).toThrow(
+      /nuget\.exe path/,
+    );
+  });
+
+  test("builds platform-specific NuGet commands", () => {
+    expect(buildNugetCommand("C:\\Program Files\\nuget.exe", "win32")).toEqual({
+      args: [],
+      display: '"C:\\Program Files\\nuget.exe"',
+      file: "C:\\Program Files\\nuget.exe",
+    });
+    expect(buildNugetCommand("/tmp/nuget.exe", "linux")).toEqual({
+      args: ["/tmp/nuget.exe"],
+      display: "mono /tmp/nuget.exe",
+      file: "mono",
+    });
   });
 });
