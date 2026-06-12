@@ -31269,7 +31269,7 @@ function resolveVcpkgPaths(input, workspace, platform = process.platform) {
 function buildBootstrapCommand(vcpkg, platform = process.platform) {
     if (platform === "win32") {
         return {
-            args: ["/d", "/s", "/c", `"${vcpkg.bootstrapScript}"`],
+            args: ["/d", "/s", "/c", "call", vcpkg.bootstrapScript],
             cwd: vcpkg.root,
             file: "cmd.exe",
         };

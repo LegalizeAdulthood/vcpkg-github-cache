@@ -51,7 +51,8 @@ describe("vcpkg helpers", () => {
       "/d",
       "/s",
       "/c",
-      `"${paths.bootstrapScript}"`,
+      "call",
+      paths.bootstrapScript,
     ]);
     expect(command.cwd).toBe(paths.root);
   });
