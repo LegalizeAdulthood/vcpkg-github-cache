@@ -31294,6 +31294,10 @@ async function ensureMonoAvailable(install, platform = process.platform, run = r
     return { installed: true, required: true };
 }
 
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/nuget.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31301,8 +31305,10 @@ async function ensureMonoAvailable(install, platform = process.platform, run = r
  * Copyright 2026 Richard Thomson
  */
 
+
+
 function buildNugetSourceRemoveArgs(sourceName) {
-    return ["sources", "Remove", "-Name", sourceName];
+    return ["sources", "Remove", "-Name", sourceName, "-NonInteractive"];
 }
 function buildNugetSourceAddArgs(settings) {
     return [
@@ -31317,41 +31323,86 @@ function buildNugetSourceAddArgs(settings) {
         settings.username,
         "-Password",
         settings.token,
+        "-ValidAuthenticationTypes",
+        "basic",
+        "-NonInteractive",
+        "-Verbosity",
+        "detailed",
     ];
 }
 function buildNugetSetApiKeyArgs(feedUrl, token) {
-    return ["setapikey", token, "-Source", feedUrl];
+    return [
+        "setapikey",
+        token,
+        "-Source",
+        feedUrl,
+        "-NonInteractive",
+        "-Verbosity",
+        "detailed",
+    ];
 }
-async function runNuget(nuget, args, run) {
-    await run(nuget.file, [...nuget.args, ...args]);
-}
-async function configureNugetSource(nuget, settings, run = runCommand) {
-    try {
-        await runNuget(nuget, buildNugetSourceRemoveArgs(settings.sourceName), run);
+function nugetConfigDirectories(platform = process.platform, env = process.env) {
+    if (platform === "win32") {
+        return env.APPDATA ? [external_node_path_namespaceObject.win32.join(env.APPDATA, "NuGet")] : [];
     }
-    catch {
+    return env.HOME
+        ? [
+            external_node_path_namespaceObject.posix.join(env.HOME, ".nuget", "NuGet"),
+            external_node_path_namespaceObject.posix.join(env.HOME, ".config", "NuGet"),
+        ]
+        : [];
+}
+async function ensureNugetConfigDirectories(directories = nugetConfigDirectories()) {
+    for (const directory of directories) {
+        await (0,promises_namespaceObject.mkdir)(directory, { recursive: true });
+    }
+}
+function redactNugetSecrets(value, settings) {
+    return value.split(settings.token).join("***");
+}
+async function runNuget(nuget, args, settings, options) {
+    const commandArgs = [...nuget.args, ...args];
+    if (options.trace) {
+        options.log?.(`NuGet command: ${redactNugetSecrets(formatCommand(nuget.file, commandArgs), settings)}`);
+    }
+    const result = await (options.run ?? runCommand)(nuget.file, commandArgs);
+    if (options.debug) {
+        options.log?.(`NuGet stdout: ${redactNugetSecrets(result.stdout.trim(), settings)}`);
+        options.log?.(`NuGet stderr: ${redactNugetSecrets(result.stderr.trim(), settings)}`);
+    }
+    return result;
+}
+function sanitizedErrorMessage(operation, settings, error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return `${operation}: ${redactNugetSecrets(detail, settings)}`;
+}
+async function configureNugetSource(nuget, settings, options = {}) {
+    await ensureNugetConfigDirectories(options.configDirectories);
+    try {
+        await runNuget(nuget, buildNugetSourceRemoveArgs(settings.sourceName), settings, options);
+    }
+    catch (error) {
+        if (options.debug) {
+            options.log?.(sanitizedErrorMessage("NuGet source remove was ignored", settings, error));
+        }
         // Missing sources are fine; stale sources are removed before re-adding.
     }
     try {
-        await runNuget(nuget, buildNugetSourceAddArgs(settings), run);
+        await runNuget(nuget, buildNugetSourceAddArgs(settings), settings, options);
     }
-    catch {
-        throw new Error("Failed to add GitHub Packages NuGet source");
+    catch (error) {
+        throw new Error(sanitizedErrorMessage("Failed to add GitHub Packages NuGet source", settings, error));
     }
     try {
-        await runNuget(nuget, buildNugetSetApiKeyArgs(settings.feedUrl, settings.token), run);
+        await runNuget(nuget, buildNugetSetApiKeyArgs(settings.feedUrl, settings.token), settings, options);
     }
-    catch {
-        throw new Error("Failed to set GitHub Packages NuGet API key");
+    catch (error) {
+        throw new Error(sanitizedErrorMessage("Failed to set GitHub Packages NuGet API key", settings, error));
     }
 }
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = require("node:fs");
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = require("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31527,6 +31578,10 @@ async function run() {
             sourceName,
             token,
             username,
+        }, {
+            debug,
+            log: (message) => info(message),
+            trace,
         });
         if (trace) {
             info(`Mono required: ${mono.required ? "true" : "false"}`);

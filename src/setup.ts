@@ -111,12 +111,20 @@ export async function run(): Promise<void> {
     const nugetPath = await fetchNuget(vcpkg);
     const nuget = buildNugetCommand(nugetPath);
     nugetCommand = nuget.display;
-    await configureNugetSource(nuget, {
-      feedUrl,
-      sourceName,
-      token,
-      username,
-    });
+    await configureNugetSource(
+      nuget,
+      {
+        feedUrl,
+        sourceName,
+        token,
+        username,
+      },
+      {
+        debug,
+        log: (message) => core.info(message),
+        trace,
+      },
+    );
 
     if (trace) {
       core.info(`Mono required: ${mono.required ? "true" : "false"}`);

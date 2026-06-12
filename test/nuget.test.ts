@@ -12,6 +12,8 @@ import {
   buildNugetSourceAddArgs,
   buildNugetSourceRemoveArgs,
   configureNugetSource,
+  nugetConfigDirectories,
+  redactNugetSecrets,
 } from "../src/shared/nuget";
 import { NugetCommand } from "../src/shared/vcpkg";
 
@@ -46,6 +48,7 @@ describe("nuget helpers", () => {
       "Remove",
       "-Name",
       "GitHubPackages",
+      "-NonInteractive",
     ]);
     expect(buildNugetSourceAddArgs(settings)).toEqual([
       "sources",
@@ -59,6 +62,11 @@ describe("nuget helpers", () => {
       "octo",
       "-Password",
       "token",
+      "-ValidAuthenticationTypes",
+      "basic",
+      "-NonInteractive",
+      "-Verbosity",
+      "detailed",
     ]);
     expect(
       buildNugetSetApiKeyArgs(
@@ -70,20 +78,40 @@ describe("nuget helpers", () => {
       "token",
       "-Source",
       "https://nuget.pkg.github.com/octo/index.json",
+      "-NonInteractive",
+      "-Verbosity",
+      "detailed",
     ]);
+  });
+
+  test("builds platform config directories", () => {
+    expect(nugetConfigDirectories("linux", { HOME: "/home/runner" })).toEqual([
+      "/home/runner/.nuget/NuGet",
+      "/home/runner/.config/NuGet",
+    ]);
+    expect(
+      nugetConfigDirectories("win32", {
+        APPDATA: "C:\\Users\\r\\AppData\\Roaming",
+      }),
+    ).toEqual(["C:\\Users\\r\\AppData\\Roaming\\NuGet"]);
+  });
+
+  test("redacts tokens from NuGet diagnostics", () => {
+    expect(redactNugetSecrets("password token value", settings)).toBe(
+      "password *** value",
+    );
   });
 
   test("removes stale source before adding credentials", async () => {
     const commands: RecordedCommand[] = [];
 
-    await configureNugetSource(
-      nugetCommand(),
-      settings,
-      async (command, args) => {
+    await configureNugetSource(nugetCommand(), settings, {
+      configDirectories: [],
+      run: async (command, args) => {
         commands.push({ args, command });
         return result();
       },
-    );
+    });
 
     expect(commands).toEqual([
       {
@@ -110,10 +138,9 @@ describe("nuget helpers", () => {
   test("ignores missing source removal", async () => {
     const commands: RecordedCommand[] = [];
 
-    await configureNugetSource(
-      nugetCommand(),
-      settings,
-      async (command, args) => {
+    await configureNugetSource(nugetCommand(), settings, {
+      configDirectories: [],
+      run: async (command, args) => {
         commands.push({ args, command });
 
         if (args.includes("Remove")) {
@@ -122,19 +149,40 @@ describe("nuget helpers", () => {
 
         return result();
       },
-    );
+    });
 
     expect(commands).toHaveLength(3);
   });
 
+  test("emits redacted trace and debug diagnostics", async () => {
+    const logs: string[] = [];
+
+    await configureNugetSource(nugetCommand(), settings, {
+      configDirectories: [],
+      debug: true,
+      log: (message) => logs.push(message),
+      run: async () => ({ stderr: "stderr token", stdout: "stdout token" }),
+      trace: true,
+    });
+
+    expect(logs.join("\n")).not.toContain("token");
+    expect(logs.join("\n")).toContain("***");
+    expect(logs.some((log) => log.startsWith("NuGet command: "))).toBe(true);
+    expect(logs.some((log) => log.startsWith("NuGet stdout: "))).toBe(true);
+    expect(logs.some((log) => log.startsWith("NuGet stderr: "))).toBe(true);
+  });
+
   test("reports sanitized add failures", async () => {
     await expect(
-      configureNugetSource(nugetCommand(), settings, async (_command, args) => {
-        if (args.includes("Add")) {
-          throw new Error("token");
-        }
+      configureNugetSource(nugetCommand(), settings, {
+        configDirectories: [],
+        run: async (_command, args) => {
+          if (args.includes("Add")) {
+            throw new Error("token");
+          }
 
-        return result();
+          return result();
+        },
       }),
     ).rejects.toThrow("Failed to add GitHub Packages NuGet source");
   });
