@@ -74,6 +74,15 @@ describe("vcpkg helpers", () => {
     expect(extractFetchedNugetPath('"/tmp/downloads/nuget.exe"\n')).toBe(
       "/tmp/downloads/nuget.exe",
     );
+    expect(extractFetchedNugetPath("downloads/tools/nuget.exe\n")).toBe(
+      "downloads/tools/nuget.exe",
+    );
+    expect(
+      extractFetchedNugetPath(
+        "Downloading https://dist.nuget.org/win-x86-commandline/v7.3.0/nuget.exe -> eaa38ed8-nuget.exe\r\n" +
+          "/home/runner/work/trn/trn/vcpkg/downloads/tools/nuget.exe\r\n",
+      ),
+    ).toBe("/home/runner/work/trn/trn/vcpkg/downloads/tools/nuget.exe");
   });
 
   test("rejects NuGet fetch output without a path", () => {

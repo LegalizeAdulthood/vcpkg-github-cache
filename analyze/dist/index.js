@@ -31316,9 +31316,21 @@ function extractFetchedNugetPath(output) {
         .map((line) => line.trim())
         .map((line) => line.replace(/^"(.*)"$/, "$1"))
         .filter((line) => line.length > 0)
-        .find((line) => /nuget\.exe$/i.test(line));
+        .find((line) => {
+        if (!/nuget\.exe$/i.test(line)) {
+            return false;
+        }
+        if (/^Downloading\b/i.test(line) || line.includes(" -> ")) {
+            return false;
+        }
+        return (/^(\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|\\\\)/.test(line) ||
+            /^[A-Za-z0-9_.-]+[\\/]/.test(line) ||
+            /^nuget\.exe$/i.test(line));
+    });
     if (!pathLine) {
-        throw new Error("vcpkg fetch nuget did not report a nuget.exe path");
+        const detail = output.trim();
+        const suffix = detail ? `:\n${detail}` : "";
+        throw new Error(`vcpkg fetch nuget did not report a nuget.exe path${suffix}`);
     }
     return pathLine;
 }
