@@ -6,7 +6,11 @@
 
 import { describe, expect, test } from "vitest";
 
-import { buildBinarySources, buildFeedUrl } from "../src/shared/cache";
+import {
+  buildBinarySources,
+  buildDisabledBinarySources,
+  buildFeedUrl,
+} from "../src/shared/cache";
 import {
   normalizeTokenKind,
   parseBoolean,
@@ -59,5 +63,9 @@ describe("shared action helpers", () => {
     expect(buildBinarySources(feedUrl, "readwrite")).toBe(
       "clear;nuget,https://nuget.pkg.github.com/octo/index.json,readwrite",
     );
+  });
+
+  test("builds disabled binary source value", () => {
+    expect(buildDisabledBinarySources()).toBe("clear");
   });
 });

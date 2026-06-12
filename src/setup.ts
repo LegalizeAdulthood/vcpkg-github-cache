@@ -6,14 +6,14 @@
 
 import * as core from "@actions/core";
 
-import { buildBinarySources, buildFeedUrl } from "./shared/cache";
+import { buildDisabledBinarySources, buildFeedUrl } from "./shared/cache";
 import {
   normalizeTokenKind,
   resolveFeedOwner,
   resolveUsername,
 } from "./shared/inputs";
 
-const DIAGNOSIS = "setup skeleton: no NuGet source changes were made";
+const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 
 function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
@@ -49,10 +49,7 @@ export async function run(): Promise<void> {
     process.env.GITHUB_ACTOR,
   );
   const feedUrl = buildFeedUrl(feedOwner);
-  const binarySources = buildBinarySources(
-    feedUrl,
-    optionalInput("access", "readwrite"),
-  );
+  const binarySources = buildDisabledBinarySources();
 
   core.setOutput("feed-url", feedUrl);
   core.setOutput("binary-sources", binarySources);

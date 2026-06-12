@@ -12,3 +12,7 @@ export function buildBinarySources(feedUrl: string, access: string): string {
   const resolvedAccess = access.trim() || "readwrite";
   return `clear;nuget,${feedUrl},${resolvedAccess}`;
 }
+
+export function buildDisabledBinarySources(): string {
+  return "clear";
+}

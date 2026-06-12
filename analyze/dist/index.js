@@ -31138,6 +31138,9 @@ function buildBinarySources(feedUrl, access) {
     const resolvedAccess = access.trim() || "readwrite";
     return `clear;nuget,${feedUrl},${resolvedAccess}`;
 }
+function buildDisabledBinarySources() {
+    return "clear";
+}
 
 ;// CONCATENATED MODULE: ./src/shared/inputs.ts
 /*

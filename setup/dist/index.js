@@ -31138,6 +31138,9 @@ function buildBinarySources(feedUrl, access) {
     const resolvedAccess = access.trim() || "readwrite";
     return `clear;nuget,${feedUrl},${resolvedAccess}`;
 }
+function buildDisabledBinarySources() {
+    return "clear";
+}
 
 ;// CONCATENATED MODULE: ./src/shared/inputs.ts
 /*
@@ -31197,7 +31200,7 @@ function resolveUsername(input, tokenKind, feedOwner, actor) {
 
 
 
-const DIAGNOSIS = "setup skeleton: no NuGet source changes were made";
+const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
@@ -31220,7 +31223,7 @@ async function run() {
     const feedOwner = resolveFeedOwner(getInput("feed-owner"), process.env.GITHUB_REPOSITORY);
     const username = resolveUsername(getInput("username"), tokenKind, feedOwner, process.env.GITHUB_ACTOR);
     const feedUrl = buildFeedUrl(feedOwner);
-    const binarySources = buildBinarySources(feedUrl, optionalInput("access", "readwrite"));
+    const binarySources = buildDisabledBinarySources();
     setOutput("feed-url", feedUrl);
     setOutput("binary-sources", binarySources);
     setOutput("nuget-command", "");
