@@ -71,7 +71,7 @@ export async function run(): Promise<void> {
     process.env.GITHUB_ACTOR,
   );
   const feedUrl = buildFeedUrl(feedOwner);
-  const bootstrap = parseBoolean(optionalInput("bootstrap", "false"));
+  const bootstrap = parseBoolean(optionalInput("bootstrap", "true"));
   const debug = parseBoolean(optionalInput("debug", "false"));
   const installMono = parseBoolean(optionalInput("install-mono", "true"));
   const installNuget = parseBoolean(optionalInput("install-nuget", "true"));

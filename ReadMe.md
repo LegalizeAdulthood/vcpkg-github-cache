@@ -21,8 +21,8 @@ The planned action has two entry points:
   hit, cold seed, auth failure, quota failure, upload failure, or unknown.
 
 The action deliberately does not wrap the caller's build.  Callers keep
-their own checkout, bootstrap, build, test, and artifact steps; the action
-only centralizes cache setup and diagnostics.
+their own checkout, build, test, and artifact steps; the action centralizes
+vcpkg bootstrap, cache setup, and diagnostics.
 
 Current scope is implementation planning.  User-facing setup examples and
 troubleshooting docs will be added after the action skeleton exists.

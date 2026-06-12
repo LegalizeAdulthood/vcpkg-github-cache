@@ -20,7 +20,7 @@ inputs:
     default: vcpkg
   bootstrap:
     description: Bootstrap vcpkg before configuring the cache.
-    default: "false"
+    default: "true"
   install-nuget:
     description: Fetch NuGet with vcpkg when needed.
     default: "true"

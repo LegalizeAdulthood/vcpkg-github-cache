@@ -54,8 +54,8 @@ Action repository: `LegalizeAdulthood/vcpkg-github-cache.git`.
 Git URL: `https://github.com/LegalizeAdulthood/vcpkg-github-cache.git`.
 
 Do not wrap caller build commands.  That is too intrusive and slows
-adoption.  Callers keep their own checkout, bootstrap, build, test, and
-artifact steps.
+adoption.  Callers keep their own checkout, build, test, and artifact
+steps.
 
 JavaScript is preferred over a pure composite action because the work is
 cross-platform and diagnostic-heavy.  A Node action can spawn commands
@@ -80,8 +80,6 @@ steps:
 - uses: actions/checkout@v6
   with:
     submodules: true
-
-- run: ./vcpkg/bootstrap-vcpkg.sh
 
 - id: vc
   uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
@@ -128,7 +126,7 @@ whether the actual build was a warm hit, partial hit, or cold seed.
 - `feed-owner`: optional.  Defaults to the owner parsed from
   `GITHUB_REPOSITORY`.
 - `vcpkg-root`: optional.  Defaults to `vcpkg`.
-- `bootstrap`: optional.  Defaults to `false`.
+- `bootstrap`: optional.  Defaults to `true`.
 - `install-nuget`: optional.  Defaults to `true`.
 - `install-mono`: optional.  Defaults to `true`.
 - `source-name`: optional.  Defaults to `GitHubPackages`.
@@ -178,7 +176,7 @@ The setup action should:
 1. Register the token with the GitHub Actions secret masker.
 2. Resolve token kind.
 3. Resolve `vcpkg-root`.
-4. Optionally bootstrap vcpkg.
+4. Bootstrap vcpkg unless `bootstrap` is disabled.
 5. Verify that vcpkg is bootstrapped.
 6. Ensure NuGet is available through `vcpkg fetch nuget`.
 7. Ensure Mono is available when the NuGet tool is a `.exe` on Unix.
@@ -750,8 +748,6 @@ integration runs for live GitHub Packages behavior.
 - The default output is concise.
 
 ## Open Questions
-
-- Should setup default `bootstrap` to `false`, or offer an `auto` mode?
 - Should Mono install use `mono-complete` or a smaller package set?
 - Should source update remove and recreate existing sources, or use NuGet
   source update when available?
