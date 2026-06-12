@@ -652,17 +652,11 @@ event.  This is expected for some pull request events.
 
 Implement:
 
-- input parsing;
-- token masking;
-- vcpkg root resolution;
-- optional bootstrap;
 - `vcpkg fetch nuget`;
 - Mono install and detection;
 - NuGet source configuration;
 - keep `binary-sources` set to `clear` until NuGet restore and upload are
   both expected to work;
-- outputs;
-- concise step summary.
 
 ### Slice 3: Analyzer Core
 

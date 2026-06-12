@@ -9,9 +9,11 @@ import * as core from "@actions/core";
 import { buildFeedUrl } from "./shared/cache";
 import {
   normalizeTokenKind,
+  parseBoolean,
   resolveFeedOwner,
   resolveUsername,
 } from "./shared/inputs";
+import { resolveVcpkgPaths } from "./shared/vcpkg";
 
 const CACHE_STATUS = "unknown";
 const DIAGNOSIS = "analyzer skeleton: no cache probes were run";
@@ -50,6 +52,18 @@ export async function run(): Promise<void> {
     process.env.GITHUB_ACTOR,
   );
   const feedUrl = buildFeedUrl(feedOwner);
+  const debug = parseBoolean(optionalInput("debug", "false"));
+  const trace = parseBoolean(optionalInput("trace", "false"));
+  const buildLog = optionalInput("build-log");
+  const packageConfigGlob = optionalInput(
+    "package-config-glob",
+    "**/packages.config",
+  );
+  const failOn = optionalInput("fail-on", "never");
+  const vcpkg = resolveVcpkgPaths(
+    optionalInput("vcpkg-root", "vcpkg"),
+    process.env.GITHUB_WORKSPACE,
+  );
 
   core.setOutput("cache-status", CACHE_STATUS);
   core.setOutput("diagnosis", DIAGNOSIS);
@@ -64,6 +78,20 @@ export async function run(): Promise<void> {
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
+
+  if (debug || trace) {
+    core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
+    core.info(`Trace: ${trace ? "enabled" : "disabled"}`);
+  }
+
+  if (trace) {
+    core.info(`Feed URL: ${feedUrl}`);
+    core.info(`vcpkg root: ${vcpkg.root}`);
+    core.info(`vcpkg executable: ${vcpkg.executable}`);
+    core.info(`build-log: ${buildLog}`);
+    core.info(`package-config-glob: ${packageConfigGlob}`);
+    core.info(`fail-on: ${failOn}`);
+  }
 
   await writeSummary(feedUrl);
 }

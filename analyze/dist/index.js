@@ -29309,7 +29309,7 @@ var summary_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _
 };
 
 
-const { access, appendFile, writeFile } = external_fs_namespaceObject.promises;
+const { access: summary_access, appendFile, writeFile } = external_fs_namespaceObject.promises;
 const SUMMARY_ENV_VAR = 'GITHUB_STEP_SUMMARY';
 const SUMMARY_DOCS_URL = 'https://docs.github.com/actions/using-workflows/workflow-commands-for-github-actions#adding-a-job-summary';
 class Summary {
@@ -29332,7 +29332,7 @@ class Summary {
                 throw new Error(`Unable to find environment variable for $${SUMMARY_ENV_VAR}. Check if your runtime environment supports job summaries.`);
             }
             try {
-                yield access(pathFromEnv, external_fs_namespaceObject.constants.R_OK | external_fs_namespaceObject.constants.W_OK);
+                yield summary_access(pathFromEnv, external_fs_namespaceObject.constants.R_OK | external_fs_namespaceObject.constants.W_OK);
             }
             catch (_a) {
                 throw new Error(`Unable to access summary file: '${pathFromEnv}'. Check if the file has correct read/write permissions.`);
@@ -31191,12 +31191,127 @@ function resolveUsername(input, tokenKind, feedOwner, actor) {
     return actor?.trim() || feedOwner;
 }
 
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = require("node:fs");
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
+;// CONCATENATED MODULE: external "node:child_process"
+const external_node_child_process_namespaceObject = require("node:child_process");
+;// CONCATENATED MODULE: ./src/shared/command.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function formatCommand(command, args) {
+    return [command, ...args].join(" ");
+}
+async function command_runCommand(command, args, options = {}) {
+    return await new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+            cwd: options.cwd,
+            env: options.env ?? process.env,
+            windowsHide: true,
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.setEncoding("utf8");
+        child.stderr.setEncoding("utf8");
+        child.stdout.on("data", (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+        });
+        child.on("error", reject);
+        child.on("close", (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+                return;
+            }
+            const exitCode = code ?? 1;
+            const detail = stderr.trim() || stdout.trim();
+            const message = detail ? `: ${detail}` : "";
+            reject(new Error(`${formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
+        });
+    });
+}
+
+;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+
+
+function vcpkgExecutableName(platform) {
+    return platform === "win32" ? "vcpkg.exe" : "vcpkg";
+}
+function bootstrapScriptName(platform) {
+    return platform === "win32" ? "bootstrap-vcpkg.bat" : "bootstrap-vcpkg.sh";
+}
+function resolveVcpkgPaths(input, workspace, platform = process.platform) {
+    const rootInput = input?.trim() || "vcpkg";
+    const base = workspace?.trim() || process.cwd();
+    const root = external_node_path_namespaceObject.resolve(base, rootInput);
+    return {
+        bootstrapScript: external_node_path_namespaceObject.join(root, bootstrapScriptName(platform)),
+        executable: external_node_path_namespaceObject.join(root, vcpkgExecutableName(platform)),
+        root,
+    };
+}
+function buildBootstrapCommand(vcpkg, platform = process.platform) {
+    if (platform === "win32") {
+        return {
+            args: ["/d", "/s", "/c", `"${vcpkg.bootstrapScript}"`],
+            cwd: vcpkg.root,
+            file: "cmd.exe",
+        };
+    }
+    return {
+        args: [],
+        cwd: vcpkg.root,
+        file: vcpkg.bootstrapScript,
+    };
+}
+async function bootstrapVcpkg(vcpkg) {
+    const command = buildBootstrapCommand(vcpkg);
+    await runCommand(command.file, command.args, { cwd: command.cwd });
+}
+async function verifyVcpkgExecutable(executable) {
+    try {
+        await access(executable, constants.F_OK);
+    }
+    catch {
+        throw new Error(`vcpkg executable was not found at ${executable}; bootstrap vcpkg before setup or set bootstrap: true`);
+    }
+}
+function extractVcpkgVersion(output) {
+    return (output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0) ?? "");
+}
+async function readVcpkgVersion(vcpkg) {
+    const result = await runCommand(vcpkg.executable, ["version"], {
+        cwd: vcpkg.root,
+    });
+    return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
+}
+
 ;// CONCATENATED MODULE: ./src/analyze.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Copyright 2026 Richard Thomson
  */
+
 
 
 
@@ -31224,6 +31339,12 @@ async function run() {
     const feedOwner = resolveFeedOwner(getInput("feed-owner"), process.env.GITHUB_REPOSITORY);
     const username = resolveUsername(getInput("username"), tokenKind, feedOwner, process.env.GITHUB_ACTOR);
     const feedUrl = buildFeedUrl(feedOwner);
+    const debug = parseBoolean(optionalInput("debug", "false"));
+    const trace = parseBoolean(optionalInput("trace", "false"));
+    const buildLog = optionalInput("build-log");
+    const packageConfigGlob = optionalInput("package-config-glob", "**/packages.config");
+    const failOn = optionalInput("fail-on", "never");
+    const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     setOutput("cache-status", CACHE_STATUS);
     setOutput("diagnosis", DIAGNOSIS);
     setOutput("requested-count", "");
@@ -31236,6 +31357,18 @@ async function run() {
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
+    if (debug || trace) {
+        info(`Debug: ${debug ? "enabled" : "disabled"}`);
+        info(`Trace: ${trace ? "enabled" : "disabled"}`);
+    }
+    if (trace) {
+        info(`Feed URL: ${feedUrl}`);
+        info(`vcpkg root: ${vcpkg.root}`);
+        info(`vcpkg executable: ${vcpkg.executable}`);
+        info(`build-log: ${buildLog}`);
+        info(`package-config-glob: ${packageConfigGlob}`);
+        info(`fail-on: ${failOn}`);
+    }
     await writeSummary(feedUrl);
 }
 void run().catch((error) => {

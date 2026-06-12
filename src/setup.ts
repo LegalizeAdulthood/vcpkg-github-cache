@@ -9,9 +9,16 @@ import * as core from "@actions/core";
 import { buildDisabledBinarySources, buildFeedUrl } from "./shared/cache";
 import {
   normalizeTokenKind,
+  parseBoolean,
   resolveFeedOwner,
   resolveUsername,
 } from "./shared/inputs";
+import {
+  bootstrapVcpkg,
+  readVcpkgVersion,
+  resolveVcpkgPaths,
+  verifyVcpkgExecutable,
+} from "./shared/vcpkg";
 
 const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 
@@ -19,7 +26,11 @@ function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
 }
 
-async function writeSummary(feedUrl: string): Promise<void> {
+async function writeSummary(
+  feedUrl: string,
+  vcpkgRoot: string,
+  vcpkgVersion: string,
+): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
   }
@@ -29,6 +40,10 @@ async function writeSummary(feedUrl: string): Promise<void> {
     .addRaw(DIAGNOSIS)
     .addEOL()
     .addRaw(`Feed: ${feedUrl}`)
+    .addEOL()
+    .addRaw(`vcpkg root: ${vcpkgRoot}`)
+    .addEOL()
+    .addRaw(`vcpkg version: ${vcpkgVersion}`)
     .addEOL()
     .write();
 }
@@ -49,20 +64,54 @@ export async function run(): Promise<void> {
     process.env.GITHUB_ACTOR,
   );
   const feedUrl = buildFeedUrl(feedOwner);
+  const bootstrap = parseBoolean(optionalInput("bootstrap", "false"));
+  const debug = parseBoolean(optionalInput("debug", "false"));
+  const trace = parseBoolean(optionalInput("trace", "false"));
+  const vcpkg = resolveVcpkgPaths(
+    optionalInput("vcpkg-root", "vcpkg"),
+    process.env.GITHUB_WORKSPACE,
+  );
+
+  if (debug || trace) {
+    core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
+    core.info(`Trace: ${trace ? "enabled" : "disabled"}`);
+  }
+
+  if (trace) {
+    core.info(`Feed URL: ${feedUrl}`);
+    core.info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
+    core.info(`vcpkg executable: ${vcpkg.executable}`);
+    core.info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
+  }
+
+  if (bootstrap) {
+    core.info(`Bootstrapping vcpkg at ${vcpkg.root}`);
+    await bootstrapVcpkg(vcpkg);
+  }
+
+  await verifyVcpkgExecutable(vcpkg.executable);
+  const vcpkgVersion = await readVcpkgVersion(vcpkg);
   const binarySources = buildDisabledBinarySources();
 
   core.setOutput("feed-url", feedUrl);
   core.setOutput("binary-sources", binarySources);
   core.setOutput("nuget-command", "");
-  core.setOutput("vcpkg-version", "");
+  core.setOutput("vcpkg-version", vcpkgVersion);
   core.setOutput("diagnosis", DIAGNOSIS);
 
   core.info(DIAGNOSIS);
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
+  core.info(`vcpkg root: ${vcpkg.root}`);
+  core.info(`vcpkg version: ${vcpkgVersion}`);
 
-  await writeSummary(feedUrl);
+  if (trace) {
+    core.info(`binary-sources: ${binarySources}`);
+    core.info("nuget-command: ");
+  }
+
+  await writeSummary(feedUrl, vcpkg.root, vcpkgVersion);
 }
 
 void run().catch((error: unknown) => {
