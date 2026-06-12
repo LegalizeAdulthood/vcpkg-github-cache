@@ -646,46 +646,102 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Analyzer Core
+### Slice 1: Analyzer Package Discovery
 
 Implement:
 
-- live probe runner;
 - `packages.config` discovery;
+- package identity parsing;
+- requested package count output.
+
+### Slice 2: Analyzer Live Probes
+
+Implement:
+
+- feed authentication probe;
+- vcpkg version probe;
+- vcpkg NuGet command probe;
+- NuGet version and source list probes.
+
+### Slice 3: Analyzer Restore Probe
+
+Implement:
+
 - exact restore probe;
+- temporary package directory;
+- restored package count output;
+- restore auth and tooling evidence.
+
+### Slice 4: Analyzer Build Log Parser
+
+Implement:
+
 - build log parser;
+- restore, build, and upload count extraction;
+- auth and quota pattern extraction.
+
+### Slice 5: Analyzer Diagnosis
+
+Implement:
+
 - diagnosis classifier;
+- `cache-status` and `failure-kind` outputs;
 - `fail-on` policy.
 
-### Slice 2: Debug And Trace
+### Slice 6: Trace Logging
 
 Implement:
 
-- trace logging;
+- trace logging.
+
+### Slice 7: Diagnostic Artifacts
+
+Implement:
+
 - sanitized diagnostic artifact assembly;
-- safe GitHub context dump;
-- sanitized NuGet config dump;
 - build log extracts.
 
-### Slice 3: Package Metadata
+### Slice 8: GitHub Context Diagnostics
+
+Implement:
+
+- safe GitHub context dump.
+
+### Slice 9: NuGet Config Diagnostics
+
+Implement:
+
+- sanitized NuGet config dump.
+
+### Slice 10: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
-- repository association;
+- repository association.
+
+### Slice 11: Package Quota Metadata
+
+Implement bounded package metadata probes:
+
 - package version count;
 - quota-risk warning.
 
-### Slice 4: Documentation And Examples
+### Slice 12: Documentation
+
+Document:
+
+- public repository expectations;
+- private repository quota behavior;
+- forked pull request behavior.
+
+### Slice 13: Examples
 
 Document:
 
 - minimal setup;
 - setup plus analyze;
 - build-log capture examples;
-- public repository expectations;
-- private repository quota behavior;
-- forked pull request behavior;
 - troubleshooting examples.
 
 ## Tests
