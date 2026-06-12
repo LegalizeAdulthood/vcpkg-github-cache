@@ -161,6 +161,16 @@ The `binary-sources` output should normally be:
 clear;nuget,https://nuget.pkg.github.com/OWNER/index.json,readwrite
 ```
 
+Until NuGet source setup is complete for both package restore and package
+upload, the setup action must emit:
+
+```text
+clear
+```
+
+Do not switch the public setup output from `clear` to `nuget` until restore
+and upload are both configured and expected to work.
+
 ## Setup Behavior
 
 The setup action should:
@@ -649,6 +659,8 @@ Implement:
 - `vcpkg fetch nuget`;
 - Mono install and detection;
 - NuGet source configuration;
+- keep `binary-sources` set to `clear` until NuGet restore and upload are
+  both expected to work;
 - outputs;
 - concise step summary.
 
