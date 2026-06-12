@@ -31191,12 +31191,6 @@ function resolveUsername(input, tokenKind, feedOwner, actor) {
     return actor?.trim() || feedOwner;
 }
 
-;// CONCATENATED MODULE: external "node:fs"
-const external_node_fs_namespaceObject = require("node:fs");
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = require("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = require("node:child_process");
 ;// CONCATENATED MODULE: ./src/shared/command.ts
@@ -31246,6 +31240,118 @@ async function runCommand(command, args, options = {}) {
     });
 }
 
+;// CONCATENATED MODULE: ./src/shared/mono.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function monoIsRequired(platform) {
+    return platform !== "win32";
+}
+function monoInstallCommands(platform) {
+    if (platform === "linux") {
+        return [
+            { args: ["apt-get", "update"], command: "sudo" },
+            {
+                args: ["apt-get", "install", "--yes", "mono-complete"],
+                command: "sudo",
+            },
+        ];
+    }
+    if (platform === "darwin") {
+        return [{ args: ["install", "mono"], command: "brew" }];
+    }
+    throw new Error(`Mono is required to run nuget.exe on ${platform}, but automatic Mono installation is not supported on this platform`);
+}
+async function monoIsAvailable(run) {
+    try {
+        await run("mono", ["--version"]);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function ensureMonoAvailable(install, platform = process.platform, run = runCommand) {
+    if (!monoIsRequired(platform)) {
+        return { installed: false, required: false };
+    }
+    if (await monoIsAvailable(run)) {
+        return { installed: false, required: true };
+    }
+    if (!install) {
+        throw new Error("Mono is required to run nuget.exe on Unix; install Mono or set install-mono: true");
+    }
+    const env = { ...process.env, DEBIAN_FRONTEND: "noninteractive" };
+    for (const command of monoInstallCommands(platform)) {
+        await run(command.command, command.args, { env });
+    }
+    if (!(await monoIsAvailable(run))) {
+        throw new Error("Mono installation completed, but mono is still unavailable");
+    }
+    return { installed: true, required: true };
+}
+
+;// CONCATENATED MODULE: ./src/shared/nuget.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function buildNugetSourceRemoveArgs(sourceName) {
+    return ["sources", "Remove", "-Name", sourceName];
+}
+function buildNugetSourceAddArgs(settings) {
+    return [
+        "sources",
+        "Add",
+        "-Source",
+        settings.feedUrl,
+        "-StorePasswordInClearText",
+        "-Name",
+        settings.sourceName,
+        "-UserName",
+        settings.username,
+        "-Password",
+        settings.token,
+    ];
+}
+function buildNugetSetApiKeyArgs(feedUrl, token) {
+    return ["setapikey", token, "-Source", feedUrl];
+}
+async function runNuget(nuget, args, run) {
+    await run(nuget.file, [...nuget.args, ...args]);
+}
+async function configureNugetSource(nuget, settings, run = runCommand) {
+    try {
+        await runNuget(nuget, buildNugetSourceRemoveArgs(settings.sourceName), run);
+    }
+    catch {
+        // Missing sources are fine; stale sources are removed before re-adding.
+    }
+    try {
+        await runNuget(nuget, buildNugetSourceAddArgs(settings), run);
+    }
+    catch {
+        throw new Error("Failed to add GitHub Packages NuGet source");
+    }
+    try {
+        await runNuget(nuget, buildNugetSetApiKeyArgs(settings.feedUrl, settings.token), run);
+    }
+    catch {
+        throw new Error("Failed to set GitHub Packages NuGet API key");
+    }
+}
+
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = require("node:fs");
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31353,6 +31459,8 @@ function buildNugetCommand(nugetPath, platform = process.platform) {
 
 
 
+
+
 const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
@@ -31384,7 +31492,9 @@ async function run() {
     const feedUrl = buildFeedUrl(feedOwner);
     const bootstrap = parseBoolean(optionalInput("bootstrap", "false"));
     const debug = parseBoolean(optionalInput("debug", "false"));
+    const installMono = parseBoolean(optionalInput("install-mono", "true"));
     const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
+    const sourceName = optionalInput("source-name", "GitHubPackages");
     const trace = parseBoolean(optionalInput("trace", "false"));
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     if (debug || trace) {
@@ -31394,7 +31504,9 @@ async function run() {
     if (trace) {
         info(`Feed URL: ${feedUrl}`);
         info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
+        info(`Install Mono: ${installMono ? "true" : "false"}`);
         info(`Fetch NuGet: ${installNuget ? "true" : "false"}`);
+        info(`NuGet source name: ${sourceName}`);
         info(`vcpkg executable: ${vcpkg.executable}`);
         info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
     }
@@ -31404,9 +31516,24 @@ async function run() {
     }
     await verifyVcpkgExecutable(vcpkg.executable);
     const vcpkgVersion = await readVcpkgVersion(vcpkg);
-    const nugetCommand = installNuget
-        ? buildNugetCommand(await fetchNuget(vcpkg)).display
-        : "";
+    let nugetCommand = "";
+    if (installNuget) {
+        const mono = await ensureMonoAvailable(installMono);
+        const nugetPath = await fetchNuget(vcpkg);
+        const nuget = buildNugetCommand(nugetPath);
+        nugetCommand = nuget.display;
+        await configureNugetSource(nuget, {
+            feedUrl,
+            sourceName,
+            token,
+            username,
+        });
+        if (trace) {
+            info(`Mono required: ${mono.required ? "true" : "false"}`);
+            info(`Mono installed by action: ${mono.installed ? "true" : "false"}`);
+            info(`NuGet source configured: ${sourceName}`);
+        }
+    }
     const binarySources = buildDisabledBinarySources();
     setOutput("feed-url", feedUrl);
     setOutput("binary-sources", binarySources);

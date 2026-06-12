@@ -648,16 +648,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Setup Action
-
-Implement:
-
-- Mono install and detection;
-- NuGet source configuration;
-- keep `binary-sources` set to `clear` until NuGet restore and upload are
-  both expected to work;
-
-### Slice 2: Analyzer Core
+### Slice 1: Analyzer Core
 
 Implement:
 
@@ -668,7 +659,7 @@ Implement:
 - diagnosis classifier;
 - `fail-on` policy.
 
-### Slice 3: Debug And Trace
+### Slice 2: Debug And Trace
 
 Implement:
 
@@ -678,7 +669,7 @@ Implement:
 - sanitized NuGet config dump;
 - build log extracts.
 
-### Slice 4: Package Metadata
+### Slice 3: Package Metadata
 
 Implement bounded package metadata probes:
 
@@ -687,7 +678,7 @@ Implement bounded package metadata probes:
 - package version count;
 - quota-risk warning.
 
-### Slice 5: Documentation And Examples
+### Slice 4: Documentation And Examples
 
 Document:
 

@@ -16,6 +16,12 @@ export interface CommandOptions {
   readonly env?: NodeJS.ProcessEnv;
 }
 
+export type CommandRunner = (
+  command: string,
+  args: readonly string[],
+  options?: CommandOptions,
+) => Promise<CommandResult>;
+
 export function quoteCommandArgument(value: string): string {
   if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
     return value;
