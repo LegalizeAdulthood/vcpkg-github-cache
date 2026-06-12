@@ -736,6 +736,15 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
+### Slice 13: Marketplace Release
+
+Implement:
+
+- root Marketplace action metadata for setup;
+- README entry point for setup plus analyze;
+- `v1` tag and release checklist;
+- Marketplace publishing notes.
+
 ## Tests
 
 Unit tests:
