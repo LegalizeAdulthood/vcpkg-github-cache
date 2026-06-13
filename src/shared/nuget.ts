@@ -151,7 +151,16 @@ export async function configureNugetSource(
   settings: NugetSourceSettings,
   options: ConfigureNugetSourceOptions = {},
 ): Promise<void> {
-  await ensureNugetConfigDirectories(options.configDirectories);
+  const configDirectories =
+    options.configDirectories ?? nugetConfigDirectories();
+
+  if (options.trace) {
+    for (const directory of configDirectories) {
+      options.log?.(`NuGet config directory: ${directory}`);
+    }
+  }
+
+  await ensureNugetConfigDirectories(configDirectories);
 
   try {
     await runNuget(

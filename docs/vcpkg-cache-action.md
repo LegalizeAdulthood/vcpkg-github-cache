@@ -646,46 +646,40 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Trace Logging
-
-Implement:
-
-- trace logging.
-
-### Slice 2: Diagnostic Artifacts
+### Slice 1: Diagnostic Artifacts
 
 Implement:
 
 - sanitized diagnostic artifact assembly;
 - build log extracts.
 
-### Slice 3: GitHub Context Diagnostics
+### Slice 2: GitHub Context Diagnostics
 
 Implement:
 
 - safe GitHub context dump.
 
-### Slice 4: NuGet Config Diagnostics
+### Slice 3: NuGet Config Diagnostics
 
 Implement:
 
 - sanitized NuGet config dump.
 
-### Slice 5: Package Visibility Metadata
+### Slice 4: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 6: Package Quota Metadata
+### Slice 5: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 7: Documentation
+### Slice 6: Documentation
 
 Document:
 
@@ -693,7 +687,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 8: Examples
+### Slice 7: Examples
 
 Document:
 
@@ -702,7 +696,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 9: Marketplace Release
+### Slice 8: Marketplace Release
 
 Implement:
 

@@ -32200,12 +32200,95 @@ async function runRestoreProbe(options) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/shared/trace.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function redact(value, secrets) {
+    let redacted = value;
+    for (const secret of secrets) {
+        if (secret) {
+            redacted = redacted.split(secret).join("***");
+        }
+    }
+    return redacted;
+}
+function errorDetail(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+function errorExitCode(error) {
+    const detail = errorDetail(error);
+    const match = /\bexit code\s+(\d+)\b/i.exec(detail);
+    return match?.[1] ?? "unknown";
+}
+function elapsedMilliseconds(start, now) {
+    return Math.max(0, Math.round(now() - start));
+}
+function createTraceLogger(options) {
+    const now = options.now ?? (() => Date.now());
+    const secrets = options.secrets ?? [];
+    function write(message) {
+        if (options.enabled) {
+            options.log(`Trace ${redact(message, secrets)}`);
+        }
+    }
+    function formatValue(value) {
+        return value && value.length > 0 ? value : "(empty)";
+    }
+    return {
+        commandRunner: (run) => async (command, args, commandOptions) => {
+            const commandLine = formatCommand(command, args);
+            const start = now();
+            write(`command: ${commandLine}`);
+            try {
+                const result = await run(command, args, commandOptions);
+                write(`command exit code: 0 (${elapsedMilliseconds(start, now)} ms): ${commandLine}`);
+                return result;
+            }
+            catch (error) {
+                write(`command exit code: ${errorExitCode(error)} (${elapsedMilliseconds(start, now)} ms): ${commandLine}`);
+                throw error;
+            }
+        },
+        decision: (label, value) => {
+            write(`decision ${label}: ${value}`);
+        },
+        input: (label, value) => {
+            write(`input ${label}: ${formatValue(value)}`);
+        },
+        path: (label, value) => {
+            write(`path ${label}: ${formatValue(value)}`);
+        },
+        step: async (label, run) => {
+            const start = now();
+            write(`step ${label}: start`);
+            try {
+                const result = await run();
+                write(`step ${label}: ok (${elapsedMilliseconds(start, now)} ms)`);
+                return result;
+            }
+            catch (error) {
+                write(`step ${label}: failed (${elapsedMilliseconds(start, now)} ms): ${errorDetail(error)}`);
+                throw error;
+            }
+        },
+        value: (label, value) => {
+            write(`${label}: ${formatValue(value)}`);
+        },
+    };
+}
+
 ;// CONCATENATED MODULE: ./src/analyze.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Copyright 2026 Richard Thomson
  */
+
+
 
 
 
@@ -32297,13 +32380,15 @@ function logBuildLogFacts(buildLogFacts, trace) {
         info(`Build log NuGet config: ${configPath}`);
     }
 }
-async function readBuildLogFacts(buildLog, workspace) {
+async function readBuildLogFacts(buildLog, workspace, traceLogger) {
     if (!buildLog) {
+        traceLogger.decision("build log", "not supplied");
         return undefined;
     }
     const buildLogPath = external_node_path_namespaceObject.resolve(workspace, buildLog);
-    const content = await (0,promises_namespaceObject.readFile)(buildLogPath, "utf8");
-    return parseBuildLog(content);
+    traceLogger.path("build log", buildLogPath);
+    const content = await traceLogger.step("read build log", async () => (0,promises_namespaceObject.readFile)(buildLogPath, "utf8"));
+    return await traceLogger.step("parse build log", async () => parseBuildLog(content));
 }
 async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
@@ -32342,19 +32427,42 @@ async function run() {
     const failOnPolicy = normalizeFailOnPolicy(failOn);
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
-    const packageConfigs = await discoverPackageConfigs(workspace, packageConfigGlob);
-    const buildLogFacts = await readBuildLogFacts(buildLog, workspace);
-    const liveProbes = await runAnalyzerLiveProbes({
+    const traceLogger = createTraceLogger({
+        enabled: trace,
+        log: (message) => info(message),
+        secrets: [token],
+    });
+    const tracedRun = traceLogger.commandRunner(command_runCommand);
+    if (trace) {
+        traceLogger.input("token", token);
+        traceLogger.input("token-kind", tokenKind);
+        traceLogger.input("feed-owner", feedOwner);
+        traceLogger.input("username", username);
+        traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
+        traceLogger.input("build-log", buildLog);
+        traceLogger.input("package-config-glob", packageConfigGlob);
+        traceLogger.input("fail-on", failOn);
+        traceLogger.value("platform", `${process.platform}/${process.arch}`);
+        traceLogger.value("feed URL", feedUrl);
+        traceLogger.path("GITHUB_WORKSPACE", workspace);
+        traceLogger.path("vcpkg root", vcpkg.root);
+        traceLogger.path("vcpkg executable", vcpkg.executable);
+    }
+    const packageConfigs = await traceLogger.step("discover packages.config files", async () => discoverPackageConfigs(workspace, packageConfigGlob));
+    const buildLogFacts = await readBuildLogFacts(buildLog, workspace, traceLogger);
+    const liveProbes = await traceLogger.step("run live probes", async () => runAnalyzerLiveProbes({
         feedUrl,
+        run: tracedRun,
         token,
         username,
         vcpkg,
-    });
-    const restoreProbe = await runRestoreProbe({
+    }));
+    const restoreProbe = await traceLogger.step("run exact restore probe", async () => runRestoreProbe({
         feedUrl,
         nuget: liveProbes.nugetCommand,
         packageConfigs,
-    });
+        run: tracedRun,
+    }));
     const requestedCount = packageConfigs.requestedPackages.length ||
         buildLogFacts?.requestedCount ||
         0;
@@ -32369,6 +32477,9 @@ async function run() {
         restoreProbe,
         tokenKind,
     });
+    traceLogger.decision("fail-on", shouldFailDiagnosis(diagnosis, failOnPolicy)
+        ? `will fail on ${diagnosis.failureKind}`
+        : `will not fail on ${diagnosis.failureKind || "none"}`);
     setOutput("cache-status", diagnosis.cacheStatus);
     setOutput("diagnosis", diagnosis.diagnosis);
     setOutput("requested-count", requestedCount.toString());

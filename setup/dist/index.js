@@ -31142,55 +31142,6 @@ function buildDisabledBinarySources() {
     return "clear";
 }
 
-;// CONCATENATED MODULE: ./src/shared/inputs.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
-function parseBoolean(value) {
-    return TRUE_VALUES.has((value ?? "").trim().toLowerCase());
-}
-function normalizeTokenKind(value) {
-    const normalized = (value ?? "github").trim().toLowerCase();
-    if (normalized === "" || normalized === "github") {
-        return "github";
-    }
-    if (normalized === "pat") {
-        return "pat";
-    }
-    throw new Error(`Unsupported token-kind: ${value}`);
-}
-function ownerFromRepository(repository) {
-    const [owner, name] = (repository ?? "").split("/");
-    if (!owner || !name) {
-        return undefined;
-    }
-    return owner;
-}
-function resolveFeedOwner(input, repository) {
-    const trimmed = input?.trim();
-    if (trimmed) {
-        return trimmed;
-    }
-    const owner = ownerFromRepository(repository);
-    if (!owner) {
-        throw new Error("feed-owner is required when GITHUB_REPOSITORY is unavailable");
-    }
-    return owner;
-}
-function resolveUsername(input, tokenKind, feedOwner, actor) {
-    const trimmed = input?.trim();
-    if (trimmed) {
-        return trimmed;
-    }
-    if (tokenKind === "github") {
-        return feedOwner;
-    }
-    return actor?.trim() || feedOwner;
-}
-
 ;// CONCATENATED MODULE: external "node:child_process"
 const external_node_child_process_namespaceObject = require("node:child_process");
 ;// CONCATENATED MODULE: ./src/shared/command.ts
@@ -31238,6 +31189,55 @@ async function runCommand(command, args, options = {}) {
             reject(new Error(`${formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
         });
     });
+}
+
+;// CONCATENATED MODULE: ./src/shared/inputs.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
+function parseBoolean(value) {
+    return TRUE_VALUES.has((value ?? "").trim().toLowerCase());
+}
+function normalizeTokenKind(value) {
+    const normalized = (value ?? "github").trim().toLowerCase();
+    if (normalized === "" || normalized === "github") {
+        return "github";
+    }
+    if (normalized === "pat") {
+        return "pat";
+    }
+    throw new Error(`Unsupported token-kind: ${value}`);
+}
+function ownerFromRepository(repository) {
+    const [owner, name] = (repository ?? "").split("/");
+    if (!owner || !name) {
+        return undefined;
+    }
+    return owner;
+}
+function resolveFeedOwner(input, repository) {
+    const trimmed = input?.trim();
+    if (trimmed) {
+        return trimmed;
+    }
+    const owner = ownerFromRepository(repository);
+    if (!owner) {
+        throw new Error("feed-owner is required when GITHUB_REPOSITORY is unavailable");
+    }
+    return owner;
+}
+function resolveUsername(input, tokenKind, feedOwner, actor) {
+    const trimmed = input?.trim();
+    if (trimmed) {
+        return trimmed;
+    }
+    if (tokenKind === "github") {
+        return feedOwner;
+    }
+    return actor?.trim() || feedOwner;
 }
 
 ;// CONCATENATED MODULE: ./src/shared/mono.ts
@@ -31377,7 +31377,13 @@ function sanitizedErrorMessage(operation, settings, error) {
     return `${operation}: ${redactNugetSecrets(detail, settings)}`;
 }
 async function configureNugetSource(nuget, settings, options = {}) {
-    await ensureNugetConfigDirectories(options.configDirectories);
+    const configDirectories = options.configDirectories ?? nugetConfigDirectories();
+    if (options.trace) {
+        for (const directory of configDirectories) {
+            options.log?.(`NuGet config directory: ${directory}`);
+        }
+    }
+    await ensureNugetConfigDirectories(configDirectories);
     try {
         await runNuget(nuget, buildNugetSourceRemoveArgs(settings.sourceName), settings, options);
     }
@@ -31399,6 +31405,87 @@ async function configureNugetSource(nuget, settings, options = {}) {
     catch (error) {
         throw new Error(sanitizedErrorMessage("Failed to set GitHub Packages NuGet API key", settings, error));
     }
+}
+
+;// CONCATENATED MODULE: ./src/shared/trace.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function redact(value, secrets) {
+    let redacted = value;
+    for (const secret of secrets) {
+        if (secret) {
+            redacted = redacted.split(secret).join("***");
+        }
+    }
+    return redacted;
+}
+function errorDetail(error) {
+    return error instanceof Error ? error.message : String(error);
+}
+function errorExitCode(error) {
+    const detail = errorDetail(error);
+    const match = /\bexit code\s+(\d+)\b/i.exec(detail);
+    return match?.[1] ?? "unknown";
+}
+function elapsedMilliseconds(start, now) {
+    return Math.max(0, Math.round(now() - start));
+}
+function createTraceLogger(options) {
+    const now = options.now ?? (() => Date.now());
+    const secrets = options.secrets ?? [];
+    function write(message) {
+        if (options.enabled) {
+            options.log(`Trace ${redact(message, secrets)}`);
+        }
+    }
+    function formatValue(value) {
+        return value && value.length > 0 ? value : "(empty)";
+    }
+    return {
+        commandRunner: (run) => async (command, args, commandOptions) => {
+            const commandLine = formatCommand(command, args);
+            const start = now();
+            write(`command: ${commandLine}`);
+            try {
+                const result = await run(command, args, commandOptions);
+                write(`command exit code: 0 (${elapsedMilliseconds(start, now)} ms): ${commandLine}`);
+                return result;
+            }
+            catch (error) {
+                write(`command exit code: ${errorExitCode(error)} (${elapsedMilliseconds(start, now)} ms): ${commandLine}`);
+                throw error;
+            }
+        },
+        decision: (label, value) => {
+            write(`decision ${label}: ${value}`);
+        },
+        input: (label, value) => {
+            write(`input ${label}: ${formatValue(value)}`);
+        },
+        path: (label, value) => {
+            write(`path ${label}: ${formatValue(value)}`);
+        },
+        step: async (label, run) => {
+            const start = now();
+            write(`step ${label}: start`);
+            try {
+                const result = await run();
+                write(`step ${label}: ok (${elapsedMilliseconds(start, now)} ms)`);
+                return result;
+            }
+            catch (error) {
+                write(`step ${label}: failed (${elapsedMilliseconds(start, now)} ms): ${errorDetail(error)}`);
+                throw error;
+            }
+        },
+        value: (label, value) => {
+            write(`${label}: ${formatValue(value)}`);
+        },
+    };
 }
 
 ;// CONCATENATED MODULE: external "node:fs"
@@ -31524,6 +31611,8 @@ function buildNugetCommand(nugetPath, platform = process.platform) {
 
 
 
+
+
 const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
@@ -31559,33 +31648,56 @@ async function run() {
     const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
     const sourceName = optionalInput("source-name", "GitHubPackages");
     const trace = parseBoolean(optionalInput("trace", "false"));
+    const access = optionalInput("access", "readwrite");
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
+    const traceLogger = createTraceLogger({
+        enabled: trace,
+        log: (message) => info(message),
+        secrets: [token],
+    });
+    const tracedRun = traceLogger.commandRunner(runCommand);
     if (debug || trace) {
         info(`Debug: ${debug ? "enabled" : "disabled"}`);
         info(`Trace: ${trace ? "enabled" : "disabled"}`);
     }
     if (trace) {
-        info(`Feed URL: ${feedUrl}`);
-        info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
-        info(`Install Mono: ${installMono ? "true" : "false"}`);
-        info(`Fetch NuGet: ${installNuget ? "true" : "false"}`);
-        info(`NuGet source name: ${sourceName}`);
-        info(`vcpkg executable: ${vcpkg.executable}`);
-        info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
+        traceLogger.input("token", token);
+        traceLogger.input("token-kind", tokenKind);
+        traceLogger.input("feed-owner", feedOwner);
+        traceLogger.input("username", username);
+        traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
+        traceLogger.input("bootstrap", bootstrap ? "true" : "false");
+        traceLogger.input("install-mono", installMono ? "true" : "false");
+        traceLogger.input("install-nuget", installNuget ? "true" : "false");
+        traceLogger.input("source-name", sourceName);
+        traceLogger.input("access", access);
+        traceLogger.value("platform", `${process.platform}/${process.arch}`);
+        traceLogger.value("feed URL", feedUrl);
+        traceLogger.path("GITHUB_WORKSPACE", process.env.GITHUB_WORKSPACE ?? "");
+        traceLogger.path("vcpkg root", vcpkg.root);
+        traceLogger.path("vcpkg executable", vcpkg.executable);
+        traceLogger.path("vcpkg bootstrap script", vcpkg.bootstrapScript);
     }
     if (bootstrap) {
+        traceLogger.decision("bootstrap vcpkg", "enabled by input");
         info(`Bootstrapping vcpkg at ${vcpkg.root}`);
-        await bootstrapVcpkg(vcpkg);
+        await traceLogger.step("bootstrap vcpkg", async () => bootstrapVcpkg(vcpkg, tracedRun));
     }
-    await verifyVcpkgExecutable(vcpkg.executable);
-    const vcpkgVersion = await readVcpkgVersion(vcpkg);
+    else {
+        traceLogger.decision("bootstrap vcpkg", "skipped by input");
+    }
+    await traceLogger.step("verify vcpkg executable", async () => verifyVcpkgExecutable(vcpkg.executable));
+    const vcpkgVersion = await traceLogger.step("read vcpkg version", async () => readVcpkgVersion(vcpkg, tracedRun));
     let nugetCommand = "";
     if (installNuget) {
-        const mono = await ensureMonoAvailable(installMono);
-        const nugetPath = await fetchNuget(vcpkg);
+        traceLogger.decision("NuGet setup", "enabled by input");
+        const mono = await traceLogger.step("ensure Mono", async () => ensureMonoAvailable(installMono, process.platform, tracedRun));
+        const nugetPath = await traceLogger.step("fetch NuGet", async () => fetchNuget(vcpkg, tracedRun));
         const nuget = buildNugetCommand(nugetPath);
         nugetCommand = nuget.display;
-        await configureNugetSource(nuget, {
+        traceLogger.path("NuGet executable", nugetPath);
+        traceLogger.value("NuGet command", nugetCommand);
+        await traceLogger.step("configure NuGet source", async () => configureNugetSource(nuget, {
             feedUrl,
             sourceName,
             token,
@@ -31593,13 +31705,17 @@ async function run() {
         }, {
             debug,
             log: (message) => info(message),
+            run: tracedRun,
             trace,
-        });
+        }));
         if (trace) {
             info(`Mono required: ${mono.required ? "true" : "false"}`);
             info(`Mono installed by action: ${mono.installed ? "true" : "false"}`);
             info(`NuGet source configured: ${sourceName}`);
         }
+    }
+    else {
+        traceLogger.decision("NuGet setup", "skipped by input");
     }
     const binarySources = buildDisabledBinarySources();
     setOutput("feed-url", feedUrl);

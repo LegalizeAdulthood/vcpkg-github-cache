@@ -16,6 +16,7 @@ import {
 } from "./shared/analyze-probes";
 import { BuildLogFacts, parseBuildLog } from "./shared/build-log";
 import { buildFeedUrl } from "./shared/cache";
+import { runCommand } from "./shared/command";
 import {
   classifyCache,
   normalizeFailOnPolicy,
@@ -29,6 +30,7 @@ import {
 } from "./shared/inputs";
 import { discoverPackageConfigs } from "./shared/package-config";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
+import { createTraceLogger, TraceLogger } from "./shared/trace";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
 
 function liveProbeRows(
@@ -170,15 +172,22 @@ function logBuildLogFacts(
 async function readBuildLogFacts(
   buildLog: string,
   workspace: string,
+  traceLogger: TraceLogger,
 ): Promise<BuildLogFacts | undefined> {
   if (!buildLog) {
+    traceLogger.decision("build log", "not supplied");
     return undefined;
   }
 
   const buildLogPath = path.resolve(workspace, buildLog);
-  const content = await readFile(buildLogPath, "utf8");
+  traceLogger.path("build log", buildLogPath);
+  const content = await traceLogger.step("read build log", async () =>
+    readFile(buildLogPath, "utf8"),
+  );
 
-  return parseBuildLog(content);
+  return await traceLogger.step("parse build log", async () =>
+    parseBuildLog(content),
+  );
 }
 
 async function writeSummary(
@@ -250,22 +259,57 @@ export async function run(): Promise<void> {
     process.env.GITHUB_WORKSPACE,
   );
   const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
-  const packageConfigs = await discoverPackageConfigs(
-    workspace,
-    packageConfigGlob,
+  const traceLogger = createTraceLogger({
+    enabled: trace,
+    log: (message) => core.info(message),
+    secrets: [token],
+  });
+  const tracedRun = traceLogger.commandRunner(runCommand);
+
+  if (trace) {
+    traceLogger.input("token", token);
+    traceLogger.input("token-kind", tokenKind);
+    traceLogger.input("feed-owner", feedOwner);
+    traceLogger.input("username", username);
+    traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
+    traceLogger.input("build-log", buildLog);
+    traceLogger.input("package-config-glob", packageConfigGlob);
+    traceLogger.input("fail-on", failOn);
+    traceLogger.value("platform", `${process.platform}/${process.arch}`);
+    traceLogger.value("feed URL", feedUrl);
+    traceLogger.path("GITHUB_WORKSPACE", workspace);
+    traceLogger.path("vcpkg root", vcpkg.root);
+    traceLogger.path("vcpkg executable", vcpkg.executable);
+  }
+
+  const packageConfigs = await traceLogger.step(
+    "discover packages.config files",
+    async () => discoverPackageConfigs(workspace, packageConfigGlob),
   );
-  const buildLogFacts = await readBuildLogFacts(buildLog, workspace);
-  const liveProbes = await runAnalyzerLiveProbes({
-    feedUrl,
-    token,
-    username,
-    vcpkg,
-  });
-  const restoreProbe = await runRestoreProbe({
-    feedUrl,
-    nuget: liveProbes.nugetCommand,
-    packageConfigs,
-  });
+  const buildLogFacts = await readBuildLogFacts(
+    buildLog,
+    workspace,
+    traceLogger,
+  );
+  const liveProbes = await traceLogger.step("run live probes", async () =>
+    runAnalyzerLiveProbes({
+      feedUrl,
+      run: tracedRun,
+      token,
+      username,
+      vcpkg,
+    }),
+  );
+  const restoreProbe = await traceLogger.step(
+    "run exact restore probe",
+    async () =>
+      runRestoreProbe({
+        feedUrl,
+        nuget: liveProbes.nugetCommand,
+        packageConfigs,
+        run: tracedRun,
+      }),
+  );
   const requestedCount =
     packageConfigs.requestedPackages.length ||
     buildLogFacts?.requestedCount ||
@@ -282,6 +326,12 @@ export async function run(): Promise<void> {
     restoreProbe,
     tokenKind,
   });
+  traceLogger.decision(
+    "fail-on",
+    shouldFailDiagnosis(diagnosis, failOnPolicy)
+      ? `will fail on ${diagnosis.failureKind}`
+      : `will not fail on ${diagnosis.failureKind || "none"}`,
+  );
 
   core.setOutput("cache-status", diagnosis.cacheStatus);
   core.setOutput("diagnosis", diagnosis.diagnosis);

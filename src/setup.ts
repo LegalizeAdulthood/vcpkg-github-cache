@@ -7,6 +7,7 @@
 import * as core from "@actions/core";
 
 import { buildDisabledBinarySources, buildFeedUrl } from "./shared/cache";
+import { runCommand } from "./shared/command";
 import {
   normalizeTokenKind,
   parseBoolean,
@@ -15,6 +16,7 @@ import {
 } from "./shared/inputs";
 import { ensureMonoAvailable } from "./shared/mono";
 import { configureNugetSource } from "./shared/nuget";
+import { createTraceLogger } from "./shared/trace";
 import {
   buildNugetCommand,
   bootstrapVcpkg,
@@ -78,10 +80,17 @@ export async function run(): Promise<void> {
   const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
   const sourceName = optionalInput("source-name", "GitHubPackages");
   const trace = parseBoolean(optionalInput("trace", "false"));
+  const access = optionalInput("access", "readwrite");
   const vcpkg = resolveVcpkgPaths(
     optionalInput("vcpkg-root", "vcpkg"),
     process.env.GITHUB_WORKSPACE,
   );
+  const traceLogger = createTraceLogger({
+    enabled: trace,
+    log: (message) => core.info(message),
+    secrets: [token],
+  });
+  const tracedRun = traceLogger.commandRunner(runCommand);
 
   if (debug || trace) {
     core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
@@ -89,42 +98,70 @@ export async function run(): Promise<void> {
   }
 
   if (trace) {
-    core.info(`Feed URL: ${feedUrl}`);
-    core.info(`Bootstrap vcpkg: ${bootstrap ? "true" : "false"}`);
-    core.info(`Install Mono: ${installMono ? "true" : "false"}`);
-    core.info(`Fetch NuGet: ${installNuget ? "true" : "false"}`);
-    core.info(`NuGet source name: ${sourceName}`);
-    core.info(`vcpkg executable: ${vcpkg.executable}`);
-    core.info(`vcpkg bootstrap script: ${vcpkg.bootstrapScript}`);
+    traceLogger.input("token", token);
+    traceLogger.input("token-kind", tokenKind);
+    traceLogger.input("feed-owner", feedOwner);
+    traceLogger.input("username", username);
+    traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
+    traceLogger.input("bootstrap", bootstrap ? "true" : "false");
+    traceLogger.input("install-mono", installMono ? "true" : "false");
+    traceLogger.input("install-nuget", installNuget ? "true" : "false");
+    traceLogger.input("source-name", sourceName);
+    traceLogger.input("access", access);
+    traceLogger.value("platform", `${process.platform}/${process.arch}`);
+    traceLogger.value("feed URL", feedUrl);
+    traceLogger.path("GITHUB_WORKSPACE", process.env.GITHUB_WORKSPACE ?? "");
+    traceLogger.path("vcpkg root", vcpkg.root);
+    traceLogger.path("vcpkg executable", vcpkg.executable);
+    traceLogger.path("vcpkg bootstrap script", vcpkg.bootstrapScript);
   }
 
   if (bootstrap) {
+    traceLogger.decision("bootstrap vcpkg", "enabled by input");
     core.info(`Bootstrapping vcpkg at ${vcpkg.root}`);
-    await bootstrapVcpkg(vcpkg);
+    await traceLogger.step("bootstrap vcpkg", async () =>
+      bootstrapVcpkg(vcpkg, tracedRun),
+    );
+  } else {
+    traceLogger.decision("bootstrap vcpkg", "skipped by input");
   }
 
-  await verifyVcpkgExecutable(vcpkg.executable);
-  const vcpkgVersion = await readVcpkgVersion(vcpkg);
+  await traceLogger.step("verify vcpkg executable", async () =>
+    verifyVcpkgExecutable(vcpkg.executable),
+  );
+  const vcpkgVersion = await traceLogger.step("read vcpkg version", async () =>
+    readVcpkgVersion(vcpkg, tracedRun),
+  );
   let nugetCommand = "";
 
   if (installNuget) {
-    const mono = await ensureMonoAvailable(installMono);
-    const nugetPath = await fetchNuget(vcpkg);
+    traceLogger.decision("NuGet setup", "enabled by input");
+    const mono = await traceLogger.step("ensure Mono", async () =>
+      ensureMonoAvailable(installMono, process.platform, tracedRun),
+    );
+    const nugetPath = await traceLogger.step("fetch NuGet", async () =>
+      fetchNuget(vcpkg, tracedRun),
+    );
     const nuget = buildNugetCommand(nugetPath);
     nugetCommand = nuget.display;
-    await configureNugetSource(
-      nuget,
-      {
-        feedUrl,
-        sourceName,
-        token,
-        username,
-      },
-      {
-        debug,
-        log: (message) => core.info(message),
-        trace,
-      },
+    traceLogger.path("NuGet executable", nugetPath);
+    traceLogger.value("NuGet command", nugetCommand);
+    await traceLogger.step("configure NuGet source", async () =>
+      configureNugetSource(
+        nuget,
+        {
+          feedUrl,
+          sourceName,
+          token,
+          username,
+        },
+        {
+          debug,
+          log: (message) => core.info(message),
+          run: tracedRun,
+          trace,
+        },
+      ),
     );
 
     if (trace) {
@@ -134,6 +171,8 @@ export async function run(): Promise<void> {
       );
       core.info(`NuGet source configured: ${sourceName}`);
     }
+  } else {
+    traceLogger.decision("NuGet setup", "skipped by input");
   }
 
   const binarySources = buildDisabledBinarySources();
