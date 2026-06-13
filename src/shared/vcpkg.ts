@@ -71,9 +71,12 @@ export function buildBootstrapCommand(
   };
 }
 
-export async function bootstrapVcpkg(vcpkg: VcpkgPaths): Promise<void> {
+export async function bootstrapVcpkg(
+  vcpkg: VcpkgPaths,
+  run: typeof runCommand = runCommand,
+): Promise<void> {
   const command = buildBootstrapCommand(vcpkg);
-  await runCommand(command.file, command.args, { cwd: command.cwd });
+  await run(command.file, command.args, { cwd: command.cwd });
 }
 
 export async function verifyVcpkgExecutable(executable: string): Promise<void> {
@@ -95,8 +98,11 @@ export function extractVcpkgVersion(output: string): string {
   );
 }
 
-export async function readVcpkgVersion(vcpkg: VcpkgPaths): Promise<string> {
-  const result = await runCommand(vcpkg.executable, ["version"], {
+export async function readVcpkgVersion(
+  vcpkg: VcpkgPaths,
+  run: typeof runCommand = runCommand,
+): Promise<string> {
+  const result = await run(vcpkg.executable, ["version"], {
     cwd: vcpkg.root,
   });
   return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
@@ -136,8 +142,11 @@ export function extractFetchedNugetPath(output: string): string {
   return pathLine;
 }
 
-export async function fetchNuget(vcpkg: VcpkgPaths): Promise<string> {
-  const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
+export async function fetchNuget(
+  vcpkg: VcpkgPaths,
+  run: typeof runCommand = runCommand,
+): Promise<string> {
+  const result = await run(vcpkg.executable, ["fetch", "nuget"], {
     cwd: vcpkg.root,
   });
   return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);

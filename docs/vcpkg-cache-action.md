@@ -646,16 +646,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Analyzer Live Probes
-
-Implement:
-
-- feed authentication probe;
-- vcpkg version probe;
-- vcpkg NuGet command probe;
-- NuGet version and source list probes.
-
-### Slice 2: Analyzer Restore Probe
+### Slice 1: Analyzer Restore Probe
 
 Implement:
 
@@ -664,7 +655,7 @@ Implement:
 - restored package count output;
 - restore auth and tooling evidence.
 
-### Slice 3: Analyzer Build Log Parser
+### Slice 2: Analyzer Build Log Parser
 
 Implement:
 
@@ -672,7 +663,7 @@ Implement:
 - restore, build, and upload count extraction;
 - auth and quota pattern extraction.
 
-### Slice 4: Analyzer Diagnosis
+### Slice 3: Analyzer Diagnosis
 
 Implement:
 
@@ -680,46 +671,46 @@ Implement:
 - `cache-status` and `failure-kind` outputs;
 - `fail-on` policy.
 
-### Slice 5: Trace Logging
+### Slice 4: Trace Logging
 
 Implement:
 
 - trace logging.
 
-### Slice 6: Diagnostic Artifacts
+### Slice 5: Diagnostic Artifacts
 
 Implement:
 
 - sanitized diagnostic artifact assembly;
 - build log extracts.
 
-### Slice 7: GitHub Context Diagnostics
+### Slice 6: GitHub Context Diagnostics
 
 Implement:
 
 - safe GitHub context dump.
 
-### Slice 8: NuGet Config Diagnostics
+### Slice 7: NuGet Config Diagnostics
 
 Implement:
 
 - sanitized NuGet config dump.
 
-### Slice 9: Package Visibility Metadata
+### Slice 8: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 10: Package Quota Metadata
+### Slice 9: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 11: Documentation
+### Slice 10: Documentation
 
 Document:
 
@@ -727,7 +718,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 12: Examples
+### Slice 11: Examples
 
 Document:
 
@@ -736,7 +727,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 13: Marketplace Release
+### Slice 12: Marketplace Release
 
 Implement:
 

@@ -6,6 +6,12 @@
 
 import * as core from "@actions/core";
 
+import {
+  AnalyzerLiveProbes,
+  formatProbeResult,
+  ProbeResult,
+  runAnalyzerLiveProbes,
+} from "./shared/analyze-probes";
 import { buildFeedUrl } from "./shared/cache";
 import {
   normalizeTokenKind,
@@ -17,14 +23,45 @@ import { discoverPackageConfigs } from "./shared/package-config";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
 
 const CACHE_STATUS = "unknown";
-const DIAGNOSIS = "analyzer skeleton: no cache probes were run";
+const DIAGNOSIS =
+  "analyzer live probes completed; cache effectiveness is unknown";
+
+function liveProbeRows(
+  liveProbes: AnalyzerLiveProbes,
+): readonly (readonly [string, ProbeResult])[] {
+  return [
+    ["Feed basic auth", liveProbes.feedBasicAuth],
+    ["Feed bearer auth", liveProbes.feedBearerAuth],
+    ["vcpkg version", liveProbes.vcpkgVersion],
+    ["vcpkg NuGet command", liveProbes.vcpkgNuget],
+    ["NuGet version", liveProbes.nugetVersion],
+    ["NuGet sources", liveProbes.nugetSources],
+  ];
+}
 
 function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
 }
 
+function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
+  for (const [label, result] of liveProbeRows(liveProbes)) {
+    core.info(`${label}: ${formatProbeResult(result)}`);
+  }
+
+  if (!trace || !liveProbes.nugetSources.output) {
+    return;
+  }
+
+  for (const line of liveProbes.nugetSources.output.split(/\r?\n/)) {
+    if (line.trim()) {
+      core.info(`NuGet sources output: ${line}`);
+    }
+  }
+}
+
 async function writeSummary(
   feedUrl: string,
+  liveProbes: AnalyzerLiveProbes,
   packageConfigCount: number,
   requestedCount: number,
 ): Promise<void> {
@@ -32,12 +69,18 @@ async function writeSummary(
     return;
   }
 
-  await core.summary
+  const summary = core.summary
     .addHeading("vcpkg GitHub Packages cache analysis")
     .addRaw(DIAGNOSIS)
     .addEOL()
     .addRaw(`Feed: ${feedUrl}`)
-    .addEOL()
+    .addEOL();
+
+  for (const [label, result] of liveProbeRows(liveProbes)) {
+    summary.addRaw(`${label}: ${formatProbeResult(result)}`).addEOL();
+  }
+
+  await summary
     .addRaw(`packages.config files: ${packageConfigCount}`)
     .addEOL()
     .addRaw(`Requested packages: ${requestedCount}`)
@@ -77,6 +120,12 @@ export async function run(): Promise<void> {
     process.env.GITHUB_WORKSPACE ?? process.cwd(),
     packageConfigGlob,
   );
+  const liveProbes = await runAnalyzerLiveProbes({
+    feedUrl,
+    token,
+    username,
+    vcpkg,
+  });
   const requestedCount = packageConfigs.requestedPackages.length;
 
   core.setOutput("cache-status", CACHE_STATUS);
@@ -92,6 +141,7 @@ export async function run(): Promise<void> {
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
+  logProbeOutputs(liveProbes, trace);
   core.info(`packages.config files: ${packageConfigs.files.length}`);
   core.info(`Requested packages: ${requestedCount}`);
 
@@ -114,7 +164,12 @@ export async function run(): Promise<void> {
     }
   }
 
-  await writeSummary(feedUrl, packageConfigs.files.length, requestedCount);
+  await writeSummary(
+    feedUrl,
+    liveProbes,
+    packageConfigs.files.length,
+    requestedCount,
+  );
 }
 
 void run().catch((error: unknown) => {

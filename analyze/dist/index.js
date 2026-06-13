@@ -29576,7 +29576,7 @@ const _summary = new Summary();
  * @deprecated use `core.summary`
  */
 const markdownSummary = (/* unused pure expression or super */ null && (_summary));
-const summary = _summary;
+const summary_summary = _summary;
 //# sourceMappingURL=summary.js.map
 ;// CONCATENATED MODULE: ./node_modules/@actions/core/lib/path-utils.js
 
@@ -31125,6 +31125,353 @@ function getIDToken(aud) {
  */
 
 //# sourceMappingURL=core.js.map
+// EXTERNAL MODULE: external "node:buffer"
+var external_node_buffer_ = __nccwpck_require__(4573);
+;// CONCATENATED MODULE: external "node:https"
+const external_node_https_namespaceObject = require("node:https");
+// EXTERNAL MODULE: external "node:url"
+var external_node_url_ = __nccwpck_require__(3136);
+;// CONCATENATED MODULE: external "node:child_process"
+const external_node_child_process_namespaceObject = require("node:child_process");
+;// CONCATENATED MODULE: ./src/shared/command.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function quoteCommandArgument(value) {
+    if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
+        return value;
+    }
+    return `"${value.replaceAll('"', '\\"')}"`;
+}
+function formatCommand(command, args) {
+    return [command, ...args].map(quoteCommandArgument).join(" ");
+}
+async function command_runCommand(command, args, options = {}) {
+    return await new Promise((resolve, reject) => {
+        const child = (0,external_node_child_process_namespaceObject.spawn)(command, args, {
+            cwd: options.cwd,
+            env: options.env ?? process.env,
+            windowsHide: true,
+        });
+        let stdout = "";
+        let stderr = "";
+        child.stdout.setEncoding("utf8");
+        child.stderr.setEncoding("utf8");
+        child.stdout.on("data", (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+            stderr += chunk;
+        });
+        child.on("error", reject);
+        child.on("close", (code) => {
+            if (code === 0) {
+                resolve({ stdout, stderr });
+                return;
+            }
+            const exitCode = code ?? 1;
+            const detail = stderr.trim() || stdout.trim();
+            const message = detail ? `: ${detail}` : "";
+            reject(new Error(`${formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
+        });
+    });
+}
+
+;// CONCATENATED MODULE: external "node:fs"
+const external_node_fs_namespaceObject = require("node:fs");
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
+;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+
+
+function vcpkgExecutableName(platform) {
+    return platform === "win32" ? "vcpkg.exe" : "vcpkg";
+}
+function bootstrapScriptName(platform) {
+    return platform === "win32" ? "bootstrap-vcpkg.bat" : "bootstrap-vcpkg.sh";
+}
+function resolveVcpkgPaths(input, workspace, platform = process.platform) {
+    const rootInput = input?.trim() || "vcpkg";
+    const base = workspace?.trim() || process.cwd();
+    const root = external_node_path_namespaceObject.resolve(base, rootInput);
+    return {
+        bootstrapScript: external_node_path_namespaceObject.join(root, bootstrapScriptName(platform)),
+        executable: external_node_path_namespaceObject.join(root, vcpkgExecutableName(platform)),
+        root,
+    };
+}
+function buildBootstrapCommand(vcpkg, platform = process.platform) {
+    if (platform === "win32") {
+        return {
+            args: ["/d", "/s", "/c", "call", vcpkg.bootstrapScript],
+            cwd: vcpkg.root,
+            file: "cmd.exe",
+        };
+    }
+    return {
+        args: [],
+        cwd: vcpkg.root,
+        file: vcpkg.bootstrapScript,
+    };
+}
+async function bootstrapVcpkg(vcpkg, run = runCommand) {
+    const command = buildBootstrapCommand(vcpkg);
+    await run(command.file, command.args, { cwd: command.cwd });
+}
+async function verifyVcpkgExecutable(executable) {
+    try {
+        await access(executable, constants.F_OK);
+    }
+    catch {
+        throw new Error(`vcpkg executable was not found at ${executable}; bootstrap vcpkg before setup or set bootstrap: true`);
+    }
+}
+function extractVcpkgVersion(output) {
+    return (output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0) ?? "");
+}
+async function readVcpkgVersion(vcpkg, run = command_runCommand) {
+    const result = await run(vcpkg.executable, ["version"], {
+        cwd: vcpkg.root,
+    });
+    return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
+}
+function extractFetchedNugetPath(output) {
+    const pathLine = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .map((line) => line.replace(/^"(.*)"$/, "$1"))
+        .filter((line) => line.length > 0)
+        .find((line) => {
+        if (!/nuget\.exe$/i.test(line)) {
+            return false;
+        }
+        if (/^Downloading\b/i.test(line) || line.includes(" -> ")) {
+            return false;
+        }
+        return (/^(\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|\\\\)/.test(line) ||
+            /^[A-Za-z0-9_.-]+[\\/]/.test(line) ||
+            /^nuget\.exe$/i.test(line));
+    });
+    if (!pathLine) {
+        const detail = output.trim();
+        const suffix = detail ? `:\n${detail}` : "";
+        throw new Error(`vcpkg fetch nuget did not report a nuget.exe path${suffix}`);
+    }
+    return pathLine;
+}
+async function fetchNuget(vcpkg, run = command_runCommand) {
+    const result = await run(vcpkg.executable, ["fetch", "nuget"], {
+        cwd: vcpkg.root,
+    });
+    return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
+}
+function buildNugetCommand(nugetPath, platform = process.platform) {
+    if (platform === "win32") {
+        return {
+            args: [],
+            display: formatCommand(nugetPath, []),
+            file: nugetPath,
+        };
+    }
+    return {
+        args: [nugetPath],
+        display: formatCommand("mono", [nugetPath]),
+        file: "mono",
+    };
+}
+
+;// CONCATENATED MODULE: ./src/shared/analyze-probes.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+
+
+
+const DEFAULT_HTTP_TIMEOUT_MILLISECONDS = 10000;
+const MAX_PROBE_OUTPUT_LENGTH = 4000;
+function analyze_probes_ok(detail, output) {
+    return { detail, output, status: "ok" };
+}
+function failed(error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { detail: trimProbeOutput(detail), status: "failed" };
+}
+function skipped(detail) {
+    return { detail, status: "skipped" };
+}
+function trimProbeOutput(value) {
+    const trimmed = value.trim();
+    if (trimmed.length <= MAX_PROBE_OUTPUT_LENGTH) {
+        return trimmed;
+    }
+    return `${trimmed.slice(0, MAX_PROBE_OUTPUT_LENGTH)}...`;
+}
+function combinedOutput(result) {
+    return trimProbeOutput(`${result.stdout}\n${result.stderr}`);
+}
+function buildBasicAuthorization(username, token) {
+    return `Basic ${external_node_buffer_.Buffer.from(`${username}:${token}`, "utf8").toString("base64")}`;
+}
+function buildBearerAuthorization(token) {
+    return `Bearer ${token}`;
+}
+function extractNugetVersion(output) {
+    const versionLine = output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => /^NuGet Version:/i.test(line));
+    if (versionLine) {
+        return versionLine.replace(/^NuGet Version:\s*/i, "");
+    }
+    return (output
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0) ?? "");
+}
+async function requestHttpStatus(probe, timeoutMilliseconds = DEFAULT_HTTP_TIMEOUT_MILLISECONDS) {
+    return await new Promise((resolve, reject) => {
+        const url = new external_node_url_.URL(probe.url);
+        const request = (0,external_node_https_namespaceObject.request)(url, {
+            headers: {
+                Accept: "application/json",
+                "User-Agent": "vcpkg-github-cache-action",
+                ...probe.headers,
+            },
+            method: "GET",
+        }, (response) => {
+            response.resume();
+            response.on("end", () => {
+                resolve({
+                    statusCode: response.statusCode,
+                    statusMessage: response.statusMessage,
+                });
+            });
+        });
+        request.setTimeout(timeoutMilliseconds, () => {
+            request.destroy(new Error(`HTTP probe timed out after ${timeoutMilliseconds} ms`));
+        });
+        request.on("error", reject);
+        request.end();
+    });
+}
+function httpProbeDetail(response) {
+    const statusCode = response.statusCode ?? 0;
+    const statusMessage = response.statusMessage ?? "";
+    return `HTTP ${statusCode}${statusMessage ? ` ${statusMessage}` : ""}`;
+}
+function httpProbeSucceeded(response) {
+    const statusCode = response.statusCode ?? 0;
+    return statusCode >= 200 && statusCode < 400;
+}
+async function probeFeedAuth(feedUrl, authorization, httpProbe) {
+    try {
+        const response = await httpProbe({
+            headers: { Authorization: authorization },
+            url: feedUrl,
+        });
+        const detail = httpProbeDetail(response);
+        if (httpProbeSucceeded(response)) {
+            return analyze_probes_ok(detail);
+        }
+        return { detail, status: "failed" };
+    }
+    catch (error) {
+        return failed(error);
+    }
+}
+async function probeVcpkgVersion(vcpkg, run) {
+    try {
+        const version = await readVcpkgVersion(vcpkg, run);
+        return analyze_probes_ok(version || "vcpkg version command returned no output");
+    }
+    catch (error) {
+        return failed(error);
+    }
+}
+async function probeVcpkgNugetCommand(vcpkg, run, platform) {
+    try {
+        const nugetPath = await fetchNuget(vcpkg, run);
+        const nuget = buildNugetCommand(nugetPath, platform);
+        return { nuget, result: analyze_probes_ok(nuget.display) };
+    }
+    catch (error) {
+        return { result: failed(error) };
+    }
+}
+async function runNuget(nuget, args, run) {
+    return await run(nuget.file, [...nuget.args, ...args]);
+}
+async function probeNugetVersion(nuget, run) {
+    if (!nuget) {
+        return skipped("NuGet command unavailable");
+    }
+    try {
+        const result = await runNuget(nuget, ["help"], run);
+        const output = combinedOutput(result);
+        return analyze_probes_ok(extractNugetVersion(output) || "NuGet responded", output);
+    }
+    catch (error) {
+        return failed(error);
+    }
+}
+async function probeNugetSources(nuget, run) {
+    if (!nuget) {
+        return skipped("NuGet command unavailable");
+    }
+    try {
+        const result = await runNuget(nuget, ["sources", "List", "-Format", "Detailed", "-NonInteractive"], run);
+        const output = combinedOutput(result);
+        return analyze_probes_ok("NuGet sources listed", output);
+    }
+    catch (error) {
+        return failed(error);
+    }
+}
+function formatProbeResult(result) {
+    return `${result.status}: ${result.detail}`;
+}
+async function runAnalyzerLiveProbes(options) {
+    const httpProbe = options.httpProbe ??
+        ((request) => requestHttpStatus(request, options.timeoutMilliseconds).then((response) => response));
+    const run = options.run ?? command_runCommand;
+    const [feedBasicAuth, feedBearerAuth] = await Promise.all([
+        probeFeedAuth(options.feedUrl, buildBasicAuthorization(options.username, options.token), httpProbe),
+        probeFeedAuth(options.feedUrl, buildBearerAuthorization(options.token), httpProbe),
+    ]);
+    const vcpkgVersion = await probeVcpkgVersion(options.vcpkg, run);
+    const vcpkgNuget = await probeVcpkgNugetCommand(options.vcpkg, run, options.platform ?? process.platform);
+    const nugetVersion = await probeNugetVersion(vcpkgNuget.nuget, run);
+    const nugetSources = await probeNugetSources(vcpkgNuget.nuget, run);
+    return {
+        feedBasicAuth,
+        feedBearerAuth,
+        nugetCommand: vcpkgNuget.nuget,
+        nugetSources,
+        nugetVersion,
+        vcpkgNuget: vcpkgNuget.result,
+        vcpkgVersion,
+    };
+}
+
 ;// CONCATENATED MODULE: ./src/shared/cache.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31191,10 +31538,6 @@ function resolveUsername(input, tokenKind, feedOwner, actor) {
     return actor?.trim() || feedOwner;
 }
 
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = require("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/package-config.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31354,166 +31697,6 @@ async function discoverPackageConfigs(root, glob, options = {}) {
     };
 }
 
-;// CONCATENATED MODULE: external "node:fs"
-const external_node_fs_namespaceObject = require("node:fs");
-;// CONCATENATED MODULE: external "node:child_process"
-const external_node_child_process_namespaceObject = require("node:child_process");
-;// CONCATENATED MODULE: ./src/shared/command.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-
-function quoteCommandArgument(value) {
-    if (/^[A-Za-z0-9_./:\\-]+$/.test(value)) {
-        return value;
-    }
-    return `"${value.replaceAll('"', '\\"')}"`;
-}
-function command_formatCommand(command, args) {
-    return [command, ...args].map(quoteCommandArgument).join(" ");
-}
-async function command_runCommand(command, args, options = {}) {
-    return await new Promise((resolve, reject) => {
-        const child = spawn(command, args, {
-            cwd: options.cwd,
-            env: options.env ?? process.env,
-            windowsHide: true,
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.setEncoding("utf8");
-        child.stderr.setEncoding("utf8");
-        child.stdout.on("data", (chunk) => {
-            stdout += chunk;
-        });
-        child.stderr.on("data", (chunk) => {
-            stderr += chunk;
-        });
-        child.on("error", reject);
-        child.on("close", (code) => {
-            if (code === 0) {
-                resolve({ stdout, stderr });
-                return;
-            }
-            const exitCode = code ?? 1;
-            const detail = stderr.trim() || stdout.trim();
-            const message = detail ? `: ${detail}` : "";
-            reject(new Error(`${command_formatCommand(command, args)} failed with exit code ${exitCode}${message}`));
-        });
-    });
-}
-
-;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-
-
-
-
-function vcpkgExecutableName(platform) {
-    return platform === "win32" ? "vcpkg.exe" : "vcpkg";
-}
-function bootstrapScriptName(platform) {
-    return platform === "win32" ? "bootstrap-vcpkg.bat" : "bootstrap-vcpkg.sh";
-}
-function resolveVcpkgPaths(input, workspace, platform = process.platform) {
-    const rootInput = input?.trim() || "vcpkg";
-    const base = workspace?.trim() || process.cwd();
-    const root = external_node_path_namespaceObject.resolve(base, rootInput);
-    return {
-        bootstrapScript: external_node_path_namespaceObject.join(root, bootstrapScriptName(platform)),
-        executable: external_node_path_namespaceObject.join(root, vcpkgExecutableName(platform)),
-        root,
-    };
-}
-function buildBootstrapCommand(vcpkg, platform = process.platform) {
-    if (platform === "win32") {
-        return {
-            args: ["/d", "/s", "/c", "call", vcpkg.bootstrapScript],
-            cwd: vcpkg.root,
-            file: "cmd.exe",
-        };
-    }
-    return {
-        args: [],
-        cwd: vcpkg.root,
-        file: vcpkg.bootstrapScript,
-    };
-}
-async function bootstrapVcpkg(vcpkg) {
-    const command = buildBootstrapCommand(vcpkg);
-    await runCommand(command.file, command.args, { cwd: command.cwd });
-}
-async function verifyVcpkgExecutable(executable) {
-    try {
-        await access(executable, constants.F_OK);
-    }
-    catch {
-        throw new Error(`vcpkg executable was not found at ${executable}; bootstrap vcpkg before setup or set bootstrap: true`);
-    }
-}
-function extractVcpkgVersion(output) {
-    return (output
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .find((line) => line.length > 0) ?? "");
-}
-async function readVcpkgVersion(vcpkg) {
-    const result = await runCommand(vcpkg.executable, ["version"], {
-        cwd: vcpkg.root,
-    });
-    return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
-}
-function extractFetchedNugetPath(output) {
-    const pathLine = output
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .map((line) => line.replace(/^"(.*)"$/, "$1"))
-        .filter((line) => line.length > 0)
-        .find((line) => {
-        if (!/nuget\.exe$/i.test(line)) {
-            return false;
-        }
-        if (/^Downloading\b/i.test(line) || line.includes(" -> ")) {
-            return false;
-        }
-        return (/^(\/|\.{1,2}[\\/]|[A-Za-z]:[\\/]|\\\\)/.test(line) ||
-            /^[A-Za-z0-9_.-]+[\\/]/.test(line) ||
-            /^nuget\.exe$/i.test(line));
-    });
-    if (!pathLine) {
-        const detail = output.trim();
-        const suffix = detail ? `:\n${detail}` : "";
-        throw new Error(`vcpkg fetch nuget did not report a nuget.exe path${suffix}`);
-    }
-    return pathLine;
-}
-async function fetchNuget(vcpkg) {
-    const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
-        cwd: vcpkg.root,
-    });
-    return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
-}
-function buildNugetCommand(nugetPath, platform = process.platform) {
-    if (platform === "win32") {
-        return {
-            args: [],
-            display: formatCommand(nugetPath, []),
-            file: nugetPath,
-        };
-    }
-    return {
-        args: [nugetPath],
-        display: formatCommand("mono", [nugetPath]),
-        file: "mono",
-    };
-}
-
 ;// CONCATENATED MODULE: ./src/analyze.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31525,21 +31708,49 @@ function buildNugetCommand(nugetPath, platform = process.platform) {
 
 
 
+
 const CACHE_STATUS = "unknown";
-const DIAGNOSIS = "analyzer skeleton: no cache probes were run";
+const DIAGNOSIS = "analyzer live probes completed; cache effectiveness is unknown";
+function liveProbeRows(liveProbes) {
+    return [
+        ["Feed basic auth", liveProbes.feedBasicAuth],
+        ["Feed bearer auth", liveProbes.feedBearerAuth],
+        ["vcpkg version", liveProbes.vcpkgVersion],
+        ["vcpkg NuGet command", liveProbes.vcpkgNuget],
+        ["NuGet version", liveProbes.nugetVersion],
+        ["NuGet sources", liveProbes.nugetSources],
+    ];
+}
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
-async function writeSummary(feedUrl, packageConfigCount, requestedCount) {
+function logProbeOutputs(liveProbes, trace) {
+    for (const [label, result] of liveProbeRows(liveProbes)) {
+        info(`${label}: ${formatProbeResult(result)}`);
+    }
+    if (!trace || !liveProbes.nugetSources.output) {
+        return;
+    }
+    for (const line of liveProbes.nugetSources.output.split(/\r?\n/)) {
+        if (line.trim()) {
+            info(`NuGet sources output: ${line}`);
+        }
+    }
+}
+async function writeSummary(feedUrl, liveProbes, packageConfigCount, requestedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
-    await summary
+    const summary = summary_summary
         .addHeading("vcpkg GitHub Packages cache analysis")
         .addRaw(DIAGNOSIS)
         .addEOL()
         .addRaw(`Feed: ${feedUrl}`)
-        .addEOL()
+        .addEOL();
+    for (const [label, result] of liveProbeRows(liveProbes)) {
+        summary.addRaw(`${label}: ${formatProbeResult(result)}`).addEOL();
+    }
+    await summary
         .addRaw(`packages.config files: ${packageConfigCount}`)
         .addEOL()
         .addRaw(`Requested packages: ${requestedCount}`)
@@ -31560,6 +31771,12 @@ async function run() {
     const failOn = optionalInput("fail-on", "never");
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     const packageConfigs = await discoverPackageConfigs(process.env.GITHUB_WORKSPACE ?? process.cwd(), packageConfigGlob);
+    const liveProbes = await runAnalyzerLiveProbes({
+        feedUrl,
+        token,
+        username,
+        vcpkg,
+    });
     const requestedCount = packageConfigs.requestedPackages.length;
     setOutput("cache-status", CACHE_STATUS);
     setOutput("diagnosis", DIAGNOSIS);
@@ -31573,6 +31790,7 @@ async function run() {
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
+    logProbeOutputs(liveProbes, trace);
     info(`packages.config files: ${packageConfigs.files.length}`);
     info(`Requested packages: ${requestedCount}`);
     if (debug || trace) {
@@ -31590,7 +31808,7 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(feedUrl, packageConfigs.files.length, requestedCount);
+    await writeSummary(feedUrl, liveProbes, packageConfigs.files.length, requestedCount);
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));

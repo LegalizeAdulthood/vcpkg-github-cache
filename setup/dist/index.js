@@ -31443,9 +31443,9 @@ function buildBootstrapCommand(vcpkg, platform = process.platform) {
         file: vcpkg.bootstrapScript,
     };
 }
-async function bootstrapVcpkg(vcpkg) {
+async function bootstrapVcpkg(vcpkg, run = runCommand) {
     const command = buildBootstrapCommand(vcpkg);
-    await runCommand(command.file, command.args, { cwd: command.cwd });
+    await run(command.file, command.args, { cwd: command.cwd });
 }
 async function verifyVcpkgExecutable(executable) {
     try {
@@ -31461,8 +31461,8 @@ function extractVcpkgVersion(output) {
         .map((line) => line.trim())
         .find((line) => line.length > 0) ?? "");
 }
-async function readVcpkgVersion(vcpkg) {
-    const result = await runCommand(vcpkg.executable, ["version"], {
+async function readVcpkgVersion(vcpkg, run = runCommand) {
+    const result = await run(vcpkg.executable, ["version"], {
         cwd: vcpkg.root,
     });
     return extractVcpkgVersion(`${result.stdout}\n${result.stderr}`);
@@ -31491,8 +31491,8 @@ function extractFetchedNugetPath(output) {
     }
     return pathLine;
 }
-async function fetchNuget(vcpkg) {
-    const result = await runCommand(vcpkg.executable, ["fetch", "nuget"], {
+async function fetchNuget(vcpkg, run = runCommand) {
+    const result = await run(vcpkg.executable, ["fetch", "nuget"], {
         cwd: vcpkg.root,
     });
     return extractFetchedNugetPath(`${result.stdout}\n${result.stderr}`);
