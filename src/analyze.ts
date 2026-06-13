@@ -44,6 +44,8 @@ import {
   PackageIdentity,
 } from "./shared/package-config";
 import {
+  PACKAGE_QUOTA_RISK_PRIVATE_STORAGE,
+  packageMetadataQuotaRiskCount,
   PackageMetadataProbe,
   PackageMetadataResult,
   runPackageMetadataProbe,
@@ -151,6 +153,26 @@ function packageMetadataResults(
   );
 }
 
+function shouldProbePackageMetadata(
+  debug: boolean,
+  failOnPolicy: string,
+  tokenKind: string,
+): boolean {
+  return debug || failOnPolicy === "private-package" || tokenKind === "pat";
+}
+
+function logPackageQuotaRisks(
+  packageMetadata: PackageMetadataProbe | undefined,
+): void {
+  for (const result of packageMetadata?.results ?? []) {
+    if (result.quotaRisk === PACKAGE_QUOTA_RISK_PRIVATE_STORAGE) {
+      core.warning(
+        `GitHub Packages quota risk: ${result.name} uses ${result.quotaRisk}`,
+      );
+    }
+  }
+}
+
 function packageMetadataIdentities(
   buildLogFacts: BuildLogFacts | undefined,
   requestedPackages: readonly PackageIdentity[],
@@ -182,6 +204,8 @@ async function deniedPackageReports(
         nupkgSize: await nupkgSize(vcpkgRoot, value),
         packageId: value.packageId,
         packageSettingsUrl: result?.settingsUrl,
+        packageVersionCount: result?.versionCount,
+        quotaRisk: result?.quotaRisk,
         repository: result?.repository,
         version: value.version,
         visibility: result?.visibility,
@@ -476,23 +500,10 @@ export async function run(): Promise<void> {
     "";
   const builtCount = buildLogFacts?.builtCount?.toString() ?? "";
   const uploadedCount = buildLogFacts?.uploadedCount?.toString() ?? "";
-  const diagnosis = classifyCache({
-    buildLogFacts,
-    liveProbes,
-    requestedCount,
-    restoreProbe,
-    tokenKind,
-  });
-  traceLogger.decision(
-    "fail-on",
-    shouldFailDiagnosis(diagnosis, failOnPolicy)
-      ? `will fail on ${diagnosis.failureKind}`
-      : `will not fail on ${diagnosis.failureKind || "none"}`,
-  );
   let diagnosticsArtifact = "";
   let packageMetadata: PackageMetadataProbe | undefined;
 
-  if (debug) {
+  if (shouldProbePackageMetadata(debug, failOnPolicy, tokenKind)) {
     packageMetadata = await traceLogger.step(
       "probe package metadata",
       async () =>
@@ -507,6 +518,21 @@ export async function run(): Promise<void> {
         }),
     );
   }
+
+  const diagnosis = classifyCache({
+    buildLogFacts,
+    liveProbes,
+    packageMetadata,
+    requestedCount,
+    restoreProbe,
+    tokenKind,
+  });
+  traceLogger.decision(
+    "fail-on",
+    shouldFailDiagnosis(diagnosis, failOnPolicy)
+      ? `will fail on ${diagnosis.failureKind}`
+      : `will not fail on ${diagnosis.failureKind || "none"}`,
+  );
 
   const deniedReports = await traceLogger.step(
     "collect denied package details",
@@ -578,6 +604,7 @@ export async function run(): Promise<void> {
   logProbeOutputs(liveProbes, trace);
   logRestoreProbe(restoreProbe, trace);
   logBuildLogFacts(buildLogFacts, deniedReports, trace);
+  logPackageQuotaRisks(packageMetadata);
   core.info(`packages.config files: ${packageConfigs.files.length}`);
   core.info(`Requested packages: ${requestedCount}`);
   if (restoredCount) {
@@ -590,6 +617,9 @@ export async function run(): Promise<void> {
   }
 
   if (trace) {
+    core.info(
+      `Package quota risks: ${packageMetadataQuotaRiskCount(packageMetadata)}`,
+    );
     core.info(`Feed URL: ${feedUrl}`);
     core.info(`vcpkg root: ${vcpkg.root}`);
     core.info(`vcpkg executable: ${vcpkg.executable}`);

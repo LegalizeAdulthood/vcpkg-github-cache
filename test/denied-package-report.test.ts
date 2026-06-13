@@ -29,6 +29,8 @@ describe("denied package report", () => {
         packageId: "fmt_x64-windows",
         packageSettingsUrl:
           "https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings",
+        packageVersionCount: 4,
+        quotaRisk: "none",
         repository: "octo/repo",
         version: `8.0.0-${VCPKG_SUFFIX}`,
         visibility: "public",
@@ -41,7 +43,9 @@ describe("denied package report", () => {
       "Size",
       "Build Time",
       "Repository",
+      "Versions",
       "Visibility",
+      "Quota Risk",
     ]);
     expect(rows[1]).toEqual([
       "fmt_x64-windows",
@@ -49,7 +53,9 @@ describe("denied package report", () => {
       "12 MiB",
       "42 s",
       "octo/repo",
+      "4",
       "public",
+      "none",
     ]);
   });
 

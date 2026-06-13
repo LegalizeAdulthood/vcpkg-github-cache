@@ -9,6 +9,8 @@ export interface DeniedPackageReport {
   readonly nupkgSize?: string;
   readonly packageId: string;
   readonly packageSettingsUrl?: string;
+  readonly packageVersionCount?: number;
+  readonly quotaRisk?: string;
   readonly repository?: string;
   readonly version: string;
   readonly visibility?: string;
@@ -51,8 +53,16 @@ const COLUMNS: readonly ReportColumn[] = [
     value: (report) => report.repository,
   },
   {
+    header: "Versions",
+    value: (report) => report.packageVersionCount?.toString(),
+  },
+  {
     header: "Visibility",
     value: (report) => report.visibility,
+  },
+  {
+    header: "Quota Risk",
+    value: (report) => report.quotaRisk,
   },
 ];
 
@@ -150,8 +160,12 @@ export function formatDeniedPackageReportLine(
   const details = [
     report.nupkgSize ? `size: ${report.nupkgSize}` : "",
     report.buildTime ? `build time: ${report.buildTime}` : "",
+    report.packageVersionCount !== undefined
+      ? `versions: ${report.packageVersionCount}`
+      : "",
     report.repository ? `repository: ${report.repository}` : "",
     report.visibility ? `visibility: ${report.visibility}` : "",
+    report.quotaRisk ? `quota risk: ${report.quotaRisk}` : "",
   ].filter((value) => value.length > 0);
 
   return [

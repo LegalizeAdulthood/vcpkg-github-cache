@@ -46,11 +46,13 @@ export interface PackageMetadataResult {
   readonly endpoint?: PackageOwnerEndpoint;
   readonly name: string;
   readonly packageType?: string;
+  readonly quotaRisk?: string;
   readonly repository?: string;
   readonly repositoryUrl?: string;
   readonly settingsUrl?: string;
   readonly status: PackageMetadataStatus;
   readonly url?: string;
+  readonly versionCount?: number;
   readonly visibility?: string;
 }
 
@@ -62,6 +64,7 @@ const DEFAULT_API_URL = "https://api.github.com";
 const DEFAULT_LIMIT = 20;
 const DEFAULT_TIMEOUT_MILLISECONDS = 10000;
 const OWNER_ENDPOINTS: readonly PackageOwnerEndpoint[] = ["users", "orgs"];
+export const PACKAGE_QUOTA_RISK_PRIVATE_STORAGE = "private package storage";
 
 function uniquePackageIds(
   packageIdentities: readonly PackageIdentity[],
@@ -132,6 +135,17 @@ function stringField(
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function numberField(
+  object: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = object?.[key];
+
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+}
+
 function objectField(
   object: Readonly<Record<string, unknown>> | undefined,
   key: string,
@@ -141,6 +155,20 @@ function objectField(
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Readonly<Record<string, unknown>>)
     : undefined;
+}
+
+export function packageQuotaRisk(visibility: string | undefined): string {
+  const normalized = visibility?.trim().toLowerCase();
+
+  if (normalized === "public") {
+    return "none";
+  }
+
+  if (normalized === "private" || normalized === "internal") {
+    return PACKAGE_QUOTA_RISK_PRIVATE_STORAGE;
+  }
+
+  return "unknown";
 }
 
 function parseMetadataResponse(
@@ -161,11 +189,13 @@ function parseMetadataResponse(
       endpoint,
       name,
       packageType: stringField(metadata, "package_type"),
+      quotaRisk: packageQuotaRisk(stringField(metadata, "visibility")),
       repository: stringField(repository, "full_name"),
       repositoryUrl: stringField(repository, "html_url"),
       settingsUrl: packageSettingsUrl(endpoint, owner, name),
       status: "ok",
       url: stringField(metadata, "html_url"),
+      versionCount: numberField(metadata, "version_count"),
       visibility: stringField(metadata, "visibility"),
     };
   } catch (error) {
@@ -305,6 +335,14 @@ export async function runPackageMetadataProbe(
   };
 }
 
+export function packageMetadataQuotaRiskCount(
+  probe: PackageMetadataProbe | undefined,
+): number {
+  return (probe?.results ?? []).filter(
+    (result) => result.quotaRisk === PACKAGE_QUOTA_RISK_PRIVATE_STORAGE,
+  ).length;
+}
+
 function optional(value: string | undefined): string {
   return value && value.length > 0 ? value : "unknown";
 }
@@ -316,7 +354,9 @@ function formatResult(result: PackageMetadataResult): readonly string[] {
     `detail: ${result.detail}`,
     `endpoint: ${optional(result.endpoint)}`,
     `type: ${optional(result.packageType)}`,
+    `versions: ${result.versionCount?.toString() ?? "unknown"}`,
     `visibility: ${optional(result.visibility)}`,
+    `quota risk: ${optional(result.quotaRisk)}`,
     `repository: ${optional(result.repository)}`,
     `repository url: ${optional(result.repositoryUrl)}`,
     `settings url: ${optional(result.settingsUrl)}`,

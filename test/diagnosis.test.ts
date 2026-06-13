@@ -12,6 +12,7 @@ import {
   normalizeFailOnPolicy,
   shouldFailDiagnosis,
 } from "../src/shared/diagnosis";
+import { PackageMetadataProbe } from "../src/shared/package-metadata";
 import { RestoreProbe } from "../src/shared/restore-probe";
 
 function probe(status: ProbeResult["status"], detail: string): ProbeResult {
@@ -40,6 +41,25 @@ function restoreProbe(
   return {
     restoredCount,
     result: { detail, output, status },
+  };
+}
+
+function packageMetadata(): PackageMetadataProbe {
+  return {
+    limit: 20,
+    owner: "octo",
+    probedPackageIds: 1,
+    requestedPackageIds: 1,
+    results: [
+      {
+        detail: "HTTP 200 OK",
+        endpoint: "users",
+        name: "fmt",
+        quotaRisk: "private package storage",
+        status: "ok",
+        visibility: "private",
+      },
+    ],
   };
 }
 
@@ -121,6 +141,21 @@ describe("cache diagnosis", () => {
     expect(diagnosis.cacheStatus).toBe("restore-healthy");
     expect(diagnosis.failureKind).toBe("");
     expect(diagnosis.diagnosis).toContain("build log absent");
+  });
+
+  test("reports private package quota risk when cache is otherwise healthy", () => {
+    const diagnosis = classifyCache({
+      liveProbes: liveProbes(),
+      packageMetadata: packageMetadata(),
+      requestedCount: 3,
+      restoreProbe: restoreProbe("ok", "restored 3/3 packages", 3),
+      tokenKind: "pat",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("restore-healthy");
+    expect(diagnosis.failureKind).toBe("private-package");
+    expect(diagnosis.diagnosis).toContain("private package quota risk 1");
+    expect(shouldFailDiagnosis(diagnosis, "private-package")).toBe(true);
   });
 
   test("classifies exact restore misses", () => {

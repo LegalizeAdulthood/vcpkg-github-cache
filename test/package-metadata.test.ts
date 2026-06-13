@@ -9,7 +9,9 @@ import { describe, expect, test } from "vitest";
 import {
   formatPackageMetadataProbe,
   PackageMetadataHttpRequest,
+  packageMetadataQuotaRiskCount,
   packageMetadataUrl,
+  packageQuotaRisk,
   packageSettingsUrl,
   runPackageMetadataProbe,
 } from "../src/shared/package-metadata";
@@ -50,6 +52,7 @@ describe("package metadata probes", () => {
               full_name: "octo/repo",
               html_url: "https://github.com/octo/repo",
             },
+            version_count: 3,
             visibility: "public",
           }),
           statusCode: 200,
@@ -70,11 +73,16 @@ describe("package metadata probes", () => {
       endpoint: "users",
       name: "fmt",
       packageType: "nuget",
+      quotaRisk: "none",
       repository: "octo/repo",
       settingsUrl: "https://github.com/users/octo/packages/nuget/fmt/settings",
       status: "ok",
+      versionCount: 3,
       visibility: "public",
     });
+    expect(packageMetadataQuotaRiskCount(probe)).toBe(0);
+    expect(formatPackageMetadataProbe(probe)).toContain("versions: 3");
+    expect(formatPackageMetadataProbe(probe)).toContain("quota risk: none");
   });
 
   test("falls back from user to organization package metadata", async () => {
@@ -97,6 +105,7 @@ describe("package metadata probes", () => {
           body: JSON.stringify({
             name: "zlib",
             repository: { full_name: "octo-org/repo" },
+            version_count: 7,
             visibility: "private",
           }),
           statusCode: 200,
@@ -112,10 +121,20 @@ describe("package metadata probes", () => {
     ]);
     expect(probe.results[0]).toMatchObject({
       endpoint: "orgs",
+      quotaRisk: "private package storage",
       repository: "octo-org/repo",
       status: "ok",
+      versionCount: 7,
       visibility: "private",
     });
+    expect(packageMetadataQuotaRiskCount(probe)).toBe(1);
+  });
+
+  test("classifies package quota risk from visibility", () => {
+    expect(packageQuotaRisk("public")).toBe("none");
+    expect(packageQuotaRisk("private")).toBe("private package storage");
+    expect(packageQuotaRisk("internal")).toBe("private package storage");
+    expect(packageQuotaRisk(undefined)).toBe("unknown");
   });
 
   test("bounds package metadata probes", async () => {

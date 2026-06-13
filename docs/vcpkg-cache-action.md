@@ -295,8 +295,8 @@ Analyze evidence tiers:
 - With a build log, parse upload behavior from the actual build.  This is
   the only tier that may report packages denied write access.  The denied
   package table should include package ID and version, and may add package
-  size, elapsed handle time, repository, visibility, and package settings
-  links when available.
+  size, elapsed handle time, repository, package version count, visibility,
+  quota risk, and package settings links when available.
 - Without a build log, but with discovered `packages.config` files, run the
   exact restore probe and package metadata probes.  Report package metadata
   as planning evidence only.  Do not claim that the repository was denied
@@ -566,11 +566,12 @@ The probe should report:
 
 - package name;
 - package type;
+- newest version count, if available;
 - visibility;
+- quota risk;
 - repository association, if present;
 - package settings URL, if the package owner endpoint is known;
 - package URL;
-- newest version count, if available.
 
 If the API cannot read visibility, report `unknown` and keep the main
 diagnosis based on restore and upload behavior.
@@ -673,14 +674,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Package Quota Metadata
-
-Implement bounded package metadata probes:
-
-- package version count;
-- quota-risk warning.
-
-### Slice 2: Documentation
+### Slice 1: Documentation
 
 Document:
 
@@ -688,7 +682,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 3: Examples
+### Slice 2: Examples
 
 Document:
 
@@ -697,7 +691,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 4: Marketplace Release
+### Slice 3: Marketplace Release
 
 Implement:
 

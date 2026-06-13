@@ -7,6 +7,10 @@
 import { AnalyzerLiveProbes, ProbeResult } from "./analyze-probes";
 import { BuildLogFacts } from "./build-log";
 import { TokenKind } from "./inputs";
+import {
+  packageMetadataQuotaRiskCount,
+  PackageMetadataProbe,
+} from "./package-metadata";
 import { RestoreProbe } from "./restore-probe";
 
 export type CacheStatus =
@@ -50,6 +54,7 @@ export interface CacheDiagnosis {
 export interface CacheDiagnosisInput {
   readonly buildLogFacts?: BuildLogFacts;
   readonly liveProbes: AnalyzerLiveProbes;
+  readonly packageMetadata?: PackageMetadataProbe;
   readonly requestedCount: number;
   readonly restoreProbe: RestoreProbe;
   readonly tokenKind: TokenKind;
@@ -261,6 +266,23 @@ function result(
   };
 }
 
+function withPackageQuotaRisk(
+  diagnosis: CacheDiagnosis,
+  input: CacheDiagnosisInput,
+): CacheDiagnosis {
+  const quotaRiskCount = packageMetadataQuotaRiskCount(input.packageMetadata);
+
+  if (diagnosis.failureKind || quotaRiskCount === 0) {
+    return diagnosis;
+  }
+
+  return {
+    cacheStatus: diagnosis.cacheStatus,
+    diagnosis: `${diagnosis.diagnosis}; private package quota risk ${quotaRiskCount}`,
+    failureKind: "private-package",
+  };
+}
+
 export function normalizeFailOnPolicy(value: string): FailOnPolicy {
   const normalized = value.trim().toLowerCase();
 
@@ -316,8 +338,8 @@ export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
   }
 
   if (input.buildLogFacts) {
-    return classifyBuildLog(input);
+    return withPackageQuotaRisk(classifyBuildLog(input), input);
   }
 
-  return classifyWithoutBuildLog(input);
+  return withPackageQuotaRisk(classifyWithoutBuildLog(input), input);
 }
