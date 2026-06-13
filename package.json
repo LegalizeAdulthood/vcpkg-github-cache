@@ -8,20 +8,21 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "npm run build:setup && npm run build:analyze && npm run fix-dist-text && npm run check-dist-syntax",
+    "build": "npm run build:setup && npm run build:analyze && npm run check-dist",
     "build:setup": "ncc build src/setup.ts --out setup/dist --source-map --license licenses.txt",
     "build:analyze": "ncc build src/analyze.ts --out analyze/dist --source-map --license licenses.txt",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
+    "check-dist": "npm run check-dist-syntax && npm run check-dist-load",
+    "check-dist-load": "node -e \"process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE='1'; require('./setup/dist/index.js')\" && node -e \"process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE='1'; require('./analyze/dist/index.js')\"",
     "check-dist-syntax": "node --check setup/dist/index.js && node --check analyze/dist/index.js",
-    "fix-dist-text": "node scripts/fix-dist-text.mjs setup/dist analyze/dist",
-    "format": "prettier --write \"*.{json,mjs}\" \"scripts/**/*.mjs\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
-    "format:check": "prettier --check \"*.{json,mjs}\" \"scripts/**/*.mjs\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
+    "format": "prettier --write \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
+    "format:check": "prettier --check \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@actions/artifact": "^6.2.1",
+    "@actions/artifact": "^2.3.2",
     "@actions/core": "^3.0.1"
   },
   "devDependencies": {

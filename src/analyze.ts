@@ -446,6 +446,8 @@ export async function run(): Promise<void> {
   }
 }
 
-void run().catch((error: unknown) => {
-  core.setFailed(error instanceof Error ? error.message : String(error));
-});
+if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {
+  void run().catch((error: unknown) => {
+    core.setFailed(error instanceof Error ? error.message : String(error));
+  });
+}
