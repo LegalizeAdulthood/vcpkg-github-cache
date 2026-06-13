@@ -31298,12 +31298,32 @@ async function ensureMonoAvailable(install, platform = process.platform, run = r
 const promises_namespaceObject = require("node:fs/promises");
 ;// CONCATENATED MODULE: external "node:path"
 const external_node_path_namespaceObject = require("node:path");
+;// CONCATENATED MODULE: ./src/shared/nuget-config-paths.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function nugetConfigDirectories(platform = process.platform, env = process.env) {
+    if (platform === "win32") {
+        return env.APPDATA ? [external_node_path_namespaceObject.win32.join(env.APPDATA, "NuGet")] : [];
+    }
+    return env.HOME
+        ? [
+            external_node_path_namespaceObject.posix.join(env.HOME, ".nuget", "NuGet"),
+            external_node_path_namespaceObject.posix.join(env.HOME, ".config", "NuGet"),
+        ]
+        : [];
+}
+
 ;// CONCATENATED MODULE: ./src/shared/nuget.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Copyright 2026 Richard Thomson
  */
+
 
 
 
@@ -31340,17 +31360,6 @@ function buildNugetSetApiKeyArgs(feedUrl, token) {
         "-Verbosity",
         "detailed",
     ];
-}
-function nugetConfigDirectories(platform = process.platform, env = process.env) {
-    if (platform === "win32") {
-        return env.APPDATA ? [external_node_path_namespaceObject.win32.join(env.APPDATA, "NuGet")] : [];
-    }
-    return env.HOME
-        ? [
-            external_node_path_namespaceObject.posix.join(env.HOME, ".nuget", "NuGet"),
-            external_node_path_namespaceObject.posix.join(env.HOME, ".config", "NuGet"),
-        ]
-        : [];
 }
 async function ensureNugetConfigDirectories(directories = nugetConfigDirectories()) {
     for (const directory of directories) {

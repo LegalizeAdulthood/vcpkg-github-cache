@@ -14,6 +14,7 @@ import { BuildLogFacts } from "./build-log";
 import { CacheDiagnosis, FailOnPolicy } from "./diagnosis";
 import { safeGithubContext } from "./github-context";
 import { TokenKind } from "./inputs";
+import { ReadTextFile, sanitizedNugetConfigDump } from "./nuget-config";
 import { PackageConfigDiscovery, packageIdentityKey } from "./package-config";
 import { RestoreProbe } from "./restore-probe";
 import { VcpkgPaths } from "./vcpkg";
@@ -43,6 +44,8 @@ export interface DiagnosticsArtifactInput {
 export interface DiagnosticsArtifactOptions {
   readonly artifactName?: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly nugetConfigPaths?: readonly string[];
+  readonly readNugetConfigFile?: ReadTextFile;
   readonly rootDirectory?: string;
   readonly upload?: ArtifactUpload;
 }
@@ -248,6 +251,7 @@ function buildLogExtract(facts: BuildLogFacts | undefined): string {
 function artifactFiles(
   input: DiagnosticsArtifactInput,
   env: NodeJS.ProcessEnv,
+  nugetConfig: string,
 ): readonly ArtifactFile[] {
   return [
     { content: summary(input), path: "summary.md" },
@@ -269,6 +273,10 @@ function artifactFiles(
         input.liveProbes.nugetSources.output,
       ),
       path: "nuget-sources.txt",
+    },
+    {
+      content: nugetConfig,
+      path: "nuget-config-sanitized.txt",
     },
     {
       content: probeFile(formatProbeResult(input.liveProbes.feedBasicAuth), ""),
@@ -331,8 +339,15 @@ export async function uploadDiagnosticsArtifact(
     options.rootDirectory ??
     (await mkdtemp(path.join(tmpdir(), "vcpkg-cache-diagnostics-")));
   const env = options.env ?? process.env;
+  const nugetConfig = await sanitizedNugetConfigDump({
+    configPaths: options.nugetConfigPaths,
+    env,
+    extraConfigPaths: input.buildLogFacts?.nugetConfigPaths,
+    readFile: options.readNugetConfigFile,
+    token: input.token,
+  });
   const files = await Promise.all(
-    artifactFiles(input, env).map((file) =>
+    artifactFiles(input, env, nugetConfig).map((file) =>
       writeArtifactFile(rootDirectory, file.path, file.content, input.token),
     ),
   );

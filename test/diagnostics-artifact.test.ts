@@ -208,6 +208,9 @@ describe("diagnostics artifact", () => {
           GITHUB_REPOSITORY: "octo/repo",
           RUNNER_OS: "Windows",
         },
+        nugetConfigPaths: ["NuGet.Config"],
+        readNugetConfigFile: async () =>
+          '<configuration><apikeys><add key="feed" value="token" /></apikeys></configuration>',
         rootDirectory,
         upload: async (name, files, uploadRoot) => {
           uploads.push(
@@ -235,13 +238,24 @@ describe("diagnostics artifact", () => {
       ),
       "utf8",
     );
+    const nugetConfig = await readFile(
+      path.join(
+        rootDirectory,
+        "vcpkg-cache-diagnostics",
+        "nuget-config-sanitized.txt",
+      ),
+      "utf8",
+    );
 
     expect(artifactName).toBe("test-diagnostics");
     expect(uploads[0]).toBe("test-diagnostics");
     expect(uploads).toContain("summary.md");
+    expect(uploads).toContain("nuget-config-sanitized.txt");
     expect(summary).toContain("cache status: upload-failure");
     expect(restore).not.toContain("token");
     expect(buildLog).not.toContain("token");
+    expect(nugetConfig).not.toContain("token");
+    expect(nugetConfig).toContain('value="***"');
     expect(buildLog).toContain("auth: Response status code: 403 Forbidden ***");
   });
 });

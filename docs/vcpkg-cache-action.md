@@ -653,27 +653,21 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: NuGet Config Diagnostics
-
-Implement:
-
-- sanitized NuGet config dump.
-
-### Slice 2: Package Visibility Metadata
+### Slice 1: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 3: Package Quota Metadata
+### Slice 2: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 4: Documentation
+### Slice 3: Documentation
 
 Document:
 
@@ -681,7 +675,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 5: Examples
+### Slice 4: Examples
 
 Document:
 
@@ -690,7 +684,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 6: Marketplace Release
+### Slice 5: Marketplace Release
 
 Implement:
 
