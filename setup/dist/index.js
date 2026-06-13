@@ -31416,6 +31416,26 @@ async function configureNugetSource(nuget, settings, options = {}) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/shared/setup-output.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+function setupOutput(feedUrl, access, nugetConfigured) {
+    if (!nugetConfigured) {
+        return {
+            binarySources: buildDisabledBinarySources(),
+            diagnosis: "vcpkg GitHub Packages cache setup skipped NuGet",
+        };
+    }
+    return {
+        binarySources: buildBinarySources(feedUrl, access),
+        diagnosis: "vcpkg GitHub Packages cache setup complete",
+    };
+}
+
 ;// CONCATENATED MODULE: ./src/shared/trace.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31622,21 +31642,21 @@ function buildNugetCommand(nugetPath, platform = process.platform) {
 
 
 
-const DIAGNOSIS = "setup skeleton: binary caching is disabled";
+
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
 function summaryItem(label, value) {
     return `${label}: ${value}`;
 }
-async function writeSummary(feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
+async function writeSummary(diagnosis, feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     await summary
         .addHeading("vcpkg GitHub Packages cache setup", 3)
         .addList([
-        summaryItem("Diagnosis", DIAGNOSIS),
+        summaryItem("Diagnosis", diagnosis),
         summaryItem("Feed", feedUrl),
         summaryItem("vcpkg root", vcpkgRoot),
         summaryItem("vcpkg version", vcpkgVersion),
@@ -31698,6 +31718,7 @@ async function run() {
     await traceLogger.step("verify vcpkg executable", async () => verifyVcpkgExecutable(vcpkg.executable));
     const vcpkgVersion = await traceLogger.step("read vcpkg version", async () => readVcpkgVersion(vcpkg, tracedRun));
     let nugetCommand = "";
+    let nugetConfigured = false;
     if (installNuget) {
         traceLogger.decision("NuGet setup", "enabled by input");
         const mono = await traceLogger.step("ensure Mono", async () => ensureMonoAvailable(installMono, process.platform, tracedRun));
@@ -31717,6 +31738,7 @@ async function run() {
             run: tracedRun,
             trace,
         }));
+        nugetConfigured = true;
         if (trace) {
             info(`Mono required: ${mono.required ? "true" : "false"}`);
             info(`Mono installed by action: ${mono.installed ? "true" : "false"}`);
@@ -31726,13 +31748,13 @@ async function run() {
     else {
         traceLogger.decision("NuGet setup", "skipped by input");
     }
-    const binarySources = buildDisabledBinarySources();
+    const { binarySources, diagnosis } = setupOutput(feedUrl, access, nugetConfigured);
     setOutput("feed-url", feedUrl);
     setOutput("binary-sources", binarySources);
     setOutput("nuget-command", nugetCommand);
     setOutput("vcpkg-version", vcpkgVersion);
-    setOutput("diagnosis", DIAGNOSIS);
-    info(DIAGNOSIS);
+    setOutput("diagnosis", diagnosis);
+    info(diagnosis);
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
@@ -31742,7 +31764,7 @@ async function run() {
         info(`binary-sources: ${binarySources}`);
         info(`nuget-command: ${nugetCommand}`);
     }
-    await writeSummary(feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
+    await writeSummary(diagnosis, feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
 }
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {
     void run().catch((error) => {

@@ -159,15 +159,14 @@ The `binary-sources` output should normally be:
 clear;nuget,https://nuget.pkg.github.com/OWNER/index.json,readwrite
 ```
 
-Until NuGet source setup is complete for both package restore and package
-upload, the setup action must emit:
+When NuGet setup is disabled, the setup action emits:
 
 ```text
 clear
 ```
 
-Do not switch the public setup output from `clear` to `nuget` until restore
-and upload are both configured and expected to work.
+Otherwise the setup action emits a configured NuGet binary source after the
+NuGet source credentials and API key are configured.
 
 ## Setup Behavior
 
@@ -654,22 +653,14 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Setup Binary Sources Output
-
-Implement:
-
-- emit the configured NuGet `binary-sources` value from setup;
-- update the setup diagnosis now that binary caching is enabled;
-- switch `trn` to use `steps.vc.outputs.binary-sources`.
-
-### Slice 2: Package Quota Metadata
+### Slice 1: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 3: Documentation
+### Slice 2: Documentation
 
 Document:
 
@@ -677,7 +668,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 4: Examples
+### Slice 3: Examples
 
 Document:
 
@@ -686,7 +677,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 5: Marketplace Release
+### Slice 4: Marketplace Release
 
 Implement:
 

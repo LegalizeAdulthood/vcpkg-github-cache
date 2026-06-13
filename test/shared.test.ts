@@ -17,6 +17,7 @@ import {
   resolveFeedOwner,
   resolveUsername,
 } from "../src/shared/inputs";
+import { setupOutput } from "../src/shared/setup-output";
 
 describe("shared action helpers", () => {
   test("parses enabled boolean inputs", () => {
@@ -67,5 +68,19 @@ describe("shared action helpers", () => {
 
   test("builds disabled binary source value", () => {
     expect(buildDisabledBinarySources()).toBe("clear");
+  });
+
+  test("builds setup outputs for configured and skipped NuGet", () => {
+    const feedUrl = buildFeedUrl("octo");
+
+    expect(setupOutput(feedUrl, "readwrite", true)).toEqual({
+      binarySources:
+        "clear;nuget,https://nuget.pkg.github.com/octo/index.json,readwrite",
+      diagnosis: "vcpkg GitHub Packages cache setup complete",
+    });
+    expect(setupOutput(feedUrl, "readwrite", false)).toEqual({
+      binarySources: "clear",
+      diagnosis: "vcpkg GitHub Packages cache setup skipped NuGet",
+    });
   });
 });

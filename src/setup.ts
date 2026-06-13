@@ -6,7 +6,7 @@
 
 import * as core from "@actions/core";
 
-import { buildDisabledBinarySources, buildFeedUrl } from "./shared/cache";
+import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
 import {
   normalizeTokenKind,
@@ -16,6 +16,7 @@ import {
 } from "./shared/inputs";
 import { ensureMonoAvailable } from "./shared/mono";
 import { configureNugetSource } from "./shared/nuget";
+import { setupOutput } from "./shared/setup-output";
 import { createTraceLogger } from "./shared/trace";
 import {
   buildNugetCommand,
@@ -26,8 +27,6 @@ import {
   verifyVcpkgExecutable,
 } from "./shared/vcpkg";
 
-const DIAGNOSIS = "setup skeleton: binary caching is disabled";
-
 function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
 }
@@ -37,6 +36,7 @@ function summaryItem(label: string, value: string): string {
 }
 
 async function writeSummary(
+  diagnosis: string,
   feedUrl: string,
   nugetCommand: string,
   vcpkgRoot: string,
@@ -49,7 +49,7 @@ async function writeSummary(
   await core.summary
     .addHeading("vcpkg GitHub Packages cache setup", 3)
     .addList([
-      summaryItem("Diagnosis", DIAGNOSIS),
+      summaryItem("Diagnosis", diagnosis),
       summaryItem("Feed", feedUrl),
       summaryItem("vcpkg root", vcpkgRoot),
       summaryItem("vcpkg version", vcpkgVersion),
@@ -133,6 +133,7 @@ export async function run(): Promise<void> {
     readVcpkgVersion(vcpkg, tracedRun),
   );
   let nugetCommand = "";
+  let nugetConfigured = false;
 
   if (installNuget) {
     traceLogger.decision("NuGet setup", "enabled by input");
@@ -163,6 +164,7 @@ export async function run(): Promise<void> {
         },
       ),
     );
+    nugetConfigured = true;
 
     if (trace) {
       core.info(`Mono required: ${mono.required ? "true" : "false"}`);
@@ -175,15 +177,19 @@ export async function run(): Promise<void> {
     traceLogger.decision("NuGet setup", "skipped by input");
   }
 
-  const binarySources = buildDisabledBinarySources();
+  const { binarySources, diagnosis } = setupOutput(
+    feedUrl,
+    access,
+    nugetConfigured,
+  );
 
   core.setOutput("feed-url", feedUrl);
   core.setOutput("binary-sources", binarySources);
   core.setOutput("nuget-command", nugetCommand);
   core.setOutput("vcpkg-version", vcpkgVersion);
-  core.setOutput("diagnosis", DIAGNOSIS);
+  core.setOutput("diagnosis", diagnosis);
 
-  core.info(DIAGNOSIS);
+  core.info(diagnosis);
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
@@ -195,7 +201,13 @@ export async function run(): Promise<void> {
     core.info(`nuget-command: ${nugetCommand}`);
   }
 
-  await writeSummary(feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
+  await writeSummary(
+    diagnosis,
+    feedUrl,
+    nugetCommand,
+    vcpkg.root,
+    vcpkgVersion,
+  );
 }
 
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {
