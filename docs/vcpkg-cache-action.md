@@ -654,14 +654,22 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Package Quota Metadata
+### Slice 1: Setup Binary Sources Output
+
+Implement:
+
+- emit the configured NuGet `binary-sources` value from setup;
+- update the setup diagnosis now that binary caching is enabled;
+- switch `trn` to use `steps.vc.outputs.binary-sources`.
+
+### Slice 2: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 2: Documentation
+### Slice 3: Documentation
 
 Document:
 
@@ -669,7 +677,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 3: Examples
+### Slice 4: Examples
 
 Document:
 
@@ -678,7 +686,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 4: Marketplace Release
+### Slice 5: Marketplace Release
 
 Implement:
 
