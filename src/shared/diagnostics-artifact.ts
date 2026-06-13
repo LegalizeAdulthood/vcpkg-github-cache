@@ -16,6 +16,10 @@ import { safeGithubContext } from "./github-context";
 import { TokenKind } from "./inputs";
 import { ReadTextFile, sanitizedNugetConfigDump } from "./nuget-config";
 import { PackageConfigDiscovery, packageIdentityKey } from "./package-config";
+import {
+  formatPackageMetadataProbe,
+  PackageMetadataProbe,
+} from "./package-metadata";
 import { RestoreProbe } from "./restore-probe";
 import { VcpkgPaths } from "./vcpkg";
 
@@ -30,6 +34,7 @@ export interface DiagnosticsArtifactInput {
   readonly liveProbes: AnalyzerLiveProbes;
   readonly packageConfigGlob: string;
   readonly packageConfigs: PackageConfigDiscovery;
+  readonly packageMetadata?: PackageMetadataProbe;
   readonly requestedCount: number;
   readonly restoreProbe: RestoreProbe;
   readonly restoredCount: string;
@@ -290,6 +295,10 @@ function artifactFiles(
       path: "feed-probe-bearer.txt",
     },
     { content: packageConfig(input), path: "packages-config.txt" },
+    {
+      content: formatPackageMetadataProbe(input.packageMetadata),
+      path: "package-metadata.txt",
+    },
     {
       content: probeFile(
         formatProbeResult(input.restoreProbe.result),

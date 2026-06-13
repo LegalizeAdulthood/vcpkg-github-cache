@@ -31,6 +31,10 @@ import {
   resolveUsername,
 } from "./shared/inputs";
 import { discoverPackageConfigs } from "./shared/package-config";
+import {
+  PackageMetadataProbe,
+  runPackageMetadataProbe,
+} from "./shared/package-metadata";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
 import { createTraceLogger, TraceLogger } from "./shared/trace";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
@@ -337,8 +341,20 @@ export async function run(): Promise<void> {
       : `will not fail on ${diagnosis.failureKind || "none"}`,
   );
   let diagnosticsArtifact = "";
+  let packageMetadata: PackageMetadataProbe | undefined;
 
   if (debug) {
+    packageMetadata = await traceLogger.step(
+      "probe package metadata",
+      async () =>
+        runPackageMetadataProbe({
+          apiUrl: process.env.GITHUB_API_URL,
+          feedOwner,
+          packageIdentities: packageConfigs.requestedPackages,
+          token,
+        }),
+    );
+
     try {
       diagnosticsArtifact = await traceLogger.step(
         "upload diagnostics artifact",
@@ -355,6 +371,7 @@ export async function run(): Promise<void> {
               liveProbes,
               packageConfigGlob,
               packageConfigs,
+              packageMetadata,
               requestedCount,
               restoreProbe,
               restoredCount,

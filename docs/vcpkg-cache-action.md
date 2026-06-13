@@ -481,6 +481,7 @@ vcpkg-cache-diagnostics/
   feed-probe-basic.txt
   feed-probe-bearer.txt
   packages-config.txt
+  package-metadata.txt
   restore-probe.txt
   build-log-extract.txt
   abi-info/
@@ -653,21 +654,14 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Package Visibility Metadata
-
-Implement bounded package metadata probes:
-
-- package visibility;
-- repository association.
-
-### Slice 2: Package Quota Metadata
+### Slice 1: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 3: Documentation
+### Slice 2: Documentation
 
 Document:
 
@@ -675,7 +669,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 4: Examples
+### Slice 3: Examples
 
 Document:
 
@@ -684,7 +678,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 5: Marketplace Release
+### Slice 4: Marketplace Release
 
 Implement:
 

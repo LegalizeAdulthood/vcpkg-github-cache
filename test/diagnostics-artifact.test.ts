@@ -18,6 +18,7 @@ import {
   uploadDiagnosticsArtifact,
 } from "../src/shared/diagnostics-artifact";
 import { PackageConfigDiscovery } from "../src/shared/package-config";
+import { PackageMetadataProbe } from "../src/shared/package-metadata";
 import { RestoreProbe } from "../src/shared/restore-probe";
 import { VcpkgPaths } from "../src/shared/vcpkg";
 
@@ -64,6 +65,27 @@ function packageConfigs(): PackageConfigDiscovery {
       },
     ],
     requestedPackages: [{ id: "fmt", version: "8.0.0" }],
+  };
+}
+
+function packageMetadata(): PackageMetadataProbe {
+  return {
+    limit: 20,
+    owner: "octo",
+    probedPackageIds: 1,
+    requestedPackageIds: 1,
+    results: [
+      {
+        detail: "HTTP 200 OK",
+        endpoint: "users",
+        name: "fmt",
+        packageType: "nuget",
+        repository: "octo/repo",
+        status: "ok",
+        url: "https://github.com/octo/repo/packages/1",
+        visibility: "public",
+      },
+    ],
   };
 }
 
@@ -191,6 +213,7 @@ describe("diagnostics artifact", () => {
         liveProbes: liveProbes(),
         packageConfigGlob: "**/packages.config",
         packageConfigs: packageConfigs(),
+        packageMetadata: packageMetadata(),
         requestedCount: 1,
         restoreProbe: restoreProbe(),
         restoredCount: "0",
@@ -246,16 +269,27 @@ describe("diagnostics artifact", () => {
       ),
       "utf8",
     );
+    const metadata = await readFile(
+      path.join(
+        rootDirectory,
+        "vcpkg-cache-diagnostics",
+        "package-metadata.txt",
+      ),
+      "utf8",
+    );
 
     expect(artifactName).toBe("test-diagnostics");
     expect(uploads[0]).toBe("test-diagnostics");
     expect(uploads).toContain("summary.md");
     expect(uploads).toContain("nuget-config-sanitized.txt");
+    expect(uploads).toContain("package-metadata.txt");
     expect(summary).toContain("cache status: upload-failure");
     expect(restore).not.toContain("token");
     expect(buildLog).not.toContain("token");
     expect(nugetConfig).not.toContain("token");
     expect(nugetConfig).toContain('value="***"');
+    expect(metadata).toContain("visibility: public");
+    expect(metadata).toContain("repository: octo/repo");
     expect(buildLog).toContain("auth: Response status code: 403 Forbidden ***");
   });
 });
