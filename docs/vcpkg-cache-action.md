@@ -674,15 +674,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Documentation
-
-Document:
-
-- public repository expectations;
-- private repository quota behavior;
-- forked pull request behavior.
-
-### Slice 2: Examples
+### Slice 1: Examples
 
 Document:
 
@@ -691,7 +683,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 3: Marketplace Release
+### Slice 2: Marketplace Release
 
 Implement:
 
