@@ -189295,14 +189295,14 @@ async function runAnalyzerLiveProbes(options) {
  *
  * Copyright 2026 Richard Thomson
  */
-function quietDeniedPackageHeading(cacheStatus) {
-    return `Packages denied write access (${cacheStatus.replaceAll("-", " ")})`;
+function cacheStatusHeading(cacheStatus) {
+    return `vcpkg GitHub Packages cache: ${cacheStatus.replaceAll("-", " ")}`;
 }
 function shouldLogAnalysisDetails(debug, trace) {
     return debug || trace;
 }
-function shouldUseDeniedPackageTableOnly(deniedReportCount, verbose) {
-    return deniedReportCount > 0 && !verbose;
+function shouldUseCompactSummary(verbose) {
+    return !verbose;
 }
 function shouldProbePackageMetadata(debug, failOnPolicy, tokenKind, buildLogFacts) {
     return (debug ||
@@ -191152,11 +191152,14 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
         return;
     }
     const summary = summary_summary;
-    if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
-        await summary
-            .addHeading(quietDeniedPackageHeading(cacheStatus), 4)
-            .addTable(writeDeniedPackageSummaryTable(deniedReports))
-            .write();
+    if (shouldUseCompactSummary(verbose)) {
+        summary.addHeading(cacheStatusHeading(cacheStatus), 3);
+        if (deniedReports.length) {
+            summary
+                .addHeading("Packages denied write access", 4)
+                .addTable(writeDeniedPackageSummaryTable(deniedReports));
+        }
+        await summary.write();
         return;
     }
     summary

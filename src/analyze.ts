@@ -16,10 +16,10 @@ import {
   runAnalyzerLiveProbes,
 } from "./shared/analyze-probes";
 import {
-  quietDeniedPackageHeading,
+  cacheStatusHeading,
   shouldLogAnalysisDetails,
   shouldProbePackageMetadata,
-  shouldUseDeniedPackageTableOnly,
+  shouldUseCompactSummary,
 } from "./shared/analyze-policy";
 import {
   BuildLogFacts,
@@ -383,11 +383,16 @@ async function writeSummary(
 
   const summary = core.summary;
 
-  if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
-    await summary
-      .addHeading(quietDeniedPackageHeading(cacheStatus), 4)
-      .addTable(writeDeniedPackageSummaryTable(deniedReports))
-      .write();
+  if (shouldUseCompactSummary(verbose)) {
+    summary.addHeading(cacheStatusHeading(cacheStatus), 3);
+
+    if (deniedReports.length) {
+      summary
+        .addHeading("Packages denied write access", 4)
+        .addTable(writeDeniedPackageSummaryTable(deniedReports));
+    }
+
+    await summary.write();
     return;
   }
 

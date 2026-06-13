@@ -7,10 +7,10 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  quietDeniedPackageHeading,
+  cacheStatusHeading,
   shouldLogAnalysisDetails,
   shouldProbePackageMetadata,
-  shouldUseDeniedPackageTableOnly,
+  shouldUseCompactSummary,
 } from "../src/shared/analyze-policy";
 import { BuildLogFacts } from "../src/shared/build-log";
 
@@ -21,9 +21,9 @@ function buildLogFacts(
 }
 
 describe("analyze policy", () => {
-  test("labels quiet denied package summaries with cache status", () => {
-    expect(quietDeniedPackageHeading("upload-failure")).toBe(
-      "Packages denied write access (upload failure)",
+  test("labels compact summaries with cache status", () => {
+    expect(cacheStatusHeading("upload-failure")).toBe(
+      "vcpkg GitHub Packages cache: upload failure",
     );
   });
 
@@ -47,9 +47,8 @@ describe("analyze policy", () => {
     expect(shouldLogAnalysisDetails(false, true)).toBe(true);
   });
 
-  test("uses only the denied package table in quiet summaries", () => {
-    expect(shouldUseDeniedPackageTableOnly(1, false)).toBe(true);
-    expect(shouldUseDeniedPackageTableOnly(1, true)).toBe(false);
-    expect(shouldUseDeniedPackageTableOnly(0, false)).toBe(false);
+  test("uses compact summaries outside debug and trace mode", () => {
+    expect(shouldUseCompactSummary(false)).toBe(true);
+    expect(shouldUseCompactSummary(true)).toBe(false);
   });
 });

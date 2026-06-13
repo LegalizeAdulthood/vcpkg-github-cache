@@ -6,8 +6,8 @@
 
 import { BuildLogFacts } from "./build-log";
 
-export function quietDeniedPackageHeading(cacheStatus: string): string {
-  return `Packages denied write access (${cacheStatus.replaceAll("-", " ")})`;
+export function cacheStatusHeading(cacheStatus: string): string {
+  return `vcpkg GitHub Packages cache: ${cacheStatus.replaceAll("-", " ")}`;
 }
 
 export function shouldLogAnalysisDetails(
@@ -17,11 +17,8 @@ export function shouldLogAnalysisDetails(
   return debug || trace;
 }
 
-export function shouldUseDeniedPackageTableOnly(
-  deniedReportCount: number,
-  verbose: boolean,
-): boolean {
-  return deniedReportCount > 0 && !verbose;
+export function shouldUseCompactSummary(verbose: boolean): boolean {
+  return !verbose;
 }
 
 export function shouldProbePackageMetadata(
