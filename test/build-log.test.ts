@@ -17,6 +17,7 @@ describe("build log parser", () => {
 2026-06-13T00:00:03Z Additional packages (*) will be modified to complete this operation.
 Restored 2 package(s) from NuGet
 Building ncurses:x64-linux@6.5#3...
+Elapsed time to handle ncurses:x64-linux: 42 s
 Starting submission of ncurses:x64-linux to 1 binary cache(s)
 Uploading binaries for ncurses:x64-linux to NuGet
 Completed submission of ncurses:x64-linux to 1 binary cache(s)
@@ -35,6 +36,13 @@ Feeds used:
     expect(facts.zeroCacheSubmissions).toBe(0);
     expect(facts.writeDeniedPackages).toEqual([]);
     expect(facts.builtPackages).toEqual(["ncurses:x64-linux@6.5#3"]);
+    expect(facts.packageHandleTimes).toEqual([
+      {
+        elapsed: "42 s",
+        packageId: "ncurses_x64-linux",
+        packageSpec: "ncurses:x64-linux",
+      },
+    ]);
     expect(facts.nugetConfigPaths).toEqual([
       "/home/runner/.nuget/NuGet/NuGet.Config",
     ]);

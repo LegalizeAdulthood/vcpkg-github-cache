@@ -6,7 +6,7 @@
 
 import * as core from "@actions/core";
 import artifact from "@actions/artifact";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import * as path from "node:path";
 
 import {
@@ -23,6 +23,11 @@ import {
 import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
 import {
+  DeniedPackageReport,
+  deniedPackageReportRows,
+  formatDeniedPackageReportTable,
+} from "./shared/denied-package-report";
+import {
   classifyCache,
   normalizeFailOnPolicy,
   shouldFailDiagnosis,
@@ -34,9 +39,13 @@ import {
   resolveFeedOwner,
   resolveUsername,
 } from "./shared/inputs";
-import { discoverPackageConfigs } from "./shared/package-config";
+import {
+  discoverPackageConfigs,
+  PackageIdentity,
+} from "./shared/package-config";
 import {
   PackageMetadataProbe,
+  PackageMetadataResult,
   runPackageMetadataProbe,
 } from "./shared/package-metadata";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
@@ -76,31 +85,108 @@ function writeDeniedPackages(
   return buildLogFacts?.writeDeniedPackages ?? [];
 }
 
-function writeDeniedPackageTable(
-  packages: readonly WriteDeniedPackage[],
-): string {
-  if (!packages.length) {
-    return "";
-  }
+function writeDeniedPackageSummaryTable(
+  packages: readonly DeniedPackageReport[],
+): SummaryTableRows {
+  const [header, ...rows] = deniedPackageReportRows(packages);
 
   return [
-    "| Package ID | Version |",
-    "| --- | --- |",
-    ...packages.map((value) => `| ${value.packageId} | ${value.version} |`),
-    "",
-  ].join("\n");
+    header.map((value) => ({ data: value, header: true })),
+    ...rows.map((row) => [...row]),
+  ];
 }
 
-function writeDeniedPackageSummaryTable(
-  packages: readonly WriteDeniedPackage[],
-): SummaryTableRows {
-  return [
-    [
-      { data: "Package ID", header: true },
-      { data: "Version", header: true },
-    ],
-    ...packages.map((value) => [value.packageId, value.version]),
-  ];
+function formatNupkgSize(size: number): string {
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let value = size;
+  let unit = 0;
+
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  if (unit === 0) {
+    return `${size} B`;
+  }
+
+  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+}
+
+function nupkgFileName(value: WriteDeniedPackage): string {
+  return `${value.packageId}.${value.version}.nupkg`;
+}
+
+async function nupkgSize(
+  vcpkgRoot: string,
+  value: WriteDeniedPackage,
+): Promise<string | undefined> {
+  try {
+    const file = await stat(
+      path.join(vcpkgRoot, "buildtrees", nupkgFileName(value)),
+    );
+
+    return file.isFile() ? formatNupkgSize(file.size) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function packageHandleTimes(
+  buildLogFacts: BuildLogFacts | undefined,
+): ReadonlyMap<string, string> {
+  return new Map(
+    (buildLogFacts?.packageHandleTimes ?? []).map((value) => [
+      value.packageId,
+      value.elapsed,
+    ]),
+  );
+}
+
+function packageMetadataResults(
+  packageMetadata: PackageMetadataProbe | undefined,
+): ReadonlyMap<string, PackageMetadataResult> {
+  return new Map(
+    (packageMetadata?.results ?? []).map((value) => [value.name, value]),
+  );
+}
+
+function packageMetadataIdentities(
+  buildLogFacts: BuildLogFacts | undefined,
+  requestedPackages: readonly PackageIdentity[],
+): readonly PackageIdentity[] {
+  const deniedPackages = writeDeniedPackages(buildLogFacts);
+
+  return deniedPackages.length
+    ? deniedPackages.map((value) => ({
+        id: value.packageId,
+        version: value.version,
+      }))
+    : requestedPackages;
+}
+
+async function deniedPackageReports(
+  buildLogFacts: BuildLogFacts | undefined,
+  packageMetadata: PackageMetadataProbe | undefined,
+  vcpkgRoot: string,
+): Promise<readonly DeniedPackageReport[]> {
+  const handleTimes = packageHandleTimes(buildLogFacts);
+  const metadata = packageMetadataResults(packageMetadata);
+
+  return await Promise.all(
+    writeDeniedPackages(buildLogFacts).map(async (value) => {
+      const result = metadata.get(value.packageId);
+
+      return {
+        buildTime: handleTimes.get(value.packageId),
+        nupkgSize: await nupkgSize(vcpkgRoot, value),
+        packageId: value.packageId,
+        repository: result?.repository,
+        version: value.version,
+        visibility: result?.visibility,
+      };
+    }),
+  );
 }
 
 function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
@@ -174,6 +260,7 @@ function buildLogRows(
 
 function logBuildLogFacts(
   buildLogFacts: BuildLogFacts | undefined,
+  deniedReports: readonly DeniedPackageReport[],
   trace: boolean,
 ): void {
   if (!buildLogFacts) {
@@ -208,9 +295,7 @@ function logBuildLogFacts(
     `Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`,
   );
 
-  const deniedTable = writeDeniedPackageTable(
-    buildLogFacts.writeDeniedPackages,
-  );
+  const deniedTable = formatDeniedPackageReportTable(deniedReports);
 
   if (deniedTable) {
     for (const line of deniedTable.trimEnd().split("\n")) {
@@ -265,6 +350,7 @@ async function writeSummary(
   restoredCount: string,
   builtCount: string,
   uploadedCount: string,
+  deniedReports: readonly DeniedPackageReport[],
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
@@ -288,12 +374,10 @@ async function writeSummary(
       summaryItem("Built packages", builtCount || "unknown"),
       summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ]);
-  const deniedPackages = writeDeniedPackages(buildLogFacts);
-
-  if (deniedPackages.length) {
+  if (deniedReports.length) {
     summary
       .addHeading("Packages denied write access", 4)
-      .addTable(writeDeniedPackageSummaryTable(deniedPackages));
+      .addTable(writeDeniedPackageSummaryTable(deniedReports));
   }
 
   await summary.write();
@@ -414,11 +498,22 @@ export async function run(): Promise<void> {
         runPackageMetadataProbe({
           apiUrl: process.env.GITHUB_API_URL,
           feedOwner,
-          packageIdentities: packageConfigs.requestedPackages,
+          packageIdentities: packageMetadataIdentities(
+            buildLogFacts,
+            packageConfigs.requestedPackages,
+          ),
           token,
         }),
     );
+  }
 
+  const deniedReports = await traceLogger.step(
+    "collect denied package details",
+    async () =>
+      deniedPackageReports(buildLogFacts, packageMetadata, vcpkg.root),
+  );
+
+  if (debug) {
     try {
       diagnosticsArtifact = await traceLogger.step(
         "upload diagnostics artifact",
@@ -428,6 +523,7 @@ export async function run(): Promise<void> {
               buildLog,
               buildLogFacts,
               builtCount,
+              deniedPackageReports: deniedReports,
               diagnosis,
               failOnPolicy,
               feedOwner,
@@ -480,7 +576,7 @@ export async function run(): Promise<void> {
   core.info(`NuGet username: ${username}`);
   logProbeOutputs(liveProbes, trace);
   logRestoreProbe(restoreProbe, trace);
-  logBuildLogFacts(buildLogFacts, trace);
+  logBuildLogFacts(buildLogFacts, deniedReports, trace);
   core.info(`packages.config files: ${packageConfigs.files.length}`);
   core.info(`Requested packages: ${requestedCount}`);
   if (restoredCount) {
@@ -520,6 +616,7 @@ export async function run(): Promise<void> {
     restoredCount,
     builtCount,
     uploadedCount,
+    deniedReports,
   );
 
   if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {

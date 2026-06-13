@@ -11,6 +11,7 @@ export interface BuildLogFacts {
   readonly failedHttpStatuses: readonly string[];
   readonly feeds: readonly string[];
   readonly nugetConfigPaths: readonly string[];
+  readonly packageHandleTimes: readonly PackageHandleTime[];
   readonly quotaMessages: readonly string[];
   readonly requestedCount?: number;
   readonly restoredCount?: number;
@@ -25,6 +26,12 @@ export interface BuildLogFacts {
 export interface WriteDeniedPackage {
   readonly packageId: string;
   readonly version: string;
+}
+
+export interface PackageHandleTime {
+  readonly elapsed: string;
+  readonly packageId: string;
+  readonly packageSpec: string;
 }
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
@@ -138,6 +145,37 @@ function writeDeniedPackage(line: string): WriteDeniedPackage | undefined {
   };
 }
 
+function packageSpecToNugetPackageId(packageSpec: string): string | undefined {
+  const match = /^(.+):([^:\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
+
+  if (!match) {
+    return undefined;
+  }
+
+  return `${match[1]}_${match[2]}`;
+}
+
+function packageHandleTime(line: string): PackageHandleTime | undefined {
+  const match = /^Elapsed time to handle\s+(.+):\s+(.+)$/i.exec(line.trim());
+
+  if (!match) {
+    return undefined;
+  }
+
+  const packageSpec = match[1];
+  const packageId = packageSpecToNugetPackageId(packageSpec);
+
+  if (!packageId) {
+    return undefined;
+  }
+
+  return {
+    elapsed: match[2],
+    packageId,
+    packageSpec,
+  };
+}
+
 function nugetConfigPath(line: string): string | undefined {
   const trimmed = line.trim();
 
@@ -173,6 +211,22 @@ function uniqueWriteDeniedPackages(
   return output;
 }
 
+function uniquePackageHandleTimes(
+  values: readonly PackageHandleTime[],
+): readonly PackageHandleTime[] {
+  const seen = new Set<string>();
+  const output: PackageHandleTime[] = [];
+
+  for (const value of values) {
+    if (!seen.has(value.packageId)) {
+      seen.add(value.packageId);
+      output.push(value);
+    }
+  }
+
+  return output;
+}
+
 export function parseBuildLog(content: string): BuildLogFacts {
   const packageListPackages: string[] = [];
   const restoredPackages: string[] = [];
@@ -182,6 +236,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   const quotaMessages: string[] = [];
   const feeds: string[] = [];
   const nugetConfigPaths: string[] = [];
+  const packageHandleTimes: PackageHandleTime[] = [];
   const writeDeniedPackages: WriteDeniedPackage[] = [];
   let capturePackageList = false;
   let captureFeeds = false;
@@ -299,6 +354,12 @@ export function parseBuildLog(content: string): BuildLogFacts {
       failedUpload = deniedPackage;
     }
 
+    const handleTime = packageHandleTime(line);
+
+    if (handleTime) {
+      packageHandleTimes.push(handleTime);
+    }
+
     if (status === "403" && failedUpload) {
       writeDeniedPackages.push(failedUpload);
     }
@@ -327,6 +388,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     failedHttpStatuses: unique(failedHttpStatuses),
     feeds: unique(feeds),
     nugetConfigPaths: unique(nugetConfigPaths),
+    packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
     quotaMessages: unique(quotaMessages),
     requestedCount: unique(packageListPackages).length || undefined,
     restoredCount: parsedRestoredCount ?? (restoredPackageCount || undefined),

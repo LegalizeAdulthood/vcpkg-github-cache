@@ -11,6 +11,10 @@ import * as path from "node:path";
 
 import { AnalyzerLiveProbes, formatProbeResult } from "./analyze-probes";
 import { BuildLogFacts } from "./build-log";
+import {
+  DeniedPackageReport,
+  formatDeniedPackageReportLine,
+} from "./denied-package-report";
 import { CacheDiagnosis, FailOnPolicy } from "./diagnosis";
 import { safeGithubContext } from "./github-context";
 import { TokenKind } from "./inputs";
@@ -27,6 +31,7 @@ export interface DiagnosticsArtifactInput {
   readonly buildLog: string;
   readonly buildLogFacts?: BuildLogFacts;
   readonly builtCount: string;
+  readonly deniedPackageReports?: readonly DeniedPackageReport[];
   readonly diagnosis: CacheDiagnosis;
   readonly failOnPolicy: FailOnPolicy;
   readonly feedOwner: string;
@@ -228,7 +233,18 @@ function packageConfig(input: DiagnosticsArtifactInput): string {
   return lines(output);
 }
 
-function buildLogExtract(facts: BuildLogFacts | undefined): string {
+function deniedPackageReports(
+  input: DiagnosticsArtifactInput,
+  facts: BuildLogFacts,
+): readonly DeniedPackageReport[] {
+  return input.deniedPackageReports?.length
+    ? input.deniedPackageReports
+    : facts.writeDeniedPackages;
+}
+
+function buildLogExtract(input: DiagnosticsArtifactInput): string {
+  const facts = input.buildLogFacts;
+
   if (!facts) {
     return lines(["build log not supplied"]);
   }
@@ -246,10 +262,8 @@ function buildLogExtract(facts: BuildLogFacts | undefined): string {
     ...listValues(facts.authMessages).map((message) => `auth: ${message}`),
     keyValue("write-denied packages", facts.writeDeniedPackages.length),
     ...listValues(
-      facts.writeDeniedPackages.map(
-        (value) => `${value.packageId} ${value.version}`,
-      ),
-    ).map((value) => `write denied: ${value}`),
+      deniedPackageReports(input, facts).map(formatDeniedPackageReportLine),
+    ),
     keyValue("quota messages", facts.quotaMessages.length),
     ...listValues(facts.quotaMessages).map((message) => `quota: ${message}`),
     keyValue("NuGet config paths", facts.nugetConfigPaths.length),
@@ -313,7 +327,7 @@ function artifactFiles(
       path: "restore-probe.txt",
     },
     {
-      content: buildLogExtract(input.buildLogFacts),
+      content: buildLogExtract(input),
       path: "build-log-extract.txt",
     },
   ];

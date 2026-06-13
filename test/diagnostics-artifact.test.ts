@@ -196,6 +196,13 @@ describe("diagnostics artifact", () => {
           failedHttpStatuses: ["403"],
           feeds: ["https://nuget.pkg.github.com/octo/index.json"],
           nugetConfigPaths: ["C:\\Users\\runner\\NuGet.Config"],
+          packageHandleTimes: [
+            {
+              elapsed: "42 s",
+              packageId: "fmt_x64-windows",
+              packageSpec: "fmt:x64-windows",
+            },
+          ],
           quotaMessages: [],
           requestedCount: 1,
           restoredCount: 0,
@@ -213,6 +220,17 @@ describe("diagnostics artifact", () => {
           zeroCacheSubmissions: 1,
         },
         builtCount: "1",
+        deniedPackageReports: [
+          {
+            buildTime: "42 s",
+            nupkgSize: "12 MiB",
+            packageId: "fmt_x64-windows",
+            repository: "octo/repo",
+            version:
+              "8.0.0-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            visibility: "public",
+          },
+        ],
         diagnosis: diagnosis(),
         failOnPolicy: "never",
         feedOwner: "octo",
@@ -299,6 +317,10 @@ describe("diagnostics artifact", () => {
     expect(metadata).toContain("repository: octo/repo");
     expect(buildLog).toContain("auth: Response status code: 403 Forbidden ***");
     expect(buildLog).toContain("write-denied packages: 1");
-    expect(buildLog).toContain("write denied: fmt_x64-windows 8.0.0");
+    expect(buildLog).toContain(
+      "write denied: fmt_x64-windows 8.0.0 (size: 12 MiB",
+    );
+    expect(buildLog).toContain("build time: 42 s");
+    expect(buildLog).toContain("repository: octo/repo");
   });
 });
