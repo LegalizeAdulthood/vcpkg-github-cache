@@ -384,6 +384,7 @@ async function writeSummary(
 
   if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
     await summary
+      .addHeading("Packages denied write access", 4)
       .addTable(writeDeniedPackageSummaryTable(deniedReports))
       .write();
     return;
