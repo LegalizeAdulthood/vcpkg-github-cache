@@ -105,7 +105,7 @@ feeds outside the workflow repository.  It should be explicit:
     token-kind: pat
     token: ${{ secrets.PACKAGES_TOKEN }}
     username: ${{ github.actor }}
-    feed-owner: LegalizeAdulthood
+    feed-owner: PACKAGE_OWNER
 ```
 
 In PAT mode, workflow `permissions: packages: write` does not grant the PAT

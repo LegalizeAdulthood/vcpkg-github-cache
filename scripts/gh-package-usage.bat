@@ -4,14 +4,50 @@ setlocal EnableExtensions EnableDelayedExpansion
 
 rem gh-package-usage.bat
 
-rem Report current GitHub NuGet package storage for LegalizeAdulthood.
+rem Report current GitHub NuGet package storage for a user or organization.
 rem Requires gh and curl.
 
-set "OWNER=LegalizeAdulthood"
+set "OWNER="
+set "SCOPE="
 set "TYPE=nuget"
 set "QUOTA_MIB=500"
-set "DOWNLOAD_BASE=https://nuget.pkg.github.com/%OWNER%/download"
 
+:parse
+if "%~1"=="" goto parsed
+
+if /I "%~1"=="/org" (
+    if "%~2"=="" goto usage
+    set "OWNER=%~2"
+    set "SCOPE=orgs"
+    shift
+    shift
+    goto parse
+)
+
+if /I "%~1"=="/user" (
+    if "%~2"=="" goto usage
+    set "OWNER=%~2"
+    set "SCOPE=users"
+    shift
+    shift
+    goto parse
+)
+
+if /I "%~1"=="/?" goto usage
+if /I "%~1"=="/help" goto usage
+
+echo unknown option: %~1
+echo.
+goto usage
+
+:parsed
+if not defined OWNER (
+    echo error: use /user USER or /org ORG
+    echo.
+    goto usage
+)
+
+set "DOWNLOAD_BASE=https://nuget.pkg.github.com/%OWNER%/download"
 
 where gh >nul 2>nul
 
@@ -55,7 +91,7 @@ printf "%%-48s %%-32s %%8s %%14s %%10s\n" "Package" "Repository" "Versions" "Byt
 printf "%%-48s %%-32s %%8s %%14s %%10s\n" "-------" "----------" "--------" "-----" "---"
 
 for /f "usebackq tokens=1,2 delims=," %%A in (`
-    gh api --paginate "/users/%OWNER%/packages?package_type=%TYPE%&per_page=100" --jq ".[] | [.name, .repository.name] | @csv"
+    gh api --paginate "/%SCOPE%/%OWNER%/packages?package_type=%TYPE%&per_page=100" --jq ".[] | [.name, .repository.name] | @csv"
 `) do (
     call :package_usage "%%~A" "%%~B"
     if errorlevel 1 goto failed
@@ -89,7 +125,7 @@ set "REPO=%~2"
 set /a PACKAGE_BYTES=0
 set /a PACKAGE_VERSIONS=0
 
-gh api --paginate "/users/%OWNER%/packages/%TYPE%/!PACKAGE!/versions?per_page=100" --jq ".[].name" > "%VERSIONS_FILE%"
+gh api --paginate "/%SCOPE%/%OWNER%/packages/%TYPE%/!PACKAGE!/versions?per_page=100" --jq ".[].name" > "%VERSIONS_FILE%"
 if errorlevel 1 exit /b 1
 
 for /f "usebackq delims=" %%V in ("%VERSIONS_FILE%") do (
@@ -159,3 +195,9 @@ if not defined CONTENT_LENGTH (
 )
 
 exit /b 0
+
+:usage
+echo usage:
+echo   gh-package-usage.bat /user USER
+echo   gh-package-usage.bat /org ORG
+exit /b 2

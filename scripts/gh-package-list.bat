@@ -1,25 +1,46 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-rem gh-package-list.cmd
-rem List NuGet packages for GitHub user LegalizeAdulthood.
+rem gh-package-list.bat
+rem List NuGet packages for a GitHub user or organization.
 
-set "OWNER=LegalizeAdulthood"
-set "SCOPE=users"
+set "OWNER="
+set "SCOPE="
 set "TYPE=nuget"
 
+:parse
+if "%~1"=="" goto parsed
+
 if /I "%~1"=="/org" (
+    if "%~2"=="" goto usage
     set "OWNER=%~2"
     set "SCOPE=orgs"
     shift
     shift
+    goto parse
 )
 
 if /I "%~1"=="/user" (
+    if "%~2"=="" goto usage
     set "OWNER=%~2"
     set "SCOPE=users"
     shift
     shift
+    goto parse
+)
+
+if /I "%~1"=="/?" goto usage
+if /I "%~1"=="/help" goto usage
+
+echo unknown option: %~1
+echo.
+goto usage
+
+:parsed
+if not defined OWNER (
+    echo error: use /user USER or /org ORG
+    echo.
+    goto usage
 )
 
 where gh >nul 2>nul
@@ -57,3 +78,9 @@ for /f "usebackq tokens=1,2,3,4 delims=," %%A in (`
 )
 
 exit /b 0
+
+:usage
+echo usage:
+echo   gh-package-list.bat /user USER
+echo   gh-package-list.bat /org ORG
+exit /b 2

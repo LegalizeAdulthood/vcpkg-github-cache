@@ -1,14 +1,13 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-rem gh-package-prune.cmd
+rem gh-package-prune.bat
 rem Delete old GitHub NuGet package versions.
-rem Default owner: LegalizeAdulthood
-rem Default scope: user
+rem Owner scope must be supplied with /user or /org.
 rem Default mode: dry-run
 
-set "OWNER=LegalizeAdulthood"
-set "SCOPE=users"
+set "OWNER="
+set "SCOPE="
 set "TYPE=nuget"
 set "PACKAGE="
 set "ALL_REPO="
@@ -54,6 +53,7 @@ if /I "%~1"=="/delete" (
 )
 
 if /I "%~1"=="/user" (
+    if "%~2"=="" goto usage
     set "OWNER=%~2"
     set "SCOPE=users"
     shift
@@ -62,6 +62,7 @@ if /I "%~1"=="/user" (
 )
 
 if /I "%~1"=="/org" (
+    if "%~2"=="" goto usage
     set "OWNER=%~2"
     set "SCOPE=orgs"
     shift
@@ -79,6 +80,12 @@ goto usage
 :parsed
 if defined PACKAGE if defined ALL_REPO (
     echo error: use either /package or /all, not both
+    echo.
+    goto usage
+)
+
+if not defined OWNER (
+    echo error: use /user USER or /org ORG
     echo.
     goto usage
 )
@@ -209,21 +216,23 @@ exit /b 0
 
 :usage
 echo usage:
-echo   gh-package-prune.cmd /package PACKAGE_NAME [options]
-echo   gh-package-prune.cmd /all REPOSITORY [options]
+echo   gh-package-prune.bat /user USER /package PACKAGE_NAME [options]
+echo   gh-package-prune.bat /org ORG /package PACKAGE_NAME [options]
+echo   gh-package-prune.bat /user USER /all REPOSITORY [options]
+echo   gh-package-prune.bat /org ORG /all REPOSITORY [options]
 echo.
 echo options:
 echo   /all REPOSITORY     delete every version of every package attached to this repository
 echo   /keep-count N       with /package, keep newest N versions, default 10
 echo   /older-than DAYS    with /package, only delete versions older than DAYS, default 30
 echo   /delete             actually delete; otherwise dry-run
-echo   /user USER          use a user owner, default LegalizeAdulthood
+echo   /user USER          use a user owner
 echo   /org ORG            use an organization owner
 echo.
 echo examples:
-echo   gh-package-prune.cmd /package My.Package
-echo   gh-package-prune.cmd /package My.Package /keep-count 20 /older-than 30
-echo   gh-package-prune.cmd /package My.Package /keep-count 20 /older-than 30 /delete
-echo   gh-package-prune.cmd /all My.Repository
-echo   gh-package-prune.cmd /all My.Repository /delete
+echo   gh-package-prune.bat /user USER /package My.Package
+echo   gh-package-prune.bat /org ORG /package My.Package /keep-count 20 /older-than 30
+echo   gh-package-prune.bat /user USER /package My.Package /keep-count 20 /older-than 30 /delete
+echo   gh-package-prune.bat /org ORG /all My.Repository
+echo   gh-package-prune.bat /user USER /all My.Repository /delete
 exit /b 2
