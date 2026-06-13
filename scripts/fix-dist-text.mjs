@@ -9,12 +9,13 @@ import { EOL } from "node:os";
 import { join } from "node:path";
 
 const REPLACEMENTS = new Map([
+  ["\u00a0", " "],
   ["\u00a7", "section"],
   ["\u00ab", "<<"],
   ["\u00bb", ">>"],
   ["\u00d7", "x"],
   ["\u00e4", "a"],
-  ["\u2019", "'"],
+  ["\u2019", "?"],
   ["\u2026", "..."],
   ["\u2192", "->"],
   ["\u2212", "-"],

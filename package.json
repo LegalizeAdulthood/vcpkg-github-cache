@@ -8,10 +8,11 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "npm run build:setup && npm run build:analyze && npm run fix-dist-text",
+    "build": "npm run build:setup && npm run build:analyze && npm run fix-dist-text && npm run check-dist-syntax",
     "build:setup": "ncc build src/setup.ts --out setup/dist --source-map --license licenses.txt",
     "build:analyze": "ncc build src/analyze.ts --out analyze/dist --source-map --license licenses.txt",
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run build",
+    "check-dist-syntax": "node --check setup/dist/index.js && node --check analyze/dist/index.js",
     "fix-dist-text": "node scripts/fix-dist-text.mjs setup/dist analyze/dist",
     "format": "prettier --write \"*.{json,mjs}\" \"scripts/**/*.mjs\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
     "format:check": "prettier --check \"*.{json,mjs}\" \"scripts/**/*.mjs\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
