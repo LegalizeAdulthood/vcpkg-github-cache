@@ -682,11 +682,12 @@ Before moving the `v1` tag:
 - [x] Verify README examples use
   `LegalizeAdulthood/vcpkg-github-cache@v1` for setup and
   `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for diagnostics.
-- [ ] Run the trn integration workflow on `develop`.
-- [ ] Verify trn summaries and diagnostics artifacts.
-- [ ] Move the `v1` tag to the release commit.
+- [x] Run the trn integration workflow on `develop`.
+- [x] Verify trn summaries and logs; verify diagnostics artifacts only when
+  debug is enabled.
 - [ ] Create a GitHub release that describes setup, analyze, and known
   package permission limits.
+- [ ] Move the `v1` tag to the release commit.
 
 ## Marketplace Publishing Notes
 
