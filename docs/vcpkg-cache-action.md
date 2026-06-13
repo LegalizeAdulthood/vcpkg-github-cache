@@ -672,16 +672,41 @@ GitHub Packages cache is readable, but writes are not available for this
 event.  This is expected for some pull request events.
 ```
 
-## Implementation Slices
+## Release Checklist
 
-### Slice 1: Marketplace Release
+Before moving the `v1` tag:
 
-Implement:
+- run `npm run check`;
+- confirm `setup/dist` and `analyze/dist` are committed;
+- confirm root `action.yml` runs setup from `setup/dist/index.js`;
+- verify README examples use `LegalizeAdulthood/vcpkg-github-cache@v1`
+  for setup and `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for
+  diagnostics;
+- run the trn integration workflow on `develop`;
+- verify trn summaries and diagnostics artifacts;
+- move the `v1` tag to the release commit;
+- create a GitHub release that describes setup, analyze, and known package
+  permission limits.
 
-- root Marketplace action metadata for setup;
-- README entry point for setup plus analyze;
-- `v1` tag and release checklist;
-- Marketplace publishing notes.
+## Marketplace Publishing Notes
+
+GitHub Marketplace discovers the root action metadata.  The root action is
+the setup entry point so users can install
+`LegalizeAdulthood/vcpkg-github-cache@v1` directly from Marketplace.
+`LegalizeAdulthood/vcpkg-github-cache/setup@v1` remains an equivalent setup
+entry point for users who prefer explicit sub-action names.
+
+The analyzer remains a sub-action:
+
+```yaml
+uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+```
+
+Marketplace copy should state that the action configures vcpkg binary
+caching through GitHub Packages, but caller workflows still own checkout,
+build, test, and analysis steps.  Publishing should also call out that
+existing packages may require manual repository access before uploads can
+write new versions.
 
 ## Tests
 

@@ -11,7 +11,8 @@ GitHub Packages NuGet feeds.  The action makes the normal `GITHUB_TOKEN`
 path easy for public repositories while still supporting explicit PAT mode
 for cross-repository or organization feed use.
 
-The action has two entry points:
+The root Marketplace action runs setup.  The repository also has two
+explicit sub-actions:
 
 - `setup` configures vcpkg's NuGet binary cache source, provisions the
   vcpkg-selected NuGet tool, handles platform prerequisites such as Mono,
@@ -19,6 +20,10 @@ The action has two entry points:
 - `analyze` probes the feed, inspects vcpkg and NuGet state, parses
   optional build logs, and classifies cache health as a warm hit, partial
   hit, cold seed, auth failure, quota failure, upload failure, or unknown.
+
+Use `LegalizeAdulthood/vcpkg-github-cache@v1` for the Marketplace setup
+entry point.  `LegalizeAdulthood/vcpkg-github-cache/setup@v1` is an
+equivalent setup spelling for callers who prefer explicit sub-action names.
 
 The action deliberately does not wrap the caller's build.  Callers keep
 their own checkout, build, test, and artifact steps; the action centralizes
@@ -53,7 +58,7 @@ steps:
     with:
       submodules: true
 
-  - uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+  - uses: LegalizeAdulthood/vcpkg-github-cache@v1
     with:
       token: ${{ github.token }}
 
@@ -70,7 +75,7 @@ steps:
     with:
       submodules: true
 
-  - uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+  - uses: LegalizeAdulthood/vcpkg-github-cache@v1
     with:
       token: ${{ github.token }}
 
@@ -141,7 +146,7 @@ choosing the wrong vcpkg root, skipping a tool install, or resolving a
 different GitHub Packages feed than expected:
 
 ```yaml
-- uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+- uses: LegalizeAdulthood/vcpkg-github-cache@v1
   with:
     token: ${{ github.token }}
     trace: "true"

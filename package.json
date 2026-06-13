@@ -15,8 +15,8 @@
     "check-dist": "npm run check-dist-syntax && npm run check-dist-load",
     "check-dist-load": "node -e \"process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE='1'; require('./setup/dist/index.js')\" && node -e \"process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE='1'; require('./analyze/dist/index.js')\"",
     "check-dist-syntax": "node --check setup/dist/index.js && node --check analyze/dist/index.js",
-    "format": "prettier --write \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
-    "format:check": "prettier --check \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"{setup,analyze}/action.yml\"",
+    "format": "prettier --write \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"action.yml\" \"{setup,analyze}/action.yml\"",
+    "format:check": "prettier --check \"*.{json,mjs}\" \"{src,test}/**/*.ts\" \"action.yml\" \"{setup,analyze}/action.yml\"",
     "lint": "eslint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
