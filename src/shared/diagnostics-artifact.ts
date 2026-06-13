@@ -12,6 +12,7 @@ import * as path from "node:path";
 import { AnalyzerLiveProbes, formatProbeResult } from "./analyze-probes";
 import { BuildLogFacts } from "./build-log";
 import { CacheDiagnosis, FailOnPolicy } from "./diagnosis";
+import { safeGithubContext } from "./github-context";
 import { TokenKind } from "./inputs";
 import { PackageConfigDiscovery, packageIdentityKey } from "./package-config";
 import { RestoreProbe } from "./restore-probe";
@@ -143,19 +144,6 @@ function keyValue(label: string, value: string | number): string {
 
 function probeFile(label: string, output: string | undefined): string {
   return lines([label, "", output?.trim() || ""]);
-}
-
-function safeGithubContext(env: NodeJS.ProcessEnv): string {
-  return lines([
-    keyValue("event", optional(env.GITHUB_EVENT_NAME)),
-    keyValue("repository", optional(env.GITHUB_REPOSITORY)),
-    keyValue("repository owner", optional(env.GITHUB_REPOSITORY_OWNER)),
-    keyValue("ref", optional(env.GITHUB_REF)),
-    keyValue("sha", optional(env.GITHUB_SHA)),
-    keyValue("job", optional(env.GITHUB_JOB)),
-    keyValue("run id", optional(env.GITHUB_RUN_ID)),
-    keyValue("run attempt", optional(env.GITHUB_RUN_ATTEMPT)),
-  ]);
 }
 
 function environment(input: DiagnosticsArtifactInput, env: NodeJS.ProcessEnv) {
