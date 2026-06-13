@@ -189295,6 +189295,9 @@ async function runAnalyzerLiveProbes(options) {
  *
  * Copyright 2026 Richard Thomson
  */
+function quietDeniedPackageHeading(cacheStatus) {
+    return `Packages denied write access (${cacheStatus.replaceAll("-", " ")})`;
+}
 function shouldLogAnalysisDetails(debug, trace) {
     return debug || trace;
 }
@@ -191151,7 +191154,7 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
     const summary = summary_summary;
     if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
         await summary
-            .addHeading("Packages denied write access", 4)
+            .addHeading(quietDeniedPackageHeading(cacheStatus), 4)
             .addTable(writeDeniedPackageSummaryTable(deniedReports))
             .write();
         return;

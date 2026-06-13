@@ -24,6 +24,81 @@ The action deliberately does not wrap the caller's build.  Callers keep
 their own checkout, build, test, and artifact steps; the action centralizes
 vcpkg bootstrap, cache setup, and diagnostics.
 
+## Required Permissions
+
+The default `GITHUB_TOKEN` path needs package write access:
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+```
+
+## Action Reference
+
+GitHub action inputs are strings.  Quote boolean values such as `"true"`
+and `"false"` in workflow YAML.
+
+### `setup` Inputs
+
+- `token`: required.  GitHub token or PAT used for GitHub Packages.
+- `token-kind`: default `"github"`.  Token kind: `github` or `pat`.
+- `username`: optional.  NuGet username.  Defaults depend on token kind.
+- `feed-owner`: optional.  GitHub owner that hosts the NuGet feed.
+- `vcpkg-root`: default `"vcpkg"`.  Path to the vcpkg checkout.
+- `bootstrap`: default `"true"`.  Bootstrap vcpkg before configuring the
+  cache.
+- `install-nuget`: default `"true"`.  Fetch NuGet with vcpkg when needed.
+- `install-mono`: default `"true"`.  Install Mono when `nuget.exe` needs it
+  on Unix.
+- `source-name`: default `"GitHubPackages"`.  NuGet source name.
+- `access`: default `"readwrite"`.  vcpkg binary source access mode.
+- `debug`: default `"false"`.  Emit additional diagnostics.
+- `trace`: default `"false"`.  Trace action decisions.
+
+### `setup` Outputs
+
+- `feed-url`: GitHub Packages NuGet feed URL.
+- `binary-sources`: value for `VCPKG_BINARY_SOURCES`.
+- `nuget-command`: NuGet command selected by setup.
+- `vcpkg-version`: bootstrapped vcpkg tool version.
+- `diagnosis`: short setup diagnosis.
+
+### `analyze` Inputs
+
+- `token`: required.  GitHub token or PAT used for GitHub Packages.
+- `token-kind`: default `"github"`.  Token kind: `github` or `pat`.
+- `username`: optional.  NuGet username.  Defaults depend on token kind.
+- `feed-owner`: optional.  GitHub owner that hosts the NuGet feed.
+- `vcpkg-root`: default `"vcpkg"`.  Path to the vcpkg checkout.
+- `build-log`: optional path to a captured build log.
+- `artifact-name`: optional diagnostics artifact name.  Defaults to a
+  generated name.
+- `package-config-glob`: default `"**/packages.config"`.  Glob used to find
+  `packages.config` files.
+- `fail-on`: default `"never"`.  Failure policy.  One of `auth`,
+  `cache-miss`, `never`, `private-package`, `quota`, `restore-failure`, or
+  `upload-failure`.
+- `debug`: default `"false"`.  Emit additional diagnostics.
+- `trace`: default `"false"`.  Trace action decisions.
+
+### `analyze` Outputs
+
+- `cache-status`: high-level cache result.  One of `auth-failure`,
+  `cache-disabled`, `cold-seed`, `partial-hit`, `quota-failure`,
+  `restore-healthy`, `restore-miss`, `tooling-failure`, `unknown`,
+  `upload-failure`, or `warm-hit`.
+- `diagnosis`: short human-readable diagnosis.
+- `requested-count`: package count from `packages.config`, if known.
+- `restored-count`: restored package count, if known.
+- `built-count`: vcpkg package build count, if known.
+- `uploaded-count`: successful binary cache upload count, if known.
+- `failure-kind`: normalized failure kind.  Empty for no failure; otherwise
+  one of `auth`, `cache-miss`, `private-package`, `quota`,
+  `restore-failure`, `tooling-failure`, or `upload-failure`.
+- `diagnostics-artifact`: diagnostics artifact name, when `debug` is
+  enabled.
+
 ## Repository Expectations
 
 ### Public Repositories
@@ -32,12 +107,12 @@ The default path is the workflow `GITHUB_TOKEN`.  The workflow should grant
 `contents: read` and `packages: write`, then pass `${{ github.token }}` to
 both actions.
 
-Public GitHub Packages NuGet packages can still require authentication for
-restore.  Public visibility means the package avoids private storage quota;
+GitHub's NuGet feed can require authentication even when a package is
+public.  Public visibility means the package avoids private storage quota;
 it does not guarantee anonymous NuGet access.
 
-Uploads can fail when a package record already exists but is not linked to
-the calling repository with write access.  In that case, the analyzer reports
+Uploads can fail when a package already exists but is not linked to the
+calling repository with write access.  In that case, the analyzer reports
 the denied packages and links to package settings where GitHub exposes them.
 
 ### Private Repositories
@@ -64,3 +139,46 @@ as the success condition for a forked pull request.
 The analyzer should make these runs diagnosable without turning expected
 write restrictions into noisy build failures.  Do not rely on forked pull
 requests to seed new binary cache packages.
+
+## Gotchas
+
+- Public NuGet packages still usually require authentication.  Public means
+  no private package storage quota, not anonymous restore.
+- `permissions: packages: write` only affects `GITHUB_TOKEN`.  PAT mode
+  depends on the PAT scopes and the user's package permissions.
+- Package access is package-level, not version-level.  If the workflow
+  repository cannot write an existing package, it cannot upload a new
+  version of that package.
+- Repository linking grants package access permissions.  It does not
+  necessarily make a package public or move it out of private package
+  billing.
+- Package visibility is sticky.  Switching token kinds does not make an
+  existing private package public.
+- PAT-created NuGet packages may be private even when the workflow runs in a
+  public repository.  Treat private or unknown visibility as quota risk.
+- GitHub package quota failures can block downloads as well as uploads.
+- Package metadata and NuGet list/search behavior are helpful hints, not
+  proof that vcpkg can restore the exact package it needs.
+- `vcpkg fetch nuget` is the source of truth for the NuGet tool vcpkg will
+  use.
+- vcpkg package identity includes ABI details, toolchain, triplet, port
+  files, and helper ports.  Pinning vcpkg and CMake reduces drift, but
+  runner image and compiler changes can still change package identities.
+
+## Reference Documentation
+
+- [Use `GITHUB_TOKEN` for authentication in workflows][github-token]
+- [Workflow syntax: `permissions`][workflow-permissions]
+- [Working with the NuGet registry][nuget-registry]
+- [About permissions for GitHub Packages][package-permissions]
+- [Configuring package access control and visibility][package-access]
+- [GitHub Packages billing][package-billing]
+- [Events that trigger workflows][workflow-events]
+
+[github-token]: https://docs.github.com/actions/security-guides/automatic-token-authentication
+[workflow-permissions]: https://docs.github.com/actions/using-workflows/workflow-syntax-for-github-actions
+[nuget-registry]: https://docs.github.com/packages/working-with-a-github-packages-registry/working-with-the-nuget-registry
+[package-permissions]: https://docs.github.com/packages/learn-github-packages/about-permissions-for-github-packages
+[package-access]: https://docs.github.com/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
+[package-billing]: https://docs.github.com/billing/concepts/product-billing/github-packages
+[workflow-events]: https://docs.github.com/actions/using-workflows/events-that-trigger-workflows

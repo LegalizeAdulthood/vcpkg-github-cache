@@ -6,6 +6,10 @@
 
 import { BuildLogFacts } from "./build-log";
 
+export function quietDeniedPackageHeading(cacheStatus: string): string {
+  return `Packages denied write access (${cacheStatus.replaceAll("-", " ")})`;
+}
+
 export function shouldLogAnalysisDetails(
   debug: boolean,
   trace: boolean,

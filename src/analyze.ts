@@ -16,6 +16,7 @@ import {
   runAnalyzerLiveProbes,
 } from "./shared/analyze-probes";
 import {
+  quietDeniedPackageHeading,
   shouldLogAnalysisDetails,
   shouldProbePackageMetadata,
   shouldUseDeniedPackageTableOnly,
@@ -384,7 +385,7 @@ async function writeSummary(
 
   if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
     await summary
-      .addHeading("Packages denied write access", 4)
+      .addHeading(quietDeniedPackageHeading(cacheStatus), 4)
       .addTable(writeDeniedPackageSummaryTable(deniedReports))
       .write();
     return;

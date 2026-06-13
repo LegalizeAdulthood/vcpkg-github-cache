@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  quietDeniedPackageHeading,
   shouldLogAnalysisDetails,
   shouldProbePackageMetadata,
   shouldUseDeniedPackageTableOnly,
@@ -20,6 +21,12 @@ function buildLogFacts(
 }
 
 describe("analyze policy", () => {
+  test("labels quiet denied package summaries with cache status", () => {
+    expect(quietDeniedPackageHeading("upload-failure")).toBe(
+      "Packages denied write access (upload failure)",
+    );
+  });
+
   test("probes package metadata for denied package reports", () => {
     expect(
       shouldProbePackageMetadata(
