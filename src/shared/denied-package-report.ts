@@ -20,6 +20,7 @@ type ReportCellFormat = "html" | "markdown" | "text";
 
 interface ReportColumn {
   readonly header: string;
+  readonly include?: (reports: readonly DeniedPackageReport[]) => boolean;
   readonly required?: boolean;
   readonly value: (
     report: DeniedPackageReport,
@@ -62,22 +63,39 @@ const COLUMNS: readonly ReportColumn[] = [
   },
   {
     header: "Quota Risk",
+    include: (reports) =>
+      reports.some((report) => hasQuotaRisk(report.quotaRisk)),
     value: (report) => report.quotaRisk,
   },
 ];
 
-function hasValue(value: string | undefined): boolean {
+function hasValue(value: string | undefined): value is string {
   return value !== undefined && value.length > 0;
+}
+
+function hasQuotaRisk(value: string | undefined): boolean {
+  return hasValue(value) && value.trim().toLowerCase() !== "none";
+}
+
+function reportColumnIncluded(
+  column: ReportColumn,
+  reports: readonly DeniedPackageReport[],
+): boolean {
+  if (column.required) {
+    return true;
+  }
+
+  if (column.include) {
+    return column.include(reports);
+  }
+
+  return reports.some((report) => hasValue(column.value(report, "text")));
 }
 
 function reportColumns(
   reports: readonly DeniedPackageReport[],
 ): readonly ReportColumn[] {
-  return COLUMNS.filter(
-    (column) =>
-      column.required ||
-      reports.some((report) => hasValue(column.value(report, "text"))),
-  );
+  return COLUMNS.filter((column) => reportColumnIncluded(column, reports));
 }
 
 function reportValue(

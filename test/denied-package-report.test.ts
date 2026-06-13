@@ -45,7 +45,6 @@ describe("denied package report", () => {
       "Repository",
       "Versions",
       "Visibility",
-      "Quota Risk",
     ]);
     expect(rows[1]).toEqual([
       "fmt_x64-windows",
@@ -55,7 +54,29 @@ describe("denied package report", () => {
       "octo/repo",
       "4",
       "public",
-      "none",
+    ]);
+  });
+
+  test("adds quota risk column only when a row has risk", () => {
+    const rows = deniedPackageReportRows([
+      {
+        packageId: "fmt_x64-windows",
+        quotaRisk: "none",
+        version: `8.0.0-${VCPKG_SUFFIX}`,
+      },
+      {
+        packageId: "zlib_x64-windows",
+        quotaRisk: "private package storage",
+        version: `1.3.1-${VCPKG_SUFFIX}`,
+      },
+    ]);
+
+    expect(rows[0]).toEqual(["Package ID", "Version", "Quota Risk"]);
+    expect(rows[1]).toEqual(["fmt_x64-windows", "8.0.0", "none"]);
+    expect(rows[2]).toEqual([
+      "zlib_x64-windows",
+      "1.3.1",
+      "private package storage",
     ]);
   });
 
