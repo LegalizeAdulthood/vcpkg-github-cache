@@ -207,6 +207,7 @@ async function deniedPackageReports(
         packageVersionCount: result?.versionCount,
         quotaRisk: result?.quotaRisk,
         repository: result?.repository,
+        repositoryUrl: result?.repositoryUrl,
         version: value.version,
         visibility: result?.visibility,
       };

@@ -32,6 +32,7 @@ describe("denied package report", () => {
         packageVersionCount: 4,
         quotaRisk: "none",
         repository: "octo/repo",
+        repositoryUrl: "https://github.com/octo/repo",
         version: `8.0.0-${VCPKG_SUFFIX}`,
         visibility: "public",
       },
@@ -55,6 +56,22 @@ describe("denied package report", () => {
       "4",
       "public",
     ]);
+  });
+
+  test("links repositories when a repository URL is available", () => {
+    const report = {
+      packageId: "fmt_x64-windows",
+      repository: "octo/repo",
+      repositoryUrl: "https://github.com/octo/repo",
+      version: `8.0.0-${VCPKG_SUFFIX}`,
+    };
+
+    expect(deniedPackageReportRows([report], "html")[1][2]).toBe(
+      '<a href="https://github.com/octo/repo">octo/repo</a>',
+    );
+    expect(formatDeniedPackageReportTable([report])).toContain(
+      "| fmt_x64-windows | 8.0.0 | [octo/repo](https://github.com/octo/repo) |",
+    );
   });
 
   test("adds quota risk column only when a row has risk", () => {

@@ -12,6 +12,7 @@ export interface DeniedPackageReport {
   readonly packageVersionCount?: number;
   readonly quotaRisk?: string;
   readonly repository?: string;
+  readonly repositoryUrl?: string;
   readonly version: string;
   readonly visibility?: string;
 }
@@ -51,7 +52,7 @@ const COLUMNS: readonly ReportColumn[] = [
   },
   {
     header: "Repository",
-    value: (report) => report.repository,
+    value: repositoryValue,
   },
   {
     header: "Versions",
@@ -118,21 +119,36 @@ function htmlEscape(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function linkValue(
+  text: string,
+  url: string | undefined,
+  format: ReportCellFormat,
+): string {
+  if (!url || format === "text") {
+    return text;
+  }
+
+  if (format === "html") {
+    return `<a href="${htmlEscape(url)}">${htmlEscape(text)}</a>`;
+  }
+
+  return `[${text}](${url})`;
+}
+
 function packageIdValue(
   report: DeniedPackageReport,
   format: ReportCellFormat,
 ): string {
-  if (!report.packageSettingsUrl || format === "text") {
-    return report.packageId;
-  }
+  return linkValue(report.packageId, report.packageSettingsUrl, format);
+}
 
-  if (format === "html") {
-    return `<a href="${htmlEscape(report.packageSettingsUrl)}">${htmlEscape(
-      report.packageId,
-    )}</a>`;
-  }
-
-  return `[${report.packageId}](${report.packageSettingsUrl})`;
+function repositoryValue(
+  report: DeniedPackageReport,
+  format: ReportCellFormat,
+): string | undefined {
+  return report.repository
+    ? linkValue(report.repository, report.repositoryUrl, format)
+    : undefined;
 }
 
 export function displayPackageVersion(version: string): string {
