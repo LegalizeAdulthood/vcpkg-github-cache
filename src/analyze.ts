@@ -16,6 +16,11 @@ import {
   runAnalyzerLiveProbes,
 } from "./shared/analyze-probes";
 import {
+  shouldLogAnalysisDetails,
+  shouldProbePackageMetadata,
+  shouldUseDeniedPackageTableOnly,
+} from "./shared/analyze-policy";
+import {
   BuildLogFacts,
   parseBuildLog,
   WriteDeniedPackage,
@@ -151,14 +156,6 @@ function packageMetadataResults(
   return new Map(
     (packageMetadata?.results ?? []).map((value) => [value.name, value]),
   );
-}
-
-function shouldProbePackageMetadata(
-  debug: boolean,
-  failOnPolicy: string,
-  tokenKind: string,
-): boolean {
-  return debug || failOnPolicy === "private-package" || tokenKind === "pat";
 }
 
 function logPackageQuotaRisks(
@@ -377,12 +374,22 @@ async function writeSummary(
   builtCount: string,
   uploadedCount: string,
   deniedReports: readonly DeniedPackageReport[],
+  verbose: boolean,
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
   }
 
-  const summary = core.summary
+  const summary = core.summary;
+
+  if (shouldUseDeniedPackageTableOnly(deniedReports.length, verbose)) {
+    await summary
+      .addTable(writeDeniedPackageSummaryTable(deniedReports))
+      .write();
+    return;
+  }
+
+  summary
     .addHeading("vcpkg GitHub Packages cache analysis", 3)
     .addList([
       summaryItem("Diagnosis", diagnosis),
@@ -504,7 +511,9 @@ export async function run(): Promise<void> {
   let diagnosticsArtifact = "";
   let packageMetadata: PackageMetadataProbe | undefined;
 
-  if (shouldProbePackageMetadata(debug, failOnPolicy, tokenKind)) {
+  if (
+    shouldProbePackageMetadata(debug, failOnPolicy, tokenKind, buildLogFacts)
+  ) {
     packageMetadata = await traceLogger.step(
       "probe package metadata",
       async () =>
@@ -596,23 +605,27 @@ export async function run(): Promise<void> {
   core.setOutput("failure-kind", diagnosis.failureKind);
   core.setOutput("diagnostics-artifact", diagnosticsArtifact);
 
-  core.info(diagnosis.diagnosis);
-  core.info(`Cache status: ${diagnosis.cacheStatus}`);
-  core.info(`Failure kind: ${diagnosis.failureKind || "none"}`);
-  core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
-  core.info(`Feed owner: ${feedOwner}`);
-  core.info(`NuGet username: ${username}`);
-  logProbeOutputs(liveProbes, trace);
-  logRestoreProbe(restoreProbe, trace);
-  logBuildLogFacts(buildLogFacts, deniedReports, trace);
-  logPackageQuotaRisks(packageMetadata);
-  core.info(`packages.config files: ${packageConfigs.files.length}`);
-  core.info(`Requested packages: ${requestedCount}`);
-  if (restoredCount) {
-    core.info(`Restored packages: ${restoredCount}`);
-  }
+  const logDetails = shouldLogAnalysisDetails(debug, trace);
 
-  if (debug || trace) {
+  core.info(diagnosis.diagnosis);
+  if (logDetails) {
+    core.info(`Cache status: ${diagnosis.cacheStatus}`);
+    core.info(`Failure kind: ${diagnosis.failureKind || "none"}`);
+    core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
+    core.info(`Feed owner: ${feedOwner}`);
+    core.info(`NuGet username: ${username}`);
+    logProbeOutputs(liveProbes, trace);
+    logRestoreProbe(restoreProbe, trace);
+    logBuildLogFacts(buildLogFacts, deniedReports, trace);
+  }
+  logPackageQuotaRisks(packageMetadata);
+
+  if (logDetails) {
+    core.info(`packages.config files: ${packageConfigs.files.length}`);
+    core.info(`Requested packages: ${requestedCount}`);
+    if (restoredCount) {
+      core.info(`Restored packages: ${restoredCount}`);
+    }
     core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
     core.info(`Trace: ${trace ? "enabled" : "disabled"}`);
   }
@@ -649,6 +662,7 @@ export async function run(): Promise<void> {
     builtCount,
     uploadedCount,
     deniedReports,
+    logDetails,
   );
 
   if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {

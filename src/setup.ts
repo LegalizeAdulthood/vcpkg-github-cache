@@ -193,11 +193,14 @@ export async function run(): Promise<void> {
   core.exportVariable(BINARY_SOURCES_ENV, binarySources);
 
   core.info(diagnosis);
-  core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
-  core.info(`Feed owner: ${feedOwner}`);
-  core.info(`NuGet username: ${username}`);
-  core.info(`vcpkg root: ${vcpkg.root}`);
-  core.info(`vcpkg version: ${vcpkgVersion}`);
+
+  if (debug || trace) {
+    core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
+    core.info(`Feed owner: ${feedOwner}`);
+    core.info(`NuGet username: ${username}`);
+    core.info(`vcpkg root: ${vcpkg.root}`);
+    core.info(`vcpkg version: ${vcpkgVersion}`);
+  }
 
   if (trace) {
     core.info(`binary-sources: ${binarySources}`);
@@ -205,13 +208,15 @@ export async function run(): Promise<void> {
     core.info(`nuget-command: ${nugetCommand}`);
   }
 
-  await writeSummary(
-    diagnosis,
-    feedUrl,
-    nugetCommand,
-    vcpkg.root,
-    vcpkgVersion,
-  );
+  if (debug || trace) {
+    await writeSummary(
+      diagnosis,
+      feedUrl,
+      nugetCommand,
+      vcpkg.root,
+      vcpkgVersion,
+    );
+  }
 }
 
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {

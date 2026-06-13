@@ -31757,17 +31757,21 @@ async function run() {
     setOutput("diagnosis", diagnosis);
     exportVariable(BINARY_SOURCES_ENV, binarySources);
     info(diagnosis);
-    info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
-    info(`Feed owner: ${feedOwner}`);
-    info(`NuGet username: ${username}`);
-    info(`vcpkg root: ${vcpkg.root}`);
-    info(`vcpkg version: ${vcpkgVersion}`);
+    if (debug || trace) {
+        info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
+        info(`Feed owner: ${feedOwner}`);
+        info(`NuGet username: ${username}`);
+        info(`vcpkg root: ${vcpkg.root}`);
+        info(`vcpkg version: ${vcpkgVersion}`);
+    }
     if (trace) {
         info(`binary-sources: ${binarySources}`);
         info(`${BINARY_SOURCES_ENV}: ${binarySources}`);
         info(`nuget-command: ${nugetCommand}`);
     }
-    await writeSummary(diagnosis, feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
+    if (debug || trace) {
+        await writeSummary(diagnosis, feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);
+    }
 }
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {
     void run().catch((error) => {
