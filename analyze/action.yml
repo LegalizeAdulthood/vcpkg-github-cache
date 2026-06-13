@@ -20,6 +20,8 @@ inputs:
     default: vcpkg
   build-log:
     description: Optional path to a captured build log.
+  artifact-name:
+    description: Diagnostics artifact name. Defaults to a generated name.
   package-config-glob:
     description: Glob used to find packages.config files.
     default: "**/packages.config"

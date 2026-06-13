@@ -5,6 +5,7 @@
  */
 
 import * as core from "@actions/core";
+import artifact from "@actions/artifact";
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 
@@ -22,6 +23,7 @@ import {
   normalizeFailOnPolicy,
   shouldFailDiagnosis,
 } from "./shared/diagnosis";
+import { uploadDiagnosticsArtifact } from "./shared/diagnostics-artifact";
 import {
   normalizeTokenKind,
   parseBoolean,
@@ -248,6 +250,7 @@ export async function run(): Promise<void> {
   const debug = parseBoolean(optionalInput("debug", "false"));
   const trace = parseBoolean(optionalInput("trace", "false"));
   const buildLog = optionalInput("build-log");
+  const artifactName = optionalInput("artifact-name");
   const packageConfigGlob = optionalInput(
     "package-config-glob",
     "**/packages.config",
@@ -273,6 +276,7 @@ export async function run(): Promise<void> {
     traceLogger.input("username", username);
     traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
     traceLogger.input("build-log", buildLog);
+    traceLogger.input("artifact-name", artifactName);
     traceLogger.input("package-config-glob", packageConfigGlob);
     traceLogger.input("fail-on", failOn);
     traceLogger.value("platform", `${process.platform}/${process.arch}`);
@@ -332,6 +336,51 @@ export async function run(): Promise<void> {
       ? `will fail on ${diagnosis.failureKind}`
       : `will not fail on ${diagnosis.failureKind || "none"}`,
   );
+  let diagnosticsArtifact = "";
+
+  if (debug) {
+    try {
+      diagnosticsArtifact = await traceLogger.step(
+        "upload diagnostics artifact",
+        async () =>
+          uploadDiagnosticsArtifact(
+            {
+              buildLog,
+              buildLogFacts,
+              builtCount,
+              diagnosis,
+              failOnPolicy,
+              feedOwner,
+              feedUrl,
+              liveProbes,
+              packageConfigGlob,
+              packageConfigs,
+              requestedCount,
+              restoreProbe,
+              restoredCount,
+              token,
+              tokenKind,
+              uploadedCount,
+              username,
+              vcpkg,
+              workspace,
+            },
+            {
+              artifactName: artifactName || undefined,
+              upload: async (name, files, rootDirectory) =>
+                artifact.uploadArtifact(name, files, rootDirectory),
+            },
+          ),
+      );
+      core.info(`Diagnostics artifact: ${diagnosticsArtifact}`);
+    } catch (error) {
+      core.warning(
+        `Failed to upload diagnostics artifact: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
   core.setOutput("cache-status", diagnosis.cacheStatus);
   core.setOutput("diagnosis", diagnosis.diagnosis);
@@ -340,7 +389,7 @@ export async function run(): Promise<void> {
   core.setOutput("built-count", builtCount);
   core.setOutput("uploaded-count", uploadedCount);
   core.setOutput("failure-kind", diagnosis.failureKind);
-  core.setOutput("diagnostics-artifact", "");
+  core.setOutput("diagnostics-artifact", diagnosticsArtifact);
 
   core.info(diagnosis.diagnosis);
   core.info(`Cache status: ${diagnosis.cacheStatus}`);
@@ -367,6 +416,7 @@ export async function run(): Promise<void> {
     core.info(`vcpkg root: ${vcpkg.root}`);
     core.info(`vcpkg executable: ${vcpkg.executable}`);
     core.info(`build-log: ${buildLog}`);
+    core.info(`artifact-name: ${artifactName}`);
     core.info(`package-config-glob: ${packageConfigGlob}`);
     core.info(`fail-on: ${failOn}`);
     for (const packageConfig of packageConfigs.files) {

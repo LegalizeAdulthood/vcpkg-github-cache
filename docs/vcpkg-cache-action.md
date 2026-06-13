@@ -224,6 +224,8 @@ In `pat` mode:
   `GITHUB_REPOSITORY`.
 - `vcpkg-root`: optional.  Defaults to `vcpkg`.
 - `build-log`: optional path to a captured build log.
+- `artifact-name`: optional diagnostics artifact name.  Defaults to a
+  generated name including job, runner, and a random suffix.
 - `package-config-glob`: optional.  Defaults to `**/packages.config`.
 - `fail-on`: optional.  Defaults to `never`.
 - `debug`: optional.  Defaults to `false`.
@@ -457,6 +459,11 @@ When `debug` is enabled:
 - include raw scraped data needed for manual or AI-assisted analysis;
 - keep secrets redacted.
 
+The default artifact name should include the logical job id, runner OS,
+runner architecture, and a random suffix.  Use `artifact-name` when a
+matrix job needs release mode, sanitizer mode, or another build setting in
+the name.
+
 The diagnostics artifact should use this shape:
 
 ```text
@@ -646,40 +653,33 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Diagnostic Artifacts
-
-Implement:
-
-- sanitized diagnostic artifact assembly;
-- build log extracts.
-
-### Slice 2: GitHub Context Diagnostics
+### Slice 1: GitHub Context Diagnostics
 
 Implement:
 
 - safe GitHub context dump.
 
-### Slice 3: NuGet Config Diagnostics
+### Slice 2: NuGet Config Diagnostics
 
 Implement:
 
 - sanitized NuGet config dump.
 
-### Slice 4: Package Visibility Metadata
+### Slice 3: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 5: Package Quota Metadata
+### Slice 4: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 6: Documentation
+### Slice 5: Documentation
 
 Document:
 
@@ -687,7 +687,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 7: Examples
+### Slice 6: Examples
 
 Document:
 
@@ -696,7 +696,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 8: Marketplace Release
+### Slice 7: Marketplace Release
 
 Implement:
 

@@ -41,7 +41,9 @@ function replaceUnicode(text) {
     result = result.split(from).join(to);
   }
 
-  return result;
+  return Array.from(result, (value) =>
+    value.charCodeAt(0) > 0x7f ? "?" : value,
+  ).join("");
 }
 
 function assertAscii(path, text) {
