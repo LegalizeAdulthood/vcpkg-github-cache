@@ -43,6 +43,8 @@ import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
 import { createTraceLogger, TraceLogger } from "./shared/trace";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
 
+type SummaryTableRows = Parameters<typeof core.summary.addTable>[0];
+
 function liveProbeRows(
   liveProbes: AnalyzerLiveProbes,
 ): readonly (readonly [string, ProbeResult])[] {
@@ -87,6 +89,18 @@ function writeDeniedPackageTable(
     ...packages.map((value) => `| ${value.packageId} | ${value.version} |`),
     "",
   ].join("\n");
+}
+
+function writeDeniedPackageSummaryTable(
+  packages: readonly WriteDeniedPackage[],
+): SummaryTableRows {
+  return [
+    [
+      { data: "Package ID", header: true },
+      { data: "Version", header: true },
+    ],
+    ...packages.map((value) => [value.packageId, value.version]),
+  ];
 }
 
 function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
@@ -274,12 +288,12 @@ async function writeSummary(
       summaryItem("Built packages", builtCount || "unknown"),
       summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ]);
-  const deniedTable = writeDeniedPackageTable(
-    writeDeniedPackages(buildLogFacts),
-  );
+  const deniedPackages = writeDeniedPackages(buildLogFacts);
 
-  if (deniedTable) {
-    summary.addHeading("Packages denied write access", 4).addRaw(deniedTable);
+  if (deniedPackages.length) {
+    summary
+      .addHeading("Packages denied write access", 4)
+      .addTable(writeDeniedPackageSummaryTable(deniedPackages));
   }
 
   await summary.write();
