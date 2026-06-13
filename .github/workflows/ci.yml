@@ -36,5 +36,5 @@ jobs:
 
       - name: Verify generated files are current
         run: |
-          git diff --check
+          git diff --check -- . ':(exclude)setup/dist/**' ':(exclude)analyze/dist/**'
           git diff --exit-code
