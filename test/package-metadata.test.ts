@@ -10,6 +10,7 @@ import {
   formatPackageMetadataProbe,
   PackageMetadataHttpRequest,
   packageMetadataUrl,
+  packageSettingsUrl,
   runPackageMetadataProbe,
 } from "../src/shared/package-metadata";
 
@@ -24,6 +25,9 @@ describe("package metadata probes", () => {
       ),
     ).toBe(
       "https://api.github.com/users/octo/packages/nuget/fmt%3Ax64-windows",
+    );
+    expect(packageSettingsUrl("users", "octo", "fmt:x64-windows")).toBe(
+      "https://github.com/users/octo/packages/nuget/fmt%3Ax64-windows/settings",
     );
   });
 
@@ -67,6 +71,7 @@ describe("package metadata probes", () => {
       name: "fmt",
       packageType: "nuget",
       repository: "octo/repo",
+      settingsUrl: "https://github.com/users/octo/packages/nuget/fmt/settings",
       status: "ok",
       visibility: "public",
     });

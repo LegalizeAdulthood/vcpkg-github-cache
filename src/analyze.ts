@@ -88,7 +88,7 @@ function writeDeniedPackages(
 function writeDeniedPackageSummaryTable(
   packages: readonly DeniedPackageReport[],
 ): SummaryTableRows {
-  const [header, ...rows] = deniedPackageReportRows(packages);
+  const [header, ...rows] = deniedPackageReportRows(packages, "html");
 
   return [
     header.map((value) => ({ data: value, header: true })),
@@ -181,6 +181,7 @@ async function deniedPackageReports(
         buildTime: handleTimes.get(value.packageId),
         nupkgSize: await nupkgSize(vcpkgRoot, value),
         packageId: value.packageId,
+        packageSettingsUrl: result?.settingsUrl,
         repository: result?.repository,
         version: value.version,
         visibility: result?.visibility,

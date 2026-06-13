@@ -48,6 +48,7 @@ export interface PackageMetadataResult {
   readonly packageType?: string;
   readonly repository?: string;
   readonly repositoryUrl?: string;
+  readonly settingsUrl?: string;
   readonly status: PackageMetadataStatus;
   readonly url?: string;
   readonly visibility?: string;
@@ -96,6 +97,16 @@ export function packageMetadataUrl(
   )}/packages/nuget/${encodeURIComponent(packageName)}`;
 }
 
+export function packageSettingsUrl(
+  endpoint: PackageOwnerEndpoint,
+  owner: string,
+  packageName: string,
+): string {
+  return `https://github.com/${endpoint}/${encodeURIComponent(
+    owner,
+  )}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
+}
+
 function statusDetail(response: PackageMetadataHttpResponse): string {
   const statusCode = response.statusCode ?? 0;
   const statusMessage = response.statusMessage ?? "";
@@ -135,6 +146,7 @@ function objectField(
 function parseMetadataResponse(
   packageName: string,
   endpoint: PackageOwnerEndpoint,
+  owner: string,
   response: PackageMetadataHttpResponse,
 ): PackageMetadataResult {
   try {
@@ -142,14 +154,16 @@ function parseMetadataResponse(
       Record<string, unknown>
     >;
     const repository = objectField(metadata, "repository");
+    const name = stringField(metadata, "name") ?? packageName;
 
     return {
       detail: statusDetail(response),
       endpoint,
-      name: stringField(metadata, "name") ?? packageName,
+      name,
       packageType: stringField(metadata, "package_type"),
       repository: stringField(repository, "full_name"),
       repositoryUrl: stringField(repository, "html_url"),
+      settingsUrl: packageSettingsUrl(endpoint, owner, name),
       status: "ok",
       url: stringField(metadata, "html_url"),
       visibility: stringField(metadata, "visibility"),
@@ -228,7 +242,12 @@ async function queryPackageMetadata(
       });
 
       if (responseSucceeded(response)) {
-        return parseMetadataResponse(packageName, endpoint, response);
+        return parseMetadataResponse(
+          packageName,
+          endpoint,
+          options.feedOwner,
+          response,
+        );
       }
 
       const result: PackageMetadataResult = {
@@ -300,6 +319,7 @@ function formatResult(result: PackageMetadataResult): readonly string[] {
     `visibility: ${optional(result.visibility)}`,
     `repository: ${optional(result.repository)}`,
     `repository url: ${optional(result.repositoryUrl)}`,
+    `settings url: ${optional(result.settingsUrl)}`,
     `url: ${optional(result.url)}`,
   ];
 }

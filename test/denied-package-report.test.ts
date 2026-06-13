@@ -27,6 +27,8 @@ describe("denied package report", () => {
         buildTime: "42 s",
         nupkgSize: "12 MiB",
         packageId: "fmt_x64-windows",
+        packageSettingsUrl:
+          "https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings",
         repository: "octo/repo",
         version: `8.0.0-${VCPKG_SUFFIX}`,
         visibility: "public",
@@ -49,6 +51,22 @@ describe("denied package report", () => {
       "octo/repo",
       "public",
     ]);
+  });
+
+  test("links package IDs when a settings URL is available", () => {
+    const report = {
+      packageId: "fmt_x64-windows",
+      packageSettingsUrl:
+        "https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings",
+      version: `8.0.0-${VCPKG_SUFFIX}`,
+    };
+
+    expect(deniedPackageReportRows([report], "html")[1][0]).toBe(
+      '<a href="https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings">fmt_x64-windows</a>',
+    );
+    expect(formatDeniedPackageReportTable([report])).toContain(
+      "| [fmt_x64-windows](https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings) |",
+    );
   });
 
   test("formats a Markdown table for logs", () => {

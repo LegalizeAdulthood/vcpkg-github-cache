@@ -8,15 +8,21 @@ export interface DeniedPackageReport {
   readonly buildTime?: string;
   readonly nupkgSize?: string;
   readonly packageId: string;
+  readonly packageSettingsUrl?: string;
   readonly repository?: string;
   readonly version: string;
   readonly visibility?: string;
 }
 
+type ReportCellFormat = "html" | "markdown" | "text";
+
 interface ReportColumn {
   readonly header: string;
   readonly required?: boolean;
-  readonly value: (report: DeniedPackageReport) => string | undefined;
+  readonly value: (
+    report: DeniedPackageReport,
+    format: ReportCellFormat,
+  ) => string | undefined;
 }
 
 const VCPKG_VERSION_SUFFIX = /-vcpkg[0-9a-f]{64}$/i;
@@ -25,7 +31,7 @@ const COLUMNS: readonly ReportColumn[] = [
   {
     header: "Package ID",
     required: true,
-    value: (report) => report.packageId,
+    value: packageIdValue,
   },
   {
     header: "Version",
@@ -60,19 +66,45 @@ function reportColumns(
   return COLUMNS.filter(
     (column) =>
       column.required ||
-      reports.some((report) => hasValue(column.value(report))),
+      reports.some((report) => hasValue(column.value(report, "text"))),
   );
 }
 
 function reportValue(
   column: ReportColumn,
   report: DeniedPackageReport,
+  format: ReportCellFormat,
 ): string {
-  return column.value(report) || "unknown";
+  return column.value(report, format) || "unknown";
 }
 
 function markdownCell(value: string): string {
   return value.replace(/\|/g, "\\|");
+}
+
+function htmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function packageIdValue(
+  report: DeniedPackageReport,
+  format: ReportCellFormat,
+): string {
+  if (!report.packageSettingsUrl || format === "text") {
+    return report.packageId;
+  }
+
+  if (format === "html") {
+    return `<a href="${htmlEscape(report.packageSettingsUrl)}">${htmlEscape(
+      report.packageId,
+    )}</a>`;
+  }
+
+  return `[${report.packageId}](${report.packageSettingsUrl})`;
 }
 
 export function displayPackageVersion(version: string): string {
@@ -83,13 +115,14 @@ export function displayPackageVersion(version: string): string {
 
 export function deniedPackageReportRows(
   reports: readonly DeniedPackageReport[],
+  format: ReportCellFormat = "text",
 ): readonly (readonly string[])[] {
   const columns = reportColumns(reports);
 
   return [
     columns.map((column) => column.header),
     ...reports.map((report) =>
-      columns.map((column) => reportValue(column, report)),
+      columns.map((column) => reportValue(column, report, format)),
     ),
   ];
 }
@@ -101,7 +134,7 @@ export function formatDeniedPackageReportTable(
     return "";
   }
 
-  const [header, ...rows] = deniedPackageReportRows(reports);
+  const [header, ...rows] = deniedPackageReportRows(reports, "markdown");
 
   return [
     `| ${header.map(markdownCell).join(" | ")} |`,
