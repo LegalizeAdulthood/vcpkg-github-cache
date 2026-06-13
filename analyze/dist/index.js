@@ -29576,7 +29576,7 @@ const _summary = new Summary();
  * @deprecated use `core.summary`
  */
 const markdownSummary = (/* unused pure expression or super */ null && (_summary));
-const summary_summary = _summary;
+const summary = _summary;
 //# sourceMappingURL=summary.js.map
 ;// CONCATENATED MODULE: ./node_modules/@actions/core/lib/path-utils.js
 
@@ -31724,6 +31724,9 @@ function liveProbeRows(liveProbes) {
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
+function summaryItem(label, value) {
+    return `${label}: ${value}`;
+}
 function logProbeOutputs(liveProbes, trace) {
     for (const [label, result] of liveProbeRows(liveProbes)) {
         info(`${label}: ${formatProbeResult(result)}`);
@@ -31741,20 +31744,15 @@ async function writeSummary(feedUrl, liveProbes, packageConfigCount, requestedCo
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
-    const summary = summary_summary
-        .addHeading("vcpkg GitHub Packages cache analysis")
-        .addRaw(DIAGNOSIS)
-        .addEOL()
-        .addRaw(`Feed: ${feedUrl}`)
-        .addEOL();
-    for (const [label, result] of liveProbeRows(liveProbes)) {
-        summary.addRaw(`${label}: ${formatProbeResult(result)}`).addEOL();
-    }
     await summary
-        .addRaw(`packages.config files: ${packageConfigCount}`)
-        .addEOL()
-        .addRaw(`Requested packages: ${requestedCount}`)
-        .addEOL()
+        .addHeading("vcpkg GitHub Packages cache analysis", 3)
+        .addList([
+        summaryItem("Diagnosis", DIAGNOSIS),
+        summaryItem("Feed", feedUrl),
+        ...liveProbeRows(liveProbes).map(([label, result]) => summaryItem(label, formatProbeResult(result))),
+        summaryItem("packages.config files", packageConfigCount.toString()),
+        summaryItem("Requested packages", requestedCount.toString()),
+    ])
         .write();
 }
 async function run() {

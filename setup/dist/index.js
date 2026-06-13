@@ -31528,22 +31528,22 @@ const DIAGNOSIS = "setup skeleton: binary caching is disabled";
 function optionalInput(name, defaultValue = "") {
     return getInput(name).trim() || defaultValue;
 }
+function summaryItem(label, value) {
+    return `${label}: ${value}`;
+}
 async function writeSummary(feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     await summary
-        .addHeading("vcpkg GitHub Packages cache setup")
-        .addRaw(DIAGNOSIS)
-        .addEOL()
-        .addRaw(`Feed: ${feedUrl}`)
-        .addEOL()
-        .addRaw(`vcpkg root: ${vcpkgRoot}`)
-        .addEOL()
-        .addRaw(`vcpkg version: ${vcpkgVersion}`)
-        .addEOL()
-        .addRaw(`NuGet command: ${nugetCommand}`)
-        .addEOL()
+        .addHeading("vcpkg GitHub Packages cache setup", 3)
+        .addList([
+        summaryItem("Diagnosis", DIAGNOSIS),
+        summaryItem("Feed", feedUrl),
+        summaryItem("vcpkg root", vcpkgRoot),
+        summaryItem("vcpkg version", vcpkgVersion),
+        summaryItem("NuGet command", nugetCommand),
+    ])
         .write();
 }
 async function run() {

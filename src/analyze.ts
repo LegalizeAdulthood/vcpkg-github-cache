@@ -43,6 +43,10 @@ function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
 }
 
+function summaryItem(label: string, value: string): string {
+  return `${label}: ${value}`;
+}
+
 function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
   for (const [label, result] of liveProbeRows(liveProbes)) {
     core.info(`${label}: ${formatProbeResult(result)}`);
@@ -69,22 +73,17 @@ async function writeSummary(
     return;
   }
 
-  const summary = core.summary
-    .addHeading("vcpkg GitHub Packages cache analysis")
-    .addRaw(DIAGNOSIS)
-    .addEOL()
-    .addRaw(`Feed: ${feedUrl}`)
-    .addEOL();
-
-  for (const [label, result] of liveProbeRows(liveProbes)) {
-    summary.addRaw(`${label}: ${formatProbeResult(result)}`).addEOL();
-  }
-
-  await summary
-    .addRaw(`packages.config files: ${packageConfigCount}`)
-    .addEOL()
-    .addRaw(`Requested packages: ${requestedCount}`)
-    .addEOL()
+  await core.summary
+    .addHeading("vcpkg GitHub Packages cache analysis", 3)
+    .addList([
+      summaryItem("Diagnosis", DIAGNOSIS),
+      summaryItem("Feed", feedUrl),
+      ...liveProbeRows(liveProbes).map(([label, result]) =>
+        summaryItem(label, formatProbeResult(result)),
+      ),
+      summaryItem("packages.config files", packageConfigCount.toString()),
+      summaryItem("Requested packages", requestedCount.toString()),
+    ])
     .write();
 }
 

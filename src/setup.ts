@@ -30,6 +30,10 @@ function optionalInput(name: string, defaultValue = ""): string {
   return core.getInput(name).trim() || defaultValue;
 }
 
+function summaryItem(label: string, value: string): string {
+  return `${label}: ${value}`;
+}
+
 async function writeSummary(
   feedUrl: string,
   nugetCommand: string,
@@ -41,17 +45,14 @@ async function writeSummary(
   }
 
   await core.summary
-    .addHeading("vcpkg GitHub Packages cache setup")
-    .addRaw(DIAGNOSIS)
-    .addEOL()
-    .addRaw(`Feed: ${feedUrl}`)
-    .addEOL()
-    .addRaw(`vcpkg root: ${vcpkgRoot}`)
-    .addEOL()
-    .addRaw(`vcpkg version: ${vcpkgVersion}`)
-    .addEOL()
-    .addRaw(`NuGet command: ${nugetCommand}`)
-    .addEOL()
+    .addHeading("vcpkg GitHub Packages cache setup", 3)
+    .addList([
+      summaryItem("Diagnosis", DIAGNOSIS),
+      summaryItem("Feed", feedUrl),
+      summaryItem("vcpkg root", vcpkgRoot),
+      summaryItem("vcpkg version", vcpkgVersion),
+      summaryItem("NuGet command", nugetCommand),
+    ])
     .write();
 }
 
