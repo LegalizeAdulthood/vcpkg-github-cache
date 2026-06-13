@@ -646,16 +646,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Analyzer Restore Probe
-
-Implement:
-
-- exact restore probe;
-- temporary package directory;
-- restored package count output;
-- restore auth and tooling evidence.
-
-### Slice 2: Analyzer Build Log Parser
+### Slice 1: Analyzer Build Log Parser
 
 Implement:
 
@@ -663,7 +654,7 @@ Implement:
 - restore, build, and upload count extraction;
 - auth and quota pattern extraction.
 
-### Slice 3: Analyzer Diagnosis
+### Slice 2: Analyzer Diagnosis
 
 Implement:
 
@@ -671,46 +662,46 @@ Implement:
 - `cache-status` and `failure-kind` outputs;
 - `fail-on` policy.
 
-### Slice 4: Trace Logging
+### Slice 3: Trace Logging
 
 Implement:
 
 - trace logging.
 
-### Slice 5: Diagnostic Artifacts
+### Slice 4: Diagnostic Artifacts
 
 Implement:
 
 - sanitized diagnostic artifact assembly;
 - build log extracts.
 
-### Slice 6: GitHub Context Diagnostics
+### Slice 5: GitHub Context Diagnostics
 
 Implement:
 
 - safe GitHub context dump.
 
-### Slice 7: NuGet Config Diagnostics
+### Slice 6: NuGet Config Diagnostics
 
 Implement:
 
 - sanitized NuGet config dump.
 
-### Slice 8: Package Visibility Metadata
+### Slice 7: Package Visibility Metadata
 
 Implement bounded package metadata probes:
 
 - package visibility;
 - repository association.
 
-### Slice 9: Package Quota Metadata
+### Slice 8: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 10: Documentation
+### Slice 9: Documentation
 
 Document:
 
@@ -718,7 +709,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 11: Examples
+### Slice 10: Examples
 
 Document:
 
@@ -727,7 +718,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 12: Marketplace Release
+### Slice 11: Marketplace Release
 
 Implement:
 

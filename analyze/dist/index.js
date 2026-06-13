@@ -31697,6 +31697,121 @@ async function discoverPackageConfigs(root, glob, options = {}) {
     };
 }
 
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = require("node:os");
+;// CONCATENATED MODULE: ./src/shared/restore-probe.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+
+
+const MAX_RESTORE_OUTPUT_LENGTH = 8000;
+function trimRestoreOutput(value) {
+    const trimmed = value.trim();
+    if (trimmed.length <= MAX_RESTORE_OUTPUT_LENGTH) {
+        return trimmed;
+    }
+    return `${trimmed.slice(0, MAX_RESTORE_OUTPUT_LENGTH)}...`;
+}
+function restore_probe_combinedOutput(result) {
+    return trimRestoreOutput(`${result.stdout}\n${result.stderr}`);
+}
+function restore_probe_ok(detail, output) {
+    return { detail, output, status: "ok" };
+}
+function restore_probe_failed(detail, output) {
+    return { detail, output, status: "failed" };
+}
+function restore_probe_skipped(detail) {
+    return { detail, status: "skipped" };
+}
+function restoreArgs(packageConfigPath, feedUrl, packageDirectory) {
+    return [
+        "restore",
+        packageConfigPath,
+        "-PackagesDirectory",
+        packageDirectory,
+        "-Source",
+        feedUrl,
+        "-NoHttpCache",
+        "-NonInteractive",
+        "-Verbosity",
+        "detailed",
+    ];
+}
+function packageDirectoryName(identity) {
+    return `${identity.id}.${identity.version}`.toLowerCase();
+}
+async function discoveredPackageDirectoryNames(packageDirectory) {
+    try {
+        const entries = await (0,promises_namespaceObject.readdir)(packageDirectory, { withFileTypes: true });
+        return new Set(entries
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => entry.name.toLowerCase()));
+    }
+    catch {
+        return new Set();
+    }
+}
+async function countRestoredPackages(packageDirectory, requestedPackages) {
+    const directories = await discoveredPackageDirectoryNames(packageDirectory);
+    return requestedPackages.filter((identity) => directories.has(packageDirectoryName(identity))).length;
+}
+async function runRestore(nuget, args, run) {
+    return await run(nuget.file, [...nuget.args, ...args]);
+}
+function appendOutput(lines, output) {
+    if (output) {
+        lines.push(output);
+    }
+}
+function errorOutput(error) {
+    return trimRestoreOutput(error instanceof Error ? error.message : String(error));
+}
+async function runRestoreProbe(options) {
+    if (!options.nuget) {
+        return { result: restore_probe_skipped("NuGet command unavailable") };
+    }
+    const requestedPackages = options.packageConfigs.requestedPackages;
+    if (requestedPackages.length === 0) {
+        return { result: restore_probe_skipped("No packages requested") };
+    }
+    const run = options.run ?? command_runCommand;
+    const packageDirectory = await (0,promises_namespaceObject.mkdtemp)(external_node_path_namespaceObject.join((0,external_node_os_namespaceObject.tmpdir)(), "vcpkg-cache-restore-"));
+    const outputs = [];
+    let failedRestores = 0;
+    try {
+        for (const packageConfig of options.packageConfigs.files) {
+            if (packageConfig.packages.length === 0) {
+                continue;
+            }
+            try {
+                const result = await runRestore(options.nuget, restoreArgs(packageConfig.path, options.feedUrl, packageDirectory), run);
+                appendOutput(outputs, restore_probe_combinedOutput(result));
+            }
+            catch (error) {
+                failedRestores += 1;
+                appendOutput(outputs, errorOutput(error));
+            }
+        }
+        const restoredCount = await countRestoredPackages(packageDirectory, requestedPackages);
+        const requestedCount = requestedPackages.length;
+        const detail = `restored ${restoredCount}/${requestedCount} packages`;
+        const output = trimRestoreOutput(outputs.join("\n"));
+        const result = failedRestores === 0 && restoredCount === requestedCount
+            ? restore_probe_ok(detail, output)
+            : restore_probe_failed(`NuGet restore failed; ${detail}`, output);
+        return { packageDirectory, restoredCount, result };
+    }
+    finally {
+        await (0,promises_namespaceObject.rm)(packageDirectory, { force: true, recursive: true });
+    }
+}
+
 ;// CONCATENATED MODULE: ./src/analyze.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31709,8 +31824,9 @@ async function discoverPackageConfigs(root, glob, options = {}) {
 
 
 
+
 const CACHE_STATUS = "unknown";
-const DIAGNOSIS = "analyzer live probes completed; cache effectiveness is unknown";
+const DIAGNOSIS = "analyzer probes completed; cache effectiveness is unknown";
 function liveProbeRows(liveProbes) {
     return [
         ["Feed basic auth", liveProbes.feedBasicAuth],
@@ -31740,7 +31856,18 @@ function logProbeOutputs(liveProbes, trace) {
         }
     }
 }
-async function writeSummary(feedUrl, liveProbes, packageConfigCount, requestedCount) {
+function logRestoreProbe(restoreProbe, trace) {
+    info(`Restore probe: ${formatProbeResult(restoreProbe.result)}`);
+    if (!trace || !restoreProbe.result.output) {
+        return;
+    }
+    for (const line of restoreProbe.result.output.split(/\r?\n/)) {
+        if (line.trim()) {
+            info(`Restore probe output: ${line}`);
+        }
+    }
+}
+async function writeSummary(feedUrl, liveProbes, restoreProbe, packageConfigCount, requestedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -31750,8 +31877,10 @@ async function writeSummary(feedUrl, liveProbes, packageConfigCount, requestedCo
         summaryItem("Diagnosis", DIAGNOSIS),
         summaryItem("Feed", feedUrl),
         ...liveProbeRows(liveProbes).map(([label, result]) => summaryItem(label, formatProbeResult(result))),
+        summaryItem("Restore probe", formatProbeResult(restoreProbe.result)),
         summaryItem("packages.config files", packageConfigCount.toString()),
         summaryItem("Requested packages", requestedCount.toString()),
+        summaryItem("Restored packages", restoreProbe.restoredCount?.toString() ?? "unknown"),
     ])
         .write();
 }
@@ -31775,11 +31904,17 @@ async function run() {
         username,
         vcpkg,
     });
+    const restoreProbe = await runRestoreProbe({
+        feedUrl,
+        nuget: liveProbes.nugetCommand,
+        packageConfigs,
+    });
     const requestedCount = packageConfigs.requestedPackages.length;
+    const restoredCount = restoreProbe.restoredCount?.toString() ?? "";
     setOutput("cache-status", CACHE_STATUS);
     setOutput("diagnosis", DIAGNOSIS);
     setOutput("requested-count", requestedCount.toString());
-    setOutput("restored-count", "");
+    setOutput("restored-count", restoredCount);
     setOutput("built-count", "");
     setOutput("uploaded-count", "");
     setOutput("failure-kind", "");
@@ -31789,8 +31924,12 @@ async function run() {
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
     logProbeOutputs(liveProbes, trace);
+    logRestoreProbe(restoreProbe, trace);
     info(`packages.config files: ${packageConfigs.files.length}`);
     info(`Requested packages: ${requestedCount}`);
+    if (restoredCount) {
+        info(`Restored packages: ${restoredCount}`);
+    }
     if (debug || trace) {
         info(`Debug: ${debug ? "enabled" : "disabled"}`);
         info(`Trace: ${trace ? "enabled" : "disabled"}`);
@@ -31806,7 +31945,7 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(feedUrl, liveProbes, packageConfigs.files.length, requestedCount);
+    await writeSummary(feedUrl, liveProbes, restoreProbe, packageConfigs.files.length, requestedCount);
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));

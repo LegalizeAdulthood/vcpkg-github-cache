@@ -20,11 +20,11 @@ import {
   resolveUsername,
 } from "./shared/inputs";
 import { discoverPackageConfigs } from "./shared/package-config";
+import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
 
 const CACHE_STATUS = "unknown";
-const DIAGNOSIS =
-  "analyzer live probes completed; cache effectiveness is unknown";
+const DIAGNOSIS = "analyzer probes completed; cache effectiveness is unknown";
 
 function liveProbeRows(
   liveProbes: AnalyzerLiveProbes,
@@ -63,9 +63,24 @@ function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
   }
 }
 
+function logRestoreProbe(restoreProbe: RestoreProbe, trace: boolean): void {
+  core.info(`Restore probe: ${formatProbeResult(restoreProbe.result)}`);
+
+  if (!trace || !restoreProbe.result.output) {
+    return;
+  }
+
+  for (const line of restoreProbe.result.output.split(/\r?\n/)) {
+    if (line.trim()) {
+      core.info(`Restore probe output: ${line}`);
+    }
+  }
+}
+
 async function writeSummary(
   feedUrl: string,
   liveProbes: AnalyzerLiveProbes,
+  restoreProbe: RestoreProbe,
   packageConfigCount: number,
   requestedCount: number,
 ): Promise<void> {
@@ -81,8 +96,13 @@ async function writeSummary(
       ...liveProbeRows(liveProbes).map(([label, result]) =>
         summaryItem(label, formatProbeResult(result)),
       ),
+      summaryItem("Restore probe", formatProbeResult(restoreProbe.result)),
       summaryItem("packages.config files", packageConfigCount.toString()),
       summaryItem("Requested packages", requestedCount.toString()),
+      summaryItem(
+        "Restored packages",
+        restoreProbe.restoredCount?.toString() ?? "unknown",
+      ),
     ])
     .write();
 }
@@ -125,12 +145,18 @@ export async function run(): Promise<void> {
     username,
     vcpkg,
   });
+  const restoreProbe = await runRestoreProbe({
+    feedUrl,
+    nuget: liveProbes.nugetCommand,
+    packageConfigs,
+  });
   const requestedCount = packageConfigs.requestedPackages.length;
+  const restoredCount = restoreProbe.restoredCount?.toString() ?? "";
 
   core.setOutput("cache-status", CACHE_STATUS);
   core.setOutput("diagnosis", DIAGNOSIS);
   core.setOutput("requested-count", requestedCount.toString());
-  core.setOutput("restored-count", "");
+  core.setOutput("restored-count", restoredCount);
   core.setOutput("built-count", "");
   core.setOutput("uploaded-count", "");
   core.setOutput("failure-kind", "");
@@ -141,8 +167,12 @@ export async function run(): Promise<void> {
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
   logProbeOutputs(liveProbes, trace);
+  logRestoreProbe(restoreProbe, trace);
   core.info(`packages.config files: ${packageConfigs.files.length}`);
   core.info(`Requested packages: ${requestedCount}`);
+  if (restoredCount) {
+    core.info(`Restored packages: ${restoredCount}`);
+  }
 
   if (debug || trace) {
     core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
@@ -166,6 +196,7 @@ export async function run(): Promise<void> {
   await writeSummary(
     feedUrl,
     liveProbes,
+    restoreProbe,
     packageConfigs.files.length,
     requestedCount,
   );
