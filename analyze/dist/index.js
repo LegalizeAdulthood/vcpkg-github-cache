@@ -31675,6 +31675,208 @@ function buildDisabledBinarySources() {
     return "clear";
 }
 
+;// CONCATENATED MODULE: ./src/shared/diagnosis.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+const FAIL_ON_POLICIES = new Set([
+    "auth",
+    "cache-miss",
+    "never",
+    "private-package",
+    "quota",
+    "restore-failure",
+    "upload-failure",
+]);
+function diagnosis_failed(result) {
+    return result.status === "failed";
+}
+function diagnosis_skipped(result) {
+    return result.status === "skipped";
+}
+function count(value) {
+    return value ?? 0;
+}
+function detail(output) {
+    return output.filter((value) => value.length > 0).join("; ");
+}
+function statusDetail(status) {
+    return status.replaceAll("-", " ");
+}
+function tokenDetail(tokenKind) {
+    return tokenKind === "github" ? "GITHUB_TOKEN" : "PAT";
+}
+function httpAuthFailure(result) {
+    return (diagnosis_failed(result) &&
+        /\b(?:401|403|Unauthorized|Forbidden)\b/i.test(result.detail));
+}
+function textAuthFailure(value) {
+    return /\b(?:401|403|Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(value ?? "");
+}
+function textQuotaFailure(value) {
+    return /(?:billing limit|quota|twirp error permission_denied|permission_denied)/i.test(value ?? "");
+}
+function successfulUploads(buildLogFacts) {
+    return count(buildLogFacts?.uploadedCount);
+}
+function uploadFailure(buildLogFacts) {
+    if (!buildLogFacts) {
+        return false;
+    }
+    const uploads = successfulUploads(buildLogFacts);
+    return (buildLogFacts.zeroCacheSubmissions > 0 ||
+        (buildLogFacts.uploadsAttempted > 0 &&
+            uploads < buildLogFacts.uploadsAttempted));
+}
+function cacheDisabled(buildLogFacts) {
+    if (!buildLogFacts) {
+        return false;
+    }
+    return (count(buildLogFacts.builtCount) > 0 &&
+        count(buildLogFacts.restoredCount) === 0 &&
+        buildLogFacts.submissionsStarted === 0 &&
+        buildLogFacts.uploadsAttempted === 0);
+}
+function effectiveRequestedCount(input) {
+    return input.requestedCount || count(input.buildLogFacts?.requestedCount);
+}
+function effectiveRestoredCount(input) {
+    return count(input.buildLogFacts?.restoredCount ?? input.restoreProbe.restoredCount);
+}
+function classifyBuildLog(input) {
+    const requestedCount = effectiveRequestedCount(input);
+    const restoredCount = effectiveRestoredCount(input);
+    const builtCount = count(input.buildLogFacts?.builtCount);
+    const uploadedCount = successfulUploads(input.buildLogFacts);
+    const baseEvidence = [
+        `token path ${tokenDetail(input.tokenKind)}`,
+        requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
+        builtCount > 0 ? `build misses ${builtCount}` : "build misses 0",
+    ];
+    if (input.buildLogFacts?.quotaMessages.length) {
+        return result("quota-failure", "quota", [
+            ...baseEvidence,
+            `quota messages ${input.buildLogFacts.quotaMessages.length}`,
+        ]);
+    }
+    if (uploadFailure(input.buildLogFacts)) {
+        return result("upload-failure", "upload-failure", [
+            ...baseEvidence,
+            `upload ${uploadedCount}/${input.buildLogFacts?.uploadsAttempted ?? 0}`,
+            `zero-cache submissions ${input.buildLogFacts?.zeroCacheSubmissions ?? 0}`,
+            input.buildLogFacts?.authMessages.length
+                ? `auth messages ${input.buildLogFacts.authMessages.length}`
+                : "",
+        ]);
+    }
+    if (input.buildLogFacts?.authMessages.length) {
+        return result("auth-failure", "auth", [
+            ...baseEvidence,
+            `auth messages ${input.buildLogFacts.authMessages.length}`,
+        ]);
+    }
+    if (cacheDisabled(input.buildLogFacts)) {
+        return result("cache-disabled", "cache-miss", baseEvidence);
+    }
+    if (requestedCount > 0 &&
+        restoredCount >= requestedCount &&
+        builtCount === 0) {
+        return result("warm-hit", "", baseEvidence);
+    }
+    if (restoredCount > 0 && builtCount > 0) {
+        return result("partial-hit", "cache-miss", [
+            ...baseEvidence,
+            uploadedCount > 0 ? `upload ${uploadedCount}` : "upload unknown",
+        ]);
+    }
+    if (requestedCount > 0 && restoredCount === 0 && builtCount > 0) {
+        if (uploadedCount > 0) {
+            return result("cold-seed", "cache-miss", [
+                ...baseEvidence,
+                `upload ${uploadedCount}`,
+            ]);
+        }
+        return result("cache-disabled", "cache-miss", baseEvidence);
+    }
+    return result("unknown", "", baseEvidence);
+}
+function classifyWithoutBuildLog(input) {
+    const requestedCount = effectiveRequestedCount(input);
+    const restoredCount = effectiveRestoredCount(input);
+    const baseEvidence = [
+        `token path ${tokenDetail(input.tokenKind)}`,
+        requestedCount > 0
+            ? `exact restore ${restoredCount}/${requestedCount}`
+            : "",
+        "build log absent",
+    ];
+    if (input.restoreProbe.result.status === "ok") {
+        return result("restore-healthy", "", baseEvidence);
+    }
+    if (requestedCount > 0 && restoredCount < requestedCount) {
+        return result("restore-miss", "cache-miss", baseEvidence);
+    }
+    if (diagnosis_failed(input.restoreProbe.result)) {
+        return result("restore-miss", "restore-failure", [
+            ...baseEvidence,
+            input.restoreProbe.result.detail,
+        ]);
+    }
+    return result("unknown", "", baseEvidence);
+}
+function result(cacheStatus, failureKind, evidence) {
+    return {
+        cacheStatus,
+        diagnosis: `vcpkg GitHub Packages cache: ${statusDetail(cacheStatus)}; ${detail(evidence)}`,
+        failureKind,
+    };
+}
+function normalizeFailOnPolicy(value) {
+    const normalized = value.trim().toLowerCase();
+    if (FAIL_ON_POLICIES.has(normalized)) {
+        return normalized;
+    }
+    throw new Error(`Unsupported fail-on policy: ${value}`);
+}
+function shouldFailDiagnosis(diagnosis, policy) {
+    return policy !== "never" && diagnosis.failureKind === policy;
+}
+function classifyCache(input) {
+    if (input.liveProbes.vcpkgVersion.status === "failed" ||
+        input.liveProbes.vcpkgNuget.status === "failed" ||
+        input.liveProbes.nugetVersion.status === "failed" ||
+        diagnosis_skipped(input.liveProbes.vcpkgNuget) ||
+        diagnosis_skipped(input.liveProbes.nugetVersion)) {
+        return result("tooling-failure", "tooling-failure", [
+            `token path ${tokenDetail(input.tokenKind)}`,
+            `vcpkg ${input.liveProbes.vcpkgVersion.status}`,
+            `NuGet ${input.liveProbes.nugetVersion.status}`,
+        ]);
+    }
+    if (textQuotaFailure(input.restoreProbe.result.output) ||
+        textQuotaFailure(input.restoreProbe.result.detail)) {
+        return result("quota-failure", "quota", [
+            `token path ${tokenDetail(input.tokenKind)}`,
+            input.restoreProbe.result.detail,
+        ]);
+    }
+    if (httpAuthFailure(input.liveProbes.feedBasicAuth) ||
+        textAuthFailure(input.restoreProbe.result.output) ||
+        textAuthFailure(input.restoreProbe.result.detail)) {
+        return result("auth-failure", "auth", [
+            `token path ${tokenDetail(input.tokenKind)}`,
+            `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
+            input.restoreProbe.result.detail,
+        ]);
+    }
+    if (input.buildLogFacts) {
+        return classifyBuildLog(input);
+    }
+    return classifyWithoutBuildLog(input);
+}
+
 ;// CONCATENATED MODULE: ./src/shared/inputs.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -32014,8 +32216,7 @@ async function runRestoreProbe(options) {
 
 
 
-const CACHE_STATUS = "unknown";
-const DIAGNOSIS = "analyzer probes completed; cache effectiveness is unknown";
+
 function liveProbeRows(liveProbes) {
     return [
         ["Feed basic auth", liveProbes.feedBasicAuth],
@@ -32104,14 +32305,16 @@ async function readBuildLogFacts(buildLog, workspace) {
     const content = await (0,promises_namespaceObject.readFile)(buildLogPath, "utf8");
     return parseBuildLog(content);
 }
-async function writeSummary(feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount) {
+async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     await summary
         .addHeading("vcpkg GitHub Packages cache analysis", 3)
         .addList([
-        summaryItem("Diagnosis", DIAGNOSIS),
+        summaryItem("Diagnosis", diagnosis),
+        summaryItem("Cache status", cacheStatus),
+        summaryItem("Failure kind", failureKind || "none"),
         summaryItem("Feed", feedUrl),
         ...liveProbeRows(liveProbes).map(([label, result]) => summaryItem(label, formatProbeResult(result))),
         summaryItem("Restore probe", formatProbeResult(restoreProbe.result)),
@@ -32136,6 +32339,7 @@ async function run() {
     const buildLog = optionalInput("build-log");
     const packageConfigGlob = optionalInput("package-config-glob", "**/packages.config");
     const failOn = optionalInput("fail-on", "never");
+    const failOnPolicy = normalizeFailOnPolicy(failOn);
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
     const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
     const packageConfigs = await discoverPackageConfigs(workspace, packageConfigGlob);
@@ -32158,15 +32362,24 @@ async function run() {
         "";
     const builtCount = buildLogFacts?.builtCount?.toString() ?? "";
     const uploadedCount = buildLogFacts?.uploadedCount?.toString() ?? "";
-    setOutput("cache-status", CACHE_STATUS);
-    setOutput("diagnosis", DIAGNOSIS);
+    const diagnosis = classifyCache({
+        buildLogFacts,
+        liveProbes,
+        requestedCount,
+        restoreProbe,
+        tokenKind,
+    });
+    setOutput("cache-status", diagnosis.cacheStatus);
+    setOutput("diagnosis", diagnosis.diagnosis);
     setOutput("requested-count", requestedCount.toString());
     setOutput("restored-count", restoredCount);
     setOutput("built-count", builtCount);
     setOutput("uploaded-count", uploadedCount);
-    setOutput("failure-kind", "");
+    setOutput("failure-kind", diagnosis.failureKind);
     setOutput("diagnostics-artifact", "");
-    info(DIAGNOSIS);
+    info(diagnosis.diagnosis);
+    info(`Cache status: ${diagnosis.cacheStatus}`);
+    info(`Failure kind: ${diagnosis.failureKind || "none"}`);
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
     info(`NuGet username: ${username}`);
@@ -32193,7 +32406,10 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount);
+    await writeSummary(diagnosis.diagnosis, diagnosis.cacheStatus, diagnosis.failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount);
+    if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {
+        setFailed(diagnosis.diagnosis);
+    }
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));

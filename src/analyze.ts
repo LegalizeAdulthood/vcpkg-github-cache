@@ -17,6 +17,11 @@ import {
 import { BuildLogFacts, parseBuildLog } from "./shared/build-log";
 import { buildFeedUrl } from "./shared/cache";
 import {
+  classifyCache,
+  normalizeFailOnPolicy,
+  shouldFailDiagnosis,
+} from "./shared/diagnosis";
+import {
   normalizeTokenKind,
   parseBoolean,
   resolveFeedOwner,
@@ -25,9 +30,6 @@ import {
 import { discoverPackageConfigs } from "./shared/package-config";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
-
-const CACHE_STATUS = "unknown";
-const DIAGNOSIS = "analyzer probes completed; cache effectiveness is unknown";
 
 function liveProbeRows(
   liveProbes: AnalyzerLiveProbes,
@@ -180,6 +182,9 @@ async function readBuildLogFacts(
 }
 
 async function writeSummary(
+  diagnosis: string,
+  cacheStatus: string,
+  failureKind: string,
   feedUrl: string,
   liveProbes: AnalyzerLiveProbes,
   restoreProbe: RestoreProbe,
@@ -197,7 +202,9 @@ async function writeSummary(
   await core.summary
     .addHeading("vcpkg GitHub Packages cache analysis", 3)
     .addList([
-      summaryItem("Diagnosis", DIAGNOSIS),
+      summaryItem("Diagnosis", diagnosis),
+      summaryItem("Cache status", cacheStatus),
+      summaryItem("Failure kind", failureKind || "none"),
       summaryItem("Feed", feedUrl),
       ...liveProbeRows(liveProbes).map(([label, result]) =>
         summaryItem(label, formatProbeResult(result)),
@@ -237,6 +244,7 @@ export async function run(): Promise<void> {
     "**/packages.config",
   );
   const failOn = optionalInput("fail-on", "never");
+  const failOnPolicy = normalizeFailOnPolicy(failOn);
   const vcpkg = resolveVcpkgPaths(
     optionalInput("vcpkg-root", "vcpkg"),
     process.env.GITHUB_WORKSPACE,
@@ -267,17 +275,26 @@ export async function run(): Promise<void> {
     "";
   const builtCount = buildLogFacts?.builtCount?.toString() ?? "";
   const uploadedCount = buildLogFacts?.uploadedCount?.toString() ?? "";
+  const diagnosis = classifyCache({
+    buildLogFacts,
+    liveProbes,
+    requestedCount,
+    restoreProbe,
+    tokenKind,
+  });
 
-  core.setOutput("cache-status", CACHE_STATUS);
-  core.setOutput("diagnosis", DIAGNOSIS);
+  core.setOutput("cache-status", diagnosis.cacheStatus);
+  core.setOutput("diagnosis", diagnosis.diagnosis);
   core.setOutput("requested-count", requestedCount.toString());
   core.setOutput("restored-count", restoredCount);
   core.setOutput("built-count", builtCount);
   core.setOutput("uploaded-count", uploadedCount);
-  core.setOutput("failure-kind", "");
+  core.setOutput("failure-kind", diagnosis.failureKind);
   core.setOutput("diagnostics-artifact", "");
 
-  core.info(DIAGNOSIS);
+  core.info(diagnosis.diagnosis);
+  core.info(`Cache status: ${diagnosis.cacheStatus}`);
+  core.info(`Failure kind: ${diagnosis.failureKind || "none"}`);
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
   core.info(`Feed owner: ${feedOwner}`);
   core.info(`NuGet username: ${username}`);
@@ -310,6 +327,9 @@ export async function run(): Promise<void> {
   }
 
   await writeSummary(
+    diagnosis.diagnosis,
+    diagnosis.cacheStatus,
+    diagnosis.failureKind,
     feedUrl,
     liveProbes,
     restoreProbe,
@@ -320,6 +340,10 @@ export async function run(): Promise<void> {
     builtCount,
     uploadedCount,
   );
+
+  if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {
+    core.setFailed(diagnosis.diagnosis);
+  }
 }
 
 void run().catch((error: unknown) => {
