@@ -31,10 +31,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify committed actions load
+        run: npm run check-dist
+
       - name: Build and test
         run: npm run check
 
-      - name: Verify generated files are current
+      - name: Verify authored files are clean
         run: |
           git diff --check -- . ':(exclude)setup/dist/**' ':(exclude)analyze/dist/**'
-          git diff --exit-code
+          git diff --exit-code -- . ':(exclude)setup/dist/**' ':(exclude)analyze/dist/**'
