@@ -34,6 +34,128 @@ permissions:
   packages: write
 ```
 
+## Examples
+
+The setup action exports `VCPKG_BINARY_SOURCES` for later workflow steps, so
+the caller build can stay unchanged.
+
+### Minimal Setup
+
+Use setup before the vcpkg-backed build:
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+
+steps:
+  - uses: actions/checkout@v6
+    with:
+      submodules: true
+
+  - uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+    with:
+      token: ${{ github.token }}
+
+  - run: cmake --workflow --preset ci
+```
+
+### Setup Plus Analyze
+
+Capture the build log, then run analyze even when the build fails:
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+    with:
+      submodules: true
+
+  - uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+    with:
+      token: ${{ github.token }}
+
+  - name: Build
+    shell: pwsh
+    run: |
+      cmake --workflow --preset ci 2>&1 |
+        Tee-Object -FilePath build.log
+      if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+      }
+
+  - name: Analyze vcpkg package cache
+    if: always()
+    uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+    with:
+      token: ${{ github.token }}
+      build-log: build.log
+      fail-on: "never"
+```
+
+### Build Log Capture
+
+The analyzer works without a build log, but a build log lets it separate
+warm hits, partial hits, cold seeds, and upload failures.
+
+For `bash`:
+
+```yaml
+- name: Build
+  shell: bash
+  run: |
+    set -o pipefail
+    cmake --workflow --preset ci 2>&1 | tee build.log
+```
+
+For `pwsh`:
+
+```yaml
+- name: Build
+  shell: pwsh
+  run: |
+    cmake --workflow --preset ci 2>&1 |
+      Tee-Object -FilePath build.log
+    if ($LASTEXITCODE -ne 0) {
+      exit $LASTEXITCODE
+    }
+```
+
+### Troubleshooting
+
+Enable `debug` while tuning package permissions.  This keeps the analyzer
+summary concise and uploads a diagnostics artifact with probe details:
+
+```yaml
+- name: Analyze vcpkg package cache
+  if: always()
+  uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+  with:
+    token: ${{ github.token }}
+    build-log: build.log
+    fail-on: "never"
+    debug: "true"
+```
+
+Enable `trace` when setup or analysis makes an unexpected decision, such as
+choosing the wrong vcpkg root, skipping a tool install, or resolving a
+different GitHub Packages feed than expected:
+
+```yaml
+- uses: LegalizeAdulthood/vcpkg-github-cache/setup@v1
+  with:
+    token: ${{ github.token }}
+    trace: "true"
+
+- name: Analyze vcpkg package cache
+  if: always()
+  uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+  with:
+    token: ${{ github.token }}
+    build-log: build.log
+    fail-on: "never"
+    trace: "true"
+```
+
 ## Action Reference
 
 GitHub action inputs are strings.  Quote boolean values such as `"true"`

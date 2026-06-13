@@ -674,16 +674,7 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Examples
-
-Document:
-
-- minimal setup;
-- setup plus analyze;
-- build-log capture examples;
-- troubleshooting examples.
-
-### Slice 2: Marketplace Release
+### Slice 1: Marketplace Release
 
 Implement:
 
