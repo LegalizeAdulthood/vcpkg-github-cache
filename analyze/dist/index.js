@@ -31125,6 +31125,10 @@ function getIDToken(aud) {
  */
 
 //# sourceMappingURL=core.js.map
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
 // EXTERNAL MODULE: external "node:buffer"
 var external_node_buffer_ = __nccwpck_require__(4573);
 ;// CONCATENATED MODULE: external "node:https"
@@ -31182,10 +31186,6 @@ async function command_runCommand(command, args, options = {}) {
 
 ;// CONCATENATED MODULE: external "node:fs"
 const external_node_fs_namespaceObject = require("node:fs");
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = require("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/vcpkg.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31469,6 +31469,192 @@ async function runAnalyzerLiveProbes(options) {
         nugetVersion,
         vcpkgNuget: vcpkgNuget.result,
         vcpkgVersion,
+    };
+}
+
+;// CONCATENATED MODULE: ./src/shared/build-log.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
+const GITHUB_LOG_PREFIX_PATTERN = /^\ufeff?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+/;
+const URL_PATTERN = /https:\/\/[^\s"'<>]+/gi;
+function unique(values) {
+    return [...new Set(values)];
+}
+function parseCount(value) {
+    return Number.parseInt(value, 10);
+}
+function cleanLine(line) {
+    return line.replace(ANSI_PATTERN, "").replace(GITHUB_LOG_PREFIX_PATTERN, "");
+}
+function packageListLine(line) {
+    const trimmed = line.trim();
+    const packageLine = trimmed.replace(/^\*\s+/, "");
+    if (/^[A-Za-z0-9_.+-][^\s]*:[^\s]+@[^\s]+$/.test(packageLine)) {
+        return packageLine;
+    }
+    return undefined;
+}
+function restoredCount(line) {
+    const match = /Restored\s+(\d+)\s+package\(s\)\s+from\s+NuGet/i.exec(line);
+    return match ? parseCount(match[1]) : undefined;
+}
+function restoredPackage(line) {
+    const match = /Restored\s+NuGet package\s+(.+?)\.(?=\d)/i.exec(line);
+    return match?.[1];
+}
+function builtPackage(line) {
+    if (/^Building\s+for:/i.test(line)) {
+        return undefined;
+    }
+    const match = /^Building\s+(.+?)(?:\.\.\.)?$/.exec(line.trim());
+    return match?.[1];
+}
+function completedSubmissionCacheCount(line) {
+    const match = /Completed submission\b.*\bto\s+(\d+)\s+binary cache\(s\)/i.exec(line);
+    return match ? parseCount(match[1]) : undefined;
+}
+function containsAuthFailure(line) {
+    return /\b(?:401|403|Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(line);
+}
+function containsQuotaFailure(line) {
+    return /(?:billing limit|quota|twirp error permission_denied|permission_denied)/i.test(line);
+}
+function failedHttpStatus(line) {
+    const match = /\b(?:HTTP\s+|status(?:\scode)?\s+)?(401|403|429|500|502|503)\b/i.exec(line);
+    return match?.[1];
+}
+function nugetConfigPath(line) {
+    const trimmed = line.trim();
+    if (/NuGet\.Config$/i.test(trimmed) ||
+        /NuGet[\\/][^\\/]+\.config$/i.test(trimmed)) {
+        return trimmed;
+    }
+    return undefined;
+}
+function parseBuildLog(content) {
+    const packageListPackages = [];
+    const restoredPackages = [];
+    const builtPackages = [];
+    const failedHttpStatuses = [];
+    const authMessages = [];
+    const quotaMessages = [];
+    const feeds = [];
+    const nugetConfigPaths = [];
+    let capturePackageList = false;
+    let captureFeeds = false;
+    let captureNugetConfigPaths = false;
+    let parsedRestoredCount;
+    let submissionsStarted = 0;
+    let uploadsAttempted = 0;
+    let uploadedCount = 0;
+    let zeroCacheSubmissions = 0;
+    for (const rawLine of content.split(/\r?\n/)) {
+        const line = cleanLine(rawLine);
+        const trimmed = line.trim();
+        if (trimmed === "The following packages will be built and installed:") {
+            capturePackageList = true;
+            continue;
+        }
+        if (capturePackageList) {
+            const packageLine = packageListLine(line);
+            if (packageLine) {
+                packageListPackages.push(packageLine);
+                continue;
+            }
+            if (trimmed === "" || /^Additional packages\b/i.test(trimmed)) {
+                capturePackageList = false;
+            }
+        }
+        if (/^Feeds used:/i.test(trimmed)) {
+            captureFeeds = true;
+            continue;
+        }
+        if (captureFeeds) {
+            const urls = trimmed.match(URL_PATTERN);
+            if (urls) {
+                feeds.push(...urls);
+                continue;
+            }
+            if (trimmed === "") {
+                captureFeeds = false;
+            }
+        }
+        if (/^NuGet Config files used:/i.test(trimmed)) {
+            captureNugetConfigPaths = true;
+            continue;
+        }
+        if (captureNugetConfigPaths) {
+            const configPath = nugetConfigPath(line);
+            if (configPath) {
+                nugetConfigPaths.push(configPath);
+                continue;
+            }
+            if (trimmed === "") {
+                captureNugetConfigPaths = false;
+            }
+        }
+        const count = restoredCount(line);
+        if (count !== undefined) {
+            parsedRestoredCount = count;
+        }
+        const restored = restoredPackage(line);
+        if (restored) {
+            restoredPackages.push(restored);
+        }
+        const built = builtPackage(line);
+        if (built) {
+            builtPackages.push(built);
+        }
+        if (/Starting submission\b/i.test(line)) {
+            submissionsStarted += 1;
+        }
+        if (/Uploading binaries\b.*\bNuGet\b/i.test(line)) {
+            uploadsAttempted += 1;
+        }
+        const submittedCacheCount = completedSubmissionCacheCount(line);
+        if (submittedCacheCount !== undefined) {
+            if (submittedCacheCount === 0) {
+                zeroCacheSubmissions += 1;
+            }
+            else {
+                uploadedCount += 1;
+            }
+        }
+        const status = failedHttpStatus(line);
+        if (status) {
+            failedHttpStatuses.push(status);
+        }
+        if (containsAuthFailure(line)) {
+            authMessages.push(trimmed);
+        }
+        if (containsQuotaFailure(line)) {
+            quotaMessages.push(trimmed);
+        }
+        const urls = line.match(URL_PATTERN);
+        if (urls) {
+            feeds.push(...urls.filter((url) => /nuget/i.test(url)));
+        }
+    }
+    const restoredPackageCount = unique(restoredPackages).length;
+    return {
+        authMessages: unique(authMessages),
+        builtCount: unique(builtPackages).length || undefined,
+        builtPackages: unique(builtPackages),
+        failedHttpStatuses: unique(failedHttpStatuses),
+        feeds: unique(feeds),
+        nugetConfigPaths: unique(nugetConfigPaths),
+        quotaMessages: unique(quotaMessages),
+        requestedCount: unique(packageListPackages).length || undefined,
+        restoredCount: parsedRestoredCount ?? (restoredPackageCount || undefined),
+        restoredPackages: unique(restoredPackages),
+        submissionsStarted,
+        uploadedCount: uploadedCount || undefined,
+        uploadsAttempted,
+        zeroCacheSubmissions,
     };
 }
 
@@ -31825,6 +32011,9 @@ async function runRestoreProbe(options) {
 
 
 
+
+
+
 const CACHE_STATUS = "unknown";
 const DIAGNOSIS = "analyzer probes completed; cache effectiveness is unknown";
 function liveProbeRows(liveProbes) {
@@ -31842,6 +32031,9 @@ function optionalInput(name, defaultValue = "") {
 }
 function summaryItem(label, value) {
     return `${label}: ${value}`;
+}
+function optionalCount(value) {
+    return value?.toString() ?? "unknown";
 }
 function logProbeOutputs(liveProbes, trace) {
     for (const [label, result] of liveProbeRows(liveProbes)) {
@@ -31867,7 +32059,52 @@ function logRestoreProbe(restoreProbe, trace) {
         }
     }
 }
-async function writeSummary(feedUrl, liveProbes, restoreProbe, packageConfigCount, requestedCount) {
+function buildLogRows(buildLogFacts) {
+    if (!buildLogFacts) {
+        return [];
+    }
+    return [
+        summaryItem("Build log requested packages", optionalCount(buildLogFacts.requestedCount)),
+        summaryItem("Build log restored packages", optionalCount(buildLogFacts.restoredCount)),
+        summaryItem("Build log built packages", optionalCount(buildLogFacts.builtCount)),
+        summaryItem("Build log uploaded packages", optionalCount(buildLogFacts.uploadedCount)),
+        summaryItem("Build log auth messages", buildLogFacts.authMessages.length.toString()),
+        summaryItem("Build log quota messages", buildLogFacts.quotaMessages.length.toString()),
+    ];
+}
+function logBuildLogFacts(buildLogFacts, trace) {
+    if (!buildLogFacts) {
+        return;
+    }
+    info(`Build log requested packages: ${optionalCount(buildLogFacts.requestedCount)}`);
+    info(`Build log restored packages: ${optionalCount(buildLogFacts.restoredCount)}`);
+    info(`Build log built packages: ${optionalCount(buildLogFacts.builtCount)}`);
+    info(`Build log uploaded packages: ${optionalCount(buildLogFacts.uploadedCount)}`);
+    info(`Build log submissions started: ${buildLogFacts.submissionsStarted}`);
+    info(`Build log uploads attempted: ${buildLogFacts.uploadsAttempted}`);
+    info(`Build log zero-cache submissions: ${buildLogFacts.zeroCacheSubmissions}`);
+    info(`Build log failed HTTP statuses: ${buildLogFacts.failedHttpStatuses.length}`);
+    info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
+    info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
+    if (!trace) {
+        return;
+    }
+    for (const feed of buildLogFacts.feeds) {
+        info(`Build log feed: ${feed}`);
+    }
+    for (const configPath of buildLogFacts.nugetConfigPaths) {
+        info(`Build log NuGet config: ${configPath}`);
+    }
+}
+async function readBuildLogFacts(buildLog, workspace) {
+    if (!buildLog) {
+        return undefined;
+    }
+    const buildLogPath = external_node_path_namespaceObject.resolve(workspace, buildLog);
+    const content = await (0,promises_namespaceObject.readFile)(buildLogPath, "utf8");
+    return parseBuildLog(content);
+}
+async function writeSummary(feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -31878,9 +32115,12 @@ async function writeSummary(feedUrl, liveProbes, restoreProbe, packageConfigCoun
         summaryItem("Feed", feedUrl),
         ...liveProbeRows(liveProbes).map(([label, result]) => summaryItem(label, formatProbeResult(result))),
         summaryItem("Restore probe", formatProbeResult(restoreProbe.result)),
+        ...buildLogRows(buildLogFacts),
         summaryItem("packages.config files", packageConfigCount.toString()),
         summaryItem("Requested packages", requestedCount.toString()),
-        summaryItem("Restored packages", restoreProbe.restoredCount?.toString() ?? "unknown"),
+        summaryItem("Restored packages", restoredCount || "unknown"),
+        summaryItem("Built packages", builtCount || "unknown"),
+        summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ])
         .write();
 }
@@ -31897,7 +32137,9 @@ async function run() {
     const packageConfigGlob = optionalInput("package-config-glob", "**/packages.config");
     const failOn = optionalInput("fail-on", "never");
     const vcpkg = resolveVcpkgPaths(optionalInput("vcpkg-root", "vcpkg"), process.env.GITHUB_WORKSPACE);
-    const packageConfigs = await discoverPackageConfigs(process.env.GITHUB_WORKSPACE ?? process.cwd(), packageConfigGlob);
+    const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
+    const packageConfigs = await discoverPackageConfigs(workspace, packageConfigGlob);
+    const buildLogFacts = await readBuildLogFacts(buildLog, workspace);
     const liveProbes = await runAnalyzerLiveProbes({
         feedUrl,
         token,
@@ -31909,14 +32151,19 @@ async function run() {
         nuget: liveProbes.nugetCommand,
         packageConfigs,
     });
-    const requestedCount = packageConfigs.requestedPackages.length;
-    const restoredCount = restoreProbe.restoredCount?.toString() ?? "";
+    const requestedCount = packageConfigs.requestedPackages.length ||
+        buildLogFacts?.requestedCount ||
+        0;
+    const restoredCount = (buildLogFacts?.restoredCount ?? restoreProbe.restoredCount)?.toString() ??
+        "";
+    const builtCount = buildLogFacts?.builtCount?.toString() ?? "";
+    const uploadedCount = buildLogFacts?.uploadedCount?.toString() ?? "";
     setOutput("cache-status", CACHE_STATUS);
     setOutput("diagnosis", DIAGNOSIS);
     setOutput("requested-count", requestedCount.toString());
     setOutput("restored-count", restoredCount);
-    setOutput("built-count", "");
-    setOutput("uploaded-count", "");
+    setOutput("built-count", builtCount);
+    setOutput("uploaded-count", uploadedCount);
     setOutput("failure-kind", "");
     setOutput("diagnostics-artifact", "");
     info(DIAGNOSIS);
@@ -31925,6 +32172,7 @@ async function run() {
     info(`NuGet username: ${username}`);
     logProbeOutputs(liveProbes, trace);
     logRestoreProbe(restoreProbe, trace);
+    logBuildLogFacts(buildLogFacts, trace);
     info(`packages.config files: ${packageConfigs.files.length}`);
     info(`Requested packages: ${requestedCount}`);
     if (restoredCount) {
@@ -31945,7 +32193,7 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(feedUrl, liveProbes, restoreProbe, packageConfigs.files.length, requestedCount);
+    await writeSummary(feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount);
 }
 void run().catch((error) => {
     setFailed(error instanceof Error ? error.message : String(error));

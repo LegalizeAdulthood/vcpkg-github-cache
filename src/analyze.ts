@@ -5,6 +5,8 @@
  */
 
 import * as core from "@actions/core";
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
 
 import {
   AnalyzerLiveProbes,
@@ -12,6 +14,7 @@ import {
   ProbeResult,
   runAnalyzerLiveProbes,
 } from "./shared/analyze-probes";
+import { BuildLogFacts, parseBuildLog } from "./shared/build-log";
 import { buildFeedUrl } from "./shared/cache";
 import {
   normalizeTokenKind,
@@ -47,6 +50,10 @@ function summaryItem(label: string, value: string): string {
   return `${label}: ${value}`;
 }
 
+function optionalCount(value: number | undefined): string {
+  return value?.toString() ?? "unknown";
+}
+
 function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
   for (const [label, result] of liveProbeRows(liveProbes)) {
     core.info(`${label}: ${formatProbeResult(result)}`);
@@ -77,12 +84,111 @@ function logRestoreProbe(restoreProbe: RestoreProbe, trace: boolean): void {
   }
 }
 
+function buildLogRows(
+  buildLogFacts: BuildLogFacts | undefined,
+): readonly string[] {
+  if (!buildLogFacts) {
+    return [];
+  }
+
+  return [
+    summaryItem(
+      "Build log requested packages",
+      optionalCount(buildLogFacts.requestedCount),
+    ),
+    summaryItem(
+      "Build log restored packages",
+      optionalCount(buildLogFacts.restoredCount),
+    ),
+    summaryItem(
+      "Build log built packages",
+      optionalCount(buildLogFacts.builtCount),
+    ),
+    summaryItem(
+      "Build log uploaded packages",
+      optionalCount(buildLogFacts.uploadedCount),
+    ),
+    summaryItem(
+      "Build log auth messages",
+      buildLogFacts.authMessages.length.toString(),
+    ),
+    summaryItem(
+      "Build log quota messages",
+      buildLogFacts.quotaMessages.length.toString(),
+    ),
+  ];
+}
+
+function logBuildLogFacts(
+  buildLogFacts: BuildLogFacts | undefined,
+  trace: boolean,
+): void {
+  if (!buildLogFacts) {
+    return;
+  }
+
+  core.info(
+    `Build log requested packages: ${optionalCount(buildLogFacts.requestedCount)}`,
+  );
+  core.info(
+    `Build log restored packages: ${optionalCount(buildLogFacts.restoredCount)}`,
+  );
+  core.info(
+    `Build log built packages: ${optionalCount(buildLogFacts.builtCount)}`,
+  );
+  core.info(
+    `Build log uploaded packages: ${optionalCount(buildLogFacts.uploadedCount)}`,
+  );
+  core.info(
+    `Build log submissions started: ${buildLogFacts.submissionsStarted}`,
+  );
+  core.info(`Build log uploads attempted: ${buildLogFacts.uploadsAttempted}`);
+  core.info(
+    `Build log zero-cache submissions: ${buildLogFacts.zeroCacheSubmissions}`,
+  );
+  core.info(
+    `Build log failed HTTP statuses: ${buildLogFacts.failedHttpStatuses.length}`,
+  );
+  core.info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
+  core.info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
+
+  if (!trace) {
+    return;
+  }
+
+  for (const feed of buildLogFacts.feeds) {
+    core.info(`Build log feed: ${feed}`);
+  }
+
+  for (const configPath of buildLogFacts.nugetConfigPaths) {
+    core.info(`Build log NuGet config: ${configPath}`);
+  }
+}
+
+async function readBuildLogFacts(
+  buildLog: string,
+  workspace: string,
+): Promise<BuildLogFacts | undefined> {
+  if (!buildLog) {
+    return undefined;
+  }
+
+  const buildLogPath = path.resolve(workspace, buildLog);
+  const content = await readFile(buildLogPath, "utf8");
+
+  return parseBuildLog(content);
+}
+
 async function writeSummary(
   feedUrl: string,
   liveProbes: AnalyzerLiveProbes,
   restoreProbe: RestoreProbe,
+  buildLogFacts: BuildLogFacts | undefined,
   packageConfigCount: number,
   requestedCount: number,
+  restoredCount: string,
+  builtCount: string,
+  uploadedCount: string,
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
@@ -97,12 +203,12 @@ async function writeSummary(
         summaryItem(label, formatProbeResult(result)),
       ),
       summaryItem("Restore probe", formatProbeResult(restoreProbe.result)),
+      ...buildLogRows(buildLogFacts),
       summaryItem("packages.config files", packageConfigCount.toString()),
       summaryItem("Requested packages", requestedCount.toString()),
-      summaryItem(
-        "Restored packages",
-        restoreProbe.restoredCount?.toString() ?? "unknown",
-      ),
+      summaryItem("Restored packages", restoredCount || "unknown"),
+      summaryItem("Built packages", builtCount || "unknown"),
+      summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ])
     .write();
 }
@@ -135,10 +241,12 @@ export async function run(): Promise<void> {
     optionalInput("vcpkg-root", "vcpkg"),
     process.env.GITHUB_WORKSPACE,
   );
+  const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
   const packageConfigs = await discoverPackageConfigs(
-    process.env.GITHUB_WORKSPACE ?? process.cwd(),
+    workspace,
     packageConfigGlob,
   );
+  const buildLogFacts = await readBuildLogFacts(buildLog, workspace);
   const liveProbes = await runAnalyzerLiveProbes({
     feedUrl,
     token,
@@ -150,15 +258,22 @@ export async function run(): Promise<void> {
     nuget: liveProbes.nugetCommand,
     packageConfigs,
   });
-  const requestedCount = packageConfigs.requestedPackages.length;
-  const restoredCount = restoreProbe.restoredCount?.toString() ?? "";
+  const requestedCount =
+    packageConfigs.requestedPackages.length ||
+    buildLogFacts?.requestedCount ||
+    0;
+  const restoredCount =
+    (buildLogFacts?.restoredCount ?? restoreProbe.restoredCount)?.toString() ??
+    "";
+  const builtCount = buildLogFacts?.builtCount?.toString() ?? "";
+  const uploadedCount = buildLogFacts?.uploadedCount?.toString() ?? "";
 
   core.setOutput("cache-status", CACHE_STATUS);
   core.setOutput("diagnosis", DIAGNOSIS);
   core.setOutput("requested-count", requestedCount.toString());
   core.setOutput("restored-count", restoredCount);
-  core.setOutput("built-count", "");
-  core.setOutput("uploaded-count", "");
+  core.setOutput("built-count", builtCount);
+  core.setOutput("uploaded-count", uploadedCount);
   core.setOutput("failure-kind", "");
   core.setOutput("diagnostics-artifact", "");
 
@@ -168,6 +283,7 @@ export async function run(): Promise<void> {
   core.info(`NuGet username: ${username}`);
   logProbeOutputs(liveProbes, trace);
   logRestoreProbe(restoreProbe, trace);
+  logBuildLogFacts(buildLogFacts, trace);
   core.info(`packages.config files: ${packageConfigs.files.length}`);
   core.info(`Requested packages: ${requestedCount}`);
   if (restoredCount) {
@@ -197,8 +313,12 @@ export async function run(): Promise<void> {
     feedUrl,
     liveProbes,
     restoreProbe,
+    buildLogFacts,
     packageConfigs.files.length,
     requestedCount,
+    restoredCount,
+    builtCount,
+    uploadedCount,
   );
 }
 
