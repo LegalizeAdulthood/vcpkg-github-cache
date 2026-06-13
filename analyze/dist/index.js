@@ -191174,7 +191174,7 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
         summary.addHeading(cacheStatusHeading(cacheStatus), 3);
         if (deniedReports.length) {
             summary
-                .addHeading("Packages denied write access", 4)
+                .addHeading("Packages denied write access", 3)
                 .addTable(writeDeniedPackageSummaryTable(deniedReports));
         }
         await summary.write();
@@ -191198,7 +191198,7 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
     ]);
     if (deniedReports.length) {
         summary
-            .addHeading("Packages denied write access", 4)
+            .addHeading("Packages denied write access", 3)
             .addTable(writeDeniedPackageSummaryTable(deniedReports));
     }
     await summary.write();

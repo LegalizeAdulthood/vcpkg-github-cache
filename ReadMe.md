@@ -242,6 +242,40 @@ Uploads can fail when a package already exists but is not linked to the
 calling repository with write access.  In that case, the analyzer reports
 the denied packages and links to package settings where GitHub exposes them.
 
+### Denied Package Table
+
+When the build log shows NuGet push `403` failures, the analyzer writes a
+`Packages denied write access` table to the job summary.  The table is an
+administration checklist for packages that restored or built correctly, but
+could not be updated by the workflow repository.
+
+The table always includes:
+
+- `Package ID`: the GitHub Packages NuGet package name.  When available,
+  this links to the package settings page.
+- `Version`: the denied package version.  Long vcpkg ABI suffixes are
+  stripped when the remaining version is still meaningful.
+
+The table may also include:
+
+- `Size`: the built `.nupkg` size, when the package file is available.
+- `Build Time`: the vcpkg package build or handle time from the build log.
+- `Repository`: the repository currently linked to the package.  When
+  available, this links to that repository.
+- `Versions`: the package version count reported by GitHub package
+  metadata.
+- `Visibility`: the package visibility reported by GitHub package metadata.
+- `Quota Risk`: shown only when at least one package has a quota risk other
+  than `none`.
+
+To resolve a denied package, open the linked `Package ID` settings page,
+find the package access controls, and grant the workflow repository read
+and write access.  Package access is package-level, so granting access once
+allows that repository to upload future versions of the same package.  If a
+package settings link is absent, use the package ID and feed owner to find
+the package in GitHub Packages, then update the same repository access
+settings there.  GitHub documents this under [package access][package-access].
+
 ### Private Repositories
 
 Private packages use GitHub Packages storage and transfer quota.  A package

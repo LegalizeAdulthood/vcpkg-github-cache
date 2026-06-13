@@ -676,17 +676,17 @@ event.  This is expected for some pull request events.
 
 Before moving the `v1` tag:
 
-- run `npm run check`;
-- confirm `setup/dist` and `analyze/dist` are committed;
-- confirm root `action.yml` runs setup from `setup/dist/index.js`;
-- verify README examples use `LegalizeAdulthood/vcpkg-github-cache@v1`
-  for setup and `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for
-  diagnostics;
-- run the trn integration workflow on `develop`;
-- verify trn summaries and diagnostics artifacts;
-- move the `v1` tag to the release commit;
-- create a GitHub release that describes setup, analyze, and known package
-  permission limits.
+- [x] Run `npm run check`.
+- [x] Confirm `setup/dist` and `analyze/dist` are committed.
+- [x] Confirm root `action.yml` runs setup from `setup/dist/index.js`.
+- [x] Verify README examples use
+  `LegalizeAdulthood/vcpkg-github-cache@v1` for setup and
+  `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for diagnostics.
+- [ ] Run the trn integration workflow on `develop`.
+- [ ] Verify trn summaries and diagnostics artifacts.
+- [ ] Move the `v1` tag to the release commit.
+- [ ] Create a GitHub release that describes setup, analyze, and known
+  package permission limits.
 
 ## Marketplace Publishing Notes
 

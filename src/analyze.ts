@@ -388,7 +388,7 @@ async function writeSummary(
 
     if (deniedReports.length) {
       summary
-        .addHeading("Packages denied write access", 4)
+        .addHeading("Packages denied write access", 3)
         .addTable(writeDeniedPackageSummaryTable(deniedReports));
     }
 
@@ -416,7 +416,7 @@ async function writeSummary(
     ]);
   if (deniedReports.length) {
     summary
-      .addHeading("Packages denied write access", 4)
+      .addHeading("Packages denied write access", 3)
       .addTable(writeDeniedPackageSummaryTable(deniedReports));
   }
 
