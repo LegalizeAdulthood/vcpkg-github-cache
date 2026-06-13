@@ -653,14 +653,26 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Package Quota Metadata
+### Slice 1: Setup Environment Export
+
+Export `VCPKG_BINARY_SOURCES` for subsequent workflow steps after setup
+computes the same value emitted as `binary-sources`.
+
+Implement:
+
+- keep the `binary-sources` output;
+- set the environment variable only after NuGet setup state is known;
+- document that callers can omit the explicit CMake step `env` block;
+- test with `trn` by removing its explicit `VCPKG_BINARY_SOURCES` setting.
+
+### Slice 2: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 2: Documentation
+### Slice 3: Documentation
 
 Document:
 
@@ -668,7 +680,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 3: Examples
+### Slice 4: Examples
 
 Document:
 
@@ -677,7 +689,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 4: Marketplace Release
+### Slice 5: Marketplace Release
 
 Implement:
 
