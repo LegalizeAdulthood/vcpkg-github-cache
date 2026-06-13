@@ -189296,7 +189296,7 @@ async function runAnalyzerLiveProbes(options) {
  * Copyright 2026 Richard Thomson
  */
 function cacheStatusHeading(cacheStatus) {
-    return `vcpkg GitHub Packages cache: ${cacheStatus.replaceAll("-", " ")}`;
+    return `Cache status: ${cacheStatus.replaceAll("-", " ")}`;
 }
 function shouldLogAnalysisDetails(debug, trace) {
     return debug || trace;
@@ -190012,6 +190012,15 @@ function uploadFailure(buildLogFacts) {
         (buildLogFacts.uploadsAttempted > 0 &&
             uploads < buildLogFacts.uploadsAttempted));
 }
+function uploadFailureEvidence(buildLogFacts, uploadedCount) {
+    return [
+        `upload failure ${uploadedCount}/${buildLogFacts?.uploadsAttempted ?? 0}`,
+        `zero-cache submissions ${buildLogFacts?.zeroCacheSubmissions ?? 0}`,
+        buildLogFacts?.authMessages.length
+            ? `auth messages ${buildLogFacts.authMessages.length}`
+            : "",
+    ];
+}
 function cacheDisabled(buildLogFacts) {
     if (!buildLogFacts) {
         return false;
@@ -190032,6 +190041,7 @@ function classifyBuildLog(input) {
     const restoredCount = effectiveRestoredCount(input);
     const builtCount = count(input.buildLogFacts?.builtCount);
     const uploadedCount = successfulUploads(input.buildLogFacts);
+    const failedUploads = uploadFailure(input.buildLogFacts);
     const baseEvidence = [
         `token path ${tokenDetail(input.tokenKind)}`,
         requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
@@ -190043,17 +190053,7 @@ function classifyBuildLog(input) {
             `quota messages ${input.buildLogFacts.quotaMessages.length}`,
         ]);
     }
-    if (uploadFailure(input.buildLogFacts)) {
-        return result("upload-failure", "upload-failure", [
-            ...baseEvidence,
-            `upload ${uploadedCount}/${input.buildLogFacts?.uploadsAttempted ?? 0}`,
-            `zero-cache submissions ${input.buildLogFacts?.zeroCacheSubmissions ?? 0}`,
-            input.buildLogFacts?.authMessages.length
-                ? `auth messages ${input.buildLogFacts.authMessages.length}`
-                : "",
-        ]);
-    }
-    if (input.buildLogFacts?.authMessages.length) {
+    if (!failedUploads && input.buildLogFacts?.authMessages.length) {
         return result("auth-failure", "auth", [
             ...baseEvidence,
             `auth messages ${input.buildLogFacts.authMessages.length}`,
@@ -190068,12 +190068,24 @@ function classifyBuildLog(input) {
         return result("warm-hit", "", baseEvidence);
     }
     if (restoredCount > 0 && builtCount > 0) {
+        if (failedUploads) {
+            return result("partial-hit", "upload-failure", [
+                ...baseEvidence,
+                ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+            ]);
+        }
         return result("partial-hit", "cache-miss", [
             ...baseEvidence,
             uploadedCount > 0 ? `upload ${uploadedCount}` : "upload unknown",
         ]);
     }
     if (requestedCount > 0 && restoredCount === 0 && builtCount > 0) {
+        if (failedUploads) {
+            return result("upload-failure", "upload-failure", [
+                ...baseEvidence,
+                ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+            ]);
+        }
         if (uploadedCount > 0) {
             return result("cold-seed", "cache-miss", [
                 ...baseEvidence,
@@ -190081,6 +190093,12 @@ function classifyBuildLog(input) {
             ]);
         }
         return result("cache-disabled", "cache-miss", baseEvidence);
+    }
+    if (failedUploads) {
+        return result("upload-failure", "upload-failure", [
+            ...baseEvidence,
+            ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+        ]);
     }
     return result("unknown", "", baseEvidence);
 }
@@ -190111,7 +190129,7 @@ function classifyWithoutBuildLog(input) {
 function result(cacheStatus, failureKind, evidence) {
     return {
         cacheStatus,
-        diagnosis: `vcpkg GitHub Packages cache: ${diagnosis_statusDetail(cacheStatus)}; ${detail(evidence)}`,
+        diagnosis: `Cache status: ${diagnosis_statusDetail(cacheStatus)}; ${detail(evidence)}`,
         failureKind,
     };
 }

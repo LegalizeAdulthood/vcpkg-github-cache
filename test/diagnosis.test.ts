@@ -95,7 +95,7 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).toContain("restore 2/2");
   });
 
-  test("classifies zero-cache submissions as upload failures", () => {
+  test("keeps partial hit status when only misses fail to upload", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {
         authMessages: ["Response status code: 403 Forbidden"],
@@ -125,8 +125,45 @@ describe("cache diagnosis", () => {
       tokenKind: "github",
     });
 
+    expect(diagnosis.cacheStatus).toBe("partial-hit");
+    expect(diagnosis.failureKind).toBe("upload-failure");
+    expect(diagnosis.diagnosis).toContain("upload failure 0/10");
+    expect(shouldFailDiagnosis(diagnosis, "upload-failure")).toBe(true);
+  });
+
+  test("classifies cold zero-cache submissions as upload failures", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: ["Response status code: 403 Forbidden"],
+        builtCount: 10,
+        builtPackages: [],
+        failedHttpStatuses: ["403"],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageHandleTimes: [],
+        quotaMessages: [],
+        requestedCount: 10,
+        restoredCount: 0,
+        restoredPackages: [],
+        submissionsStarted: 10,
+        uploadedCount: undefined,
+        uploadsAttempted: 10,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 10,
+      },
+      liveProbes: liveProbes(),
+      requestedCount: 10,
+      restoreProbe: restoreProbe(
+        "failed",
+        "NuGet restore failed; restored 0/10 packages",
+        0,
+      ),
+      tokenKind: "github",
+    });
+
     expect(diagnosis.cacheStatus).toBe("upload-failure");
     expect(diagnosis.failureKind).toBe("upload-failure");
+    expect(diagnosis.diagnosis).toContain("upload failure 0/10");
     expect(shouldFailDiagnosis(diagnosis, "upload-failure")).toBe(true);
   });
 

@@ -7,7 +7,7 @@
 import { BuildLogFacts } from "./build-log";
 
 export function cacheStatusHeading(cacheStatus: string): string {
-  return `vcpkg GitHub Packages cache: ${cacheStatus.replaceAll("-", " ")}`;
+  return `Cache status: ${cacheStatus.replaceAll("-", " ")}`;
 }
 
 export function shouldLogAnalysisDetails(

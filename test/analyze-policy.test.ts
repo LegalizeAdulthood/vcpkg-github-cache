@@ -23,7 +23,7 @@ function buildLogFacts(
 describe("analyze policy", () => {
   test("labels compact summaries with cache status", () => {
     expect(cacheStatusHeading("upload-failure")).toBe(
-      "vcpkg GitHub Packages cache: upload failure",
+      "Cache status: upload failure",
     );
   });
 

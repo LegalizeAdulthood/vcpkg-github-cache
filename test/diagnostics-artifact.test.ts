@@ -51,7 +51,7 @@ function liveProbes(): AnalyzerLiveProbes {
 function diagnosis(): CacheDiagnosis {
   return {
     cacheStatus: "upload-failure",
-    diagnosis: "vcpkg GitHub Packages cache: upload failure",
+    diagnosis: "Cache status: upload failure",
     failureKind: "upload-failure",
   };
 }
