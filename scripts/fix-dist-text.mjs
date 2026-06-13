@@ -5,6 +5,7 @@
  */
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { EOL } from "node:os";
 import { join } from "node:path";
 
 const REPLACEMENTS = new Map([
@@ -54,7 +55,7 @@ function assertAscii(path, text) {
 for (const root of process.argv.slice(2)) {
   for (const path of listFiles(root)) {
     const text = replaceUnicode(readFileSync(path, "utf8"));
-    const normalized = text.replace(/\r?\n/g, "\r\n");
+    const normalized = text.replace(/\r?\n/g, EOL);
 
     assertAscii(path, normalized);
     writeFileSync(path, normalized, { encoding: "utf8" });
