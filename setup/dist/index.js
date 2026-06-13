@@ -30847,13 +30847,13 @@ var ExitCode;
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function exportVariable(name, val) {
-    const convertedVal = toCommandValue(val);
+    const convertedVal = utils_toCommandValue(val);
     process.env[name] = convertedVal;
     const filePath = process.env['GITHUB_ENV'] || '';
     if (filePath) {
-        return issueFileCommand('ENV', prepareKeyValueMessage(name, val));
+        return file_command_issueFileCommand('ENV', file_command_prepareKeyValueMessage(name, val));
     }
-    issueCommand('set-env', { name }, convertedVal);
+    command_issueCommand('set-env', { name }, convertedVal);
 }
 /**
  * Registers a secret which will get masked from logs
@@ -31649,6 +31649,7 @@ function optionalInput(name, defaultValue = "") {
 function summaryItem(label, value) {
     return `${label}: ${value}`;
 }
+const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
 async function writeSummary(diagnosis, feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
@@ -31754,6 +31755,7 @@ async function run() {
     setOutput("nuget-command", nugetCommand);
     setOutput("vcpkg-version", vcpkgVersion);
     setOutput("diagnosis", diagnosis);
+    exportVariable(BINARY_SOURCES_ENV, binarySources);
     info(diagnosis);
     info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
     info(`Feed owner: ${feedOwner}`);
@@ -31762,6 +31764,7 @@ async function run() {
     info(`vcpkg version: ${vcpkgVersion}`);
     if (trace) {
         info(`binary-sources: ${binarySources}`);
+        info(`${BINARY_SOURCES_ENV}: ${binarySources}`);
         info(`nuget-command: ${nugetCommand}`);
     }
     await writeSummary(diagnosis, feedUrl, nugetCommand, vcpkg.root, vcpkgVersion);

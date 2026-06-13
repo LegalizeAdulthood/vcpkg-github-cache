@@ -35,6 +35,8 @@ function summaryItem(label: string, value: string): string {
   return `${label}: ${value}`;
 }
 
+const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
+
 async function writeSummary(
   diagnosis: string,
   feedUrl: string,
@@ -188,6 +190,7 @@ export async function run(): Promise<void> {
   core.setOutput("nuget-command", nugetCommand);
   core.setOutput("vcpkg-version", vcpkgVersion);
   core.setOutput("diagnosis", diagnosis);
+  core.exportVariable(BINARY_SOURCES_ENV, binarySources);
 
   core.info(diagnosis);
   core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
@@ -198,6 +201,7 @@ export async function run(): Promise<void> {
 
   if (trace) {
     core.info(`binary-sources: ${binarySources}`);
+    core.info(`${BINARY_SOURCES_ENV}: ${binarySources}`);
     core.info(`nuget-command: ${nugetCommand}`);
   }
 

@@ -87,8 +87,6 @@ steps:
     token: ${{ github.token }}
 
 - run: cmake --workflow --preset ci-debug
-  env:
-    VCPKG_BINARY_SOURCES: ${{ steps.vc.outputs.binary-sources }}
 
 - if: always()
   uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
@@ -153,6 +151,10 @@ opaque.  Require callers to opt into PAT behavior with `token-kind: pat`.
 - `vcpkg-version`: the bootstrapped vcpkg tool version.
 - `diagnosis`: short setup diagnosis text.
 
+The setup action also exports `VCPKG_BINARY_SOURCES` for subsequent steps
+in the same job.  Callers can omit an explicit build-step `env` block in
+the common case.
+
 The `binary-sources` output should normally be:
 
 ```text
@@ -181,7 +183,7 @@ The setup action should:
 7. Ensure Mono is available when the NuGet tool is a `.exe` on Unix.
 8. Configure the GitHub Packages NuGet source.
 9. Set the API key for the same feed.
-10. Emit `binary-sources`.
+10. Emit `binary-sources` and export `VCPKG_BINARY_SOURCES`.
 11. Write a concise step summary.
 
 On Windows, run the vcpkg-fetched `nuget.exe` directly.  On Linux and
@@ -653,26 +655,14 @@ event.  This is expected for some pull request events.
 
 ## Implementation Slices
 
-### Slice 1: Setup Environment Export
-
-Export `VCPKG_BINARY_SOURCES` for subsequent workflow steps after setup
-computes the same value emitted as `binary-sources`.
-
-Implement:
-
-- keep the `binary-sources` output;
-- set the environment variable only after NuGet setup state is known;
-- document that callers can omit the explicit CMake step `env` block;
-- test with `trn` by removing its explicit `VCPKG_BINARY_SOURCES` setting.
-
-### Slice 2: Package Quota Metadata
+### Slice 1: Package Quota Metadata
 
 Implement bounded package metadata probes:
 
 - package version count;
 - quota-risk warning.
 
-### Slice 3: Documentation
+### Slice 2: Documentation
 
 Document:
 
@@ -680,7 +670,7 @@ Document:
 - private repository quota behavior;
 - forked pull request behavior.
 
-### Slice 4: Examples
+### Slice 3: Examples
 
 Document:
 
@@ -689,7 +679,7 @@ Document:
 - build-log capture examples;
 - troubleshooting examples.
 
-### Slice 5: Marketplace Release
+### Slice 4: Marketplace Release
 
 Implement:
 
@@ -743,7 +733,7 @@ integration runs for live GitHub Packages behavior.
 - A public repository can configure vcpkg NuGet binary caching with
   `GITHUB_TOKEN` and no PAT.
 - A repository can opt into PAT mode and get distinct PAT diagnostics.
-- Setup emits a usable `VCPKG_BINARY_SOURCES` value.
+- Setup emits and exports a usable `VCPKG_BINARY_SOURCES` value.
 - NuGet provisioning works on Windows, Linux, and macOS hosted runners.
 - The analyzer identifies warm hit, partial hit, cold seed, auth failure,
   and quota failure from fixtures.
