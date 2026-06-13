@@ -244,6 +244,12 @@ function buildLogExtract(facts: BuildLogFacts | undefined): string {
     keyValue("failed HTTP statuses", facts.failedHttpStatuses.join(", ")),
     keyValue("auth messages", facts.authMessages.length),
     ...listValues(facts.authMessages).map((message) => `auth: ${message}`),
+    keyValue("write-denied packages", facts.writeDeniedPackages.length),
+    ...listValues(
+      facts.writeDeniedPackages.map(
+        (value) => `${value.packageId} ${value.version}`,
+      ),
+    ).map((value) => `write denied: ${value}`),
     keyValue("quota messages", facts.quotaMessages.length),
     ...listValues(facts.quotaMessages).map((message) => `quota: ${message}`),
     keyValue("NuGet config paths", facts.nugetConfigPaths.length),

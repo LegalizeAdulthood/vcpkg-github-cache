@@ -203,6 +203,13 @@ describe("diagnostics artifact", () => {
           submissionsStarted: 1,
           uploadedCount: undefined,
           uploadsAttempted: 1,
+          writeDeniedPackages: [
+            {
+              packageId: "fmt_x64-windows",
+              version:
+                "8.0.0-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            },
+          ],
           zeroCacheSubmissions: 1,
         },
         builtCount: "1",
@@ -291,5 +298,7 @@ describe("diagnostics artifact", () => {
     expect(metadata).toContain("visibility: public");
     expect(metadata).toContain("repository: octo/repo");
     expect(buildLog).toContain("auth: Response status code: 403 Forbidden ***");
+    expect(buildLog).toContain("write-denied packages: 1");
+    expect(buildLog).toContain("write denied: fmt_x64-windows 8.0.0");
   });
 });

@@ -15,7 +15,11 @@ import {
   ProbeResult,
   runAnalyzerLiveProbes,
 } from "./shared/analyze-probes";
-import { BuildLogFacts, parseBuildLog } from "./shared/build-log";
+import {
+  BuildLogFacts,
+  parseBuildLog,
+  WriteDeniedPackage,
+} from "./shared/build-log";
 import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
 import {
@@ -62,6 +66,27 @@ function summaryItem(label: string, value: string): string {
 
 function optionalCount(value: number | undefined): string {
   return value?.toString() ?? "unknown";
+}
+
+function writeDeniedPackages(
+  buildLogFacts: BuildLogFacts | undefined,
+): readonly WriteDeniedPackage[] {
+  return buildLogFacts?.writeDeniedPackages ?? [];
+}
+
+function writeDeniedPackageTable(
+  packages: readonly WriteDeniedPackage[],
+): string {
+  if (!packages.length) {
+    return "";
+  }
+
+  return [
+    "| Package ID | Version |",
+    "| --- | --- |",
+    ...packages.map((value) => `| ${value.packageId} | ${value.version} |`),
+    "",
+  ].join("\n");
 }
 
 function logProbeOutputs(liveProbes: AnalyzerLiveProbes, trace: boolean): void {
@@ -126,6 +151,10 @@ function buildLogRows(
       "Build log quota messages",
       buildLogFacts.quotaMessages.length.toString(),
     ),
+    summaryItem(
+      "Build log write-denied packages",
+      buildLogFacts.writeDeniedPackages.length.toString(),
+    ),
   ];
 }
 
@@ -161,6 +190,19 @@ function logBuildLogFacts(
   );
   core.info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
   core.info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
+  core.info(
+    `Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`,
+  );
+
+  const deniedTable = writeDeniedPackageTable(
+    buildLogFacts.writeDeniedPackages,
+  );
+
+  if (deniedTable) {
+    for (const line of deniedTable.trimEnd().split("\n")) {
+      core.info(line);
+    }
+  }
 
   if (!trace) {
     return;
@@ -214,7 +256,7 @@ async function writeSummary(
     return;
   }
 
-  await core.summary
+  const summary = core.summary
     .addHeading("vcpkg GitHub Packages cache analysis", 3)
     .addList([
       summaryItem("Diagnosis", diagnosis),
@@ -231,8 +273,16 @@ async function writeSummary(
       summaryItem("Restored packages", restoredCount || "unknown"),
       summaryItem("Built packages", builtCount || "unknown"),
       summaryItem("Uploaded packages", uploadedCount || "unknown"),
-    ])
-    .write();
+    ]);
+  const deniedTable = writeDeniedPackageTable(
+    writeDeniedPackages(buildLogFacts),
+  );
+
+  if (deniedTable) {
+    summary.addHeading("Packages denied write access", 4).addRaw(deniedTable);
+  }
+
+  await summary.write();
 }
 
 export async function run(): Promise<void> {

@@ -18,12 +18,19 @@ export interface BuildLogFacts {
   readonly submissionsStarted: number;
   readonly uploadedCount?: number;
   readonly uploadsAttempted: number;
+  readonly writeDeniedPackages: readonly WriteDeniedPackage[];
   readonly zeroCacheSubmissions: number;
+}
+
+export interface WriteDeniedPackage {
+  readonly packageId: string;
+  readonly version: string;
 }
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
 const GITHUB_LOG_PREFIX_PATTERN =
   /^\ufeff?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+/;
+const VCPKG_NUGET_VERSION_PATTERN = /-vcpkg[0-9a-f]{64}$/i;
 const URL_PATTERN = /https:\/\/[^\s"'<>]+/gi;
 
 function unique(values: readonly string[]): readonly string[] {
@@ -99,6 +106,38 @@ function failedHttpStatus(line: string): string | undefined {
   return match?.[1];
 }
 
+function nupkgFileStem(line: string): string | undefined {
+  const match = /(?:^|[\\/"])([^\\/"\s]+\.nupkg)\b/i.exec(line);
+
+  return match?.[1].slice(0, -".nupkg".length);
+}
+
+function writeDeniedPackage(line: string): WriteDeniedPackage | undefined {
+  const stem = nupkgFileStem(line);
+
+  if (!stem) {
+    return undefined;
+  }
+
+  const versionMarker = stem.match(VCPKG_NUGET_VERSION_PATTERN);
+
+  if (!versionMarker?.index) {
+    return undefined;
+  }
+
+  const versionPrefix = stem.slice(0, versionMarker.index);
+  const versionStart = versionPrefix.search(/\.\d/);
+
+  if (versionStart < 0) {
+    return undefined;
+  }
+
+  return {
+    packageId: versionPrefix.slice(0, versionStart),
+    version: `${versionPrefix.slice(versionStart + 1)}${versionMarker[0]}`,
+  };
+}
+
 function nugetConfigPath(line: string): string | undefined {
   const trimmed = line.trim();
 
@@ -112,6 +151,28 @@ function nugetConfigPath(line: string): string | undefined {
   return undefined;
 }
 
+function writeDeniedPackageKey(value: WriteDeniedPackage): string {
+  return `${value.packageId}\n${value.version}`;
+}
+
+function uniqueWriteDeniedPackages(
+  values: readonly WriteDeniedPackage[],
+): readonly WriteDeniedPackage[] {
+  const seen = new Set<string>();
+  const output: WriteDeniedPackage[] = [];
+
+  for (const value of values) {
+    const key = writeDeniedPackageKey(value);
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      output.push(value);
+    }
+  }
+
+  return output;
+}
+
 export function parseBuildLog(content: string): BuildLogFacts {
   const packageListPackages: string[] = [];
   const restoredPackages: string[] = [];
@@ -121,9 +182,11 @@ export function parseBuildLog(content: string): BuildLogFacts {
   const quotaMessages: string[] = [];
   const feeds: string[] = [];
   const nugetConfigPaths: string[] = [];
+  const writeDeniedPackages: WriteDeniedPackage[] = [];
   let capturePackageList = false;
   let captureFeeds = false;
   let captureNugetConfigPaths = false;
+  let failedUpload: WriteDeniedPackage | undefined;
   let parsedRestoredCount: number | undefined;
   let submissionsStarted = 0;
   let uploadsAttempted = 0;
@@ -230,6 +293,16 @@ export function parseBuildLog(content: string): BuildLogFacts {
       failedHttpStatuses.push(status);
     }
 
+    const deniedPackage = writeDeniedPackage(line);
+
+    if (deniedPackage) {
+      failedUpload = deniedPackage;
+    }
+
+    if (status === "403" && failedUpload) {
+      writeDeniedPackages.push(failedUpload);
+    }
+
     if (containsAuthFailure(line)) {
       authMessages.push(trimmed);
     }
@@ -261,6 +334,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     submissionsStarted,
     uploadedCount: uploadedCount || undefined,
     uploadsAttempted,
+    writeDeniedPackages: uniqueWriteDeniedPackages(writeDeniedPackages),
     zeroCacheSubmissions,
   };
 }

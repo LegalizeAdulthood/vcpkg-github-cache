@@ -33,6 +33,7 @@ Feeds used:
     expect(facts.submissionsStarted).toBe(1);
     expect(facts.uploadsAttempted).toBe(1);
     expect(facts.zeroCacheSubmissions).toBe(0);
+    expect(facts.writeDeniedPackages).toEqual([]);
     expect(facts.builtPackages).toEqual(["ncurses:x64-linux@6.5#3"]);
     expect(facts.nugetConfigPaths).toEqual([
       "/home/runner/.nuget/NuGet/NuGet.Config",
@@ -58,6 +59,7 @@ Completed submission of boost:x64-linux to 0 binary cache(s)
     ]);
     expect(facts.uploadedCount).toBeUndefined();
     expect(facts.zeroCacheSubmissions).toBe(1);
+    expect(facts.writeDeniedPackages).toEqual([]);
   });
 
   test("counts restored packages when NuGet lists package identities", () => {
@@ -71,6 +73,26 @@ Restored NuGet package gtest_x64-linux.1.17.0-vcpkg123456.
     expect(facts.restoredPackages).toEqual([
       "boost_config_x64-linux",
       "gtest_x64-linux",
+    ]);
+  });
+
+  test("extracts packages denied write access from NuGet push failures", () => {
+    const facts = parseBuildLog(`
+Uploading binaries for vcpkg-make:x64-linux@2026-01-01 to NuGet from https://nuget.pkg.github.com/octo/index.json
+Waiting for 1 remaining binary cache submissions...
+error: /usr/bin/mono /work/vcpkg/downloads/tools/nuget.exe push -ForceEnglishOutput -Verbosity detailed -NonInteractive /work/vcpkg/buildtrees/gtest_x64-linux.1.17.0-vcpkg4cc21124af27493ac1787e1dc10c3210a797392776b8c63de971fa570703f0b9.nupkg -Timeout 100 -Source https://nuget.pkg.github.com/octo/index.json failed with exit code 1
+WARNING: Your request could not be authenticated by the GitHub Packages service.
+Forbidden https://nuget.pkg.github.com/octo/ 265ms
+Response status code does not indicate success: 403 (Forbidden).
+System.Net.Http.HttpRequestException: Response status code does not indicate success: 403 (Forbidden).
+`);
+
+    expect(facts.writeDeniedPackages).toEqual([
+      {
+        packageId: "gtest_x64-linux",
+        version:
+          "1.17.0-vcpkg4cc21124af27493ac1787e1dc10c3210a797392776b8c63de971fa570703f0b9",
+      },
     ]);
   });
 });
