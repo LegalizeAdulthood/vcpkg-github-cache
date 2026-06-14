@@ -93,8 +93,10 @@ function completedSubmissionCacheCount(line: string): number | undefined {
 }
 
 function containsAuthFailure(line: string): boolean {
-  return /\b(?:401|403|Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(
-    line,
+  return (
+    /\b(?:Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(
+      line,
+    ) || /\b(?:HTTP\s+|status(?:\s+code)?[^\d]{0,40})(?:401|403)\b/i.test(line)
   );
 }
 
@@ -106,7 +108,7 @@ function containsQuotaFailure(line: string): boolean {
 
 function failedHttpStatus(line: string): string | undefined {
   const match =
-    /\b(?:HTTP\s+|status(?:\scode)?\s+)?(401|403|429|500|502|503)\b/i.exec(
+    /\b(?:HTTP\s+|status(?:\s+code)?[^\d]{0,40})(401|403|429|500|502|503)\b/i.exec(
       line,
     );
 

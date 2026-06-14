@@ -70,6 +70,20 @@ Completed submission of boost:x64-linux to 0 binary cache(s)
     expect(facts.writeDeniedPackages).toEqual([]);
   });
 
+  test("ignores ctest numbers that look like http status codes", () => {
+    const facts = parseBuildLog(`
+Restored 33 package(s) from NuGet in 8.7 s.
+          Start  401: TestParameterCommand.longFilenameExtensionOK
+  398/1226 Test  #401: TestParameterCommand.longFilenameExtensionOK .......... Passed
+          Start  403: TestParameterCommand.mapSpecifiesSubdir
+  400/1226 Test  #403: TestParameterCommand.mapSpecifiesSubdir ............... Passed
+`);
+
+    expect(facts.restoredCount).toBe(33);
+    expect(facts.authMessages).toEqual([]);
+    expect(facts.failedHttpStatuses).toEqual([]);
+  });
+
   test("counts restored packages when NuGet lists package identities", () => {
     const facts = parseBuildLog(`
 Restored NuGet package boost_config_x64-linux.1.90.0-vcpkgabcdef.

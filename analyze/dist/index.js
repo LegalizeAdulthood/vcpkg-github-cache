@@ -140934,13 +140934,13 @@ function completedSubmissionCacheCount(line) {
     return match ? parseCount(match[1]) : undefined;
 }
 function containsAuthFailure(line) {
-    return /\b(?:401|403|Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(line);
+    return (/\b(?:Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(line) || /\b(?:HTTP\s+|status(?:\s+code)?[^\d]{0,40})(?:401|403)\b/i.test(line));
 }
 function containsQuotaFailure(line) {
     return /(?:billing limit|quota|twirp error permission_denied|permission_denied)/i.test(line);
 }
 function failedHttpStatus(line) {
-    const match = /\b(?:HTTP\s+|status(?:\scode)?\s+)?(401|403|429|500|502|503)\b/i.exec(line);
+    const match = /\b(?:HTTP\s+|status(?:\s+code)?[^\d]{0,40})(401|403|429|500|502|503)\b/i.exec(line);
     return match?.[1];
 }
 function nupkgFileStem(line) {
