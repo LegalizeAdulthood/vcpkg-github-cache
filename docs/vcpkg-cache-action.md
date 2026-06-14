@@ -674,7 +674,8 @@ event.  This is expected for some pull request events.
 
 ## Release Checklist
 
-Before moving the `v1` tag:
+Before moving the `v1` tag.  Community checks follow GitHub's action
+maintenance guidance.
 
 - [x] Run `npm run check`.
 - [x] Confirm `setup/dist` and `analyze/dist` are committed.
@@ -685,6 +686,14 @@ Before moving the `v1` tag:
 - [x] Run the trn integration workflow on `develop`.
 - [x] Verify trn summaries and logs; verify diagnostics artifacts only when
   debug is enabled.
+- [ ] Add a CI workflow status badge to the README.
+- [ ] Add a `CODE_OF_CONDUCT.md` community health file.
+- [ ] Add a `CONTRIBUTING.md` community health file.
+- [ ] Add a `SECURITY.md` community health file.
+- [ ] Add issue hygiene automation or document why it is not needed.
+- [ ] Verify repository security features and vulnerability reporting.
+- [ ] Push the exact release tag, such as `v1.0.0`, to create the draft
+  release.
 - [ ] Create a GitHub release that describes setup, analyze, and known
   package permission limits.
 - [ ] Move the `v1` tag to the release commit.
