@@ -147,8 +147,10 @@ function writeDeniedPackage(line: string): WriteDeniedPackage | undefined {
   };
 }
 
-function packageSpecToNugetPackageId(packageSpec: string): string | undefined {
-  const match = /^(.+):([^:\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
+export function packageSpecToNugetPackageId(
+  packageSpec: string,
+): string | undefined {
+  const match = /^(.+):([^:@\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
 
   if (!match) {
     return undefined;

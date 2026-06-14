@@ -140967,7 +140967,7 @@ function writeDeniedPackage(line) {
     };
 }
 function packageSpecToNugetPackageId(packageSpec) {
-    const match = /^(.+):([^:\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
+    const match = /^(.+):([^:@\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
     if (!match) {
         return undefined;
     }
@@ -141162,6 +141162,80 @@ function parseBuildLog(content) {
     };
 }
 
+;// CONCATENATED MODULE: ./src/shared/build-miss-report.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+const COLUMNS = [
+    {
+        header: "Package",
+        required: true,
+        value: (report) => report.packageSpec,
+    },
+    {
+        header: "Build Time",
+        value: (report) => report.buildTime,
+    },
+];
+function hasValue(value) {
+    return value !== undefined && value.length > 0;
+}
+function reportColumnIncluded(column, reports) {
+    return (column.required === true ||
+        reports.some((report) => hasValue(column.value(report))));
+}
+function reportColumns(reports) {
+    return COLUMNS.filter((column) => reportColumnIncluded(column, reports));
+}
+function reportValue(column, report) {
+    return column.value(report) || "unknown";
+}
+function markdownCell(value) {
+    return value.replace(/\|/g, "\\|");
+}
+function buildTimeByPackageId(buildLogFacts) {
+    return new Map(buildLogFacts.packageHandleTimes.map((value) => [
+        value.packageId,
+        value.elapsed,
+    ]));
+}
+function buildMissReports(buildLogFacts) {
+    if (!buildLogFacts) {
+        return [];
+    }
+    const handleTimes = buildTimeByPackageId(buildLogFacts);
+    return buildLogFacts.builtPackages.map((packageSpec) => {
+        const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
+        return {
+            buildTime: handleTimes.get(packageId),
+            packageId,
+            packageSpec,
+        };
+    });
+}
+function buildMissReportRows(reports) {
+    const columns = reportColumns(reports);
+    return [
+        columns.map((column) => column.header),
+        ...reports.map((report) => columns.map((column) => reportValue(column, report))),
+    ];
+}
+function formatBuildMissReportTable(reports) {
+    if (!reports.length) {
+        return "";
+    }
+    const [header, ...rows] = buildMissReportRows(reports);
+    return [
+        `| ${header.map(markdownCell).join(" | ")} |`,
+        `| ${header.map(() => "---").join(" | ")} |`,
+        ...rows.map((row) => `| ${row.map(markdownCell).join(" | ")} |`),
+        "",
+    ].join("\n");
+}
+
 ;// CONCATENATED MODULE: ./src/shared/cache.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -141186,7 +141260,7 @@ function buildDisabledBinarySources() {
  * Copyright 2026 Richard Thomson
  */
 const VCPKG_VERSION_SUFFIX = /-vcpkg[0-9a-f]{64}$/i;
-const COLUMNS = [
+const denied_package_report_COLUMNS = [
     {
         header: "Package ID",
         required: true,
@@ -141223,28 +141297,28 @@ const COLUMNS = [
         value: (report) => report.quotaRisk,
     },
 ];
-function hasValue(value) {
+function denied_package_report_hasValue(value) {
     return value !== undefined && value.length > 0;
 }
 function hasQuotaRisk(value) {
-    return hasValue(value) && value.trim().toLowerCase() !== "none";
+    return denied_package_report_hasValue(value) && value.trim().toLowerCase() !== "none";
 }
-function reportColumnIncluded(column, reports) {
+function denied_package_report_reportColumnIncluded(column, reports) {
     if (column.required) {
         return true;
     }
     if (column.include) {
         return column.include(reports);
     }
-    return reports.some((report) => hasValue(column.value(report, "text")));
+    return reports.some((report) => denied_package_report_hasValue(column.value(report, "text")));
 }
-function reportColumns(reports) {
-    return COLUMNS.filter((column) => reportColumnIncluded(column, reports));
+function denied_package_report_reportColumns(reports) {
+    return denied_package_report_COLUMNS.filter((column) => denied_package_report_reportColumnIncluded(column, reports));
 }
-function reportValue(column, report, format) {
+function denied_package_report_reportValue(column, report, format) {
     return column.value(report, format) || "unknown";
 }
-function markdownCell(value) {
+function denied_package_report_markdownCell(value) {
     return value.replace(/\|/g, "\\|");
 }
 function htmlEscape(value) {
@@ -141276,10 +141350,10 @@ function displayPackageVersion(version) {
     return trimmed.length > 0 ? trimmed : version;
 }
 function deniedPackageReportRows(reports, format = "text") {
-    const columns = reportColumns(reports);
+    const columns = denied_package_report_reportColumns(reports);
     return [
         columns.map((column) => column.header),
-        ...reports.map((report) => columns.map((column) => reportValue(column, report, format))),
+        ...reports.map((report) => columns.map((column) => denied_package_report_reportValue(column, report, format))),
     ];
 }
 function formatDeniedPackageReportTable(reports) {
@@ -141288,9 +141362,9 @@ function formatDeniedPackageReportTable(reports) {
     }
     const [header, ...rows] = deniedPackageReportRows(reports, "markdown");
     return [
-        `| ${header.map(markdownCell).join(" | ")} |`,
+        `| ${header.map(denied_package_report_markdownCell).join(" | ")} |`,
         `| ${header.map(() => "---").join(" | ")} |`,
-        ...rows.map((row) => `| ${row.map(markdownCell).join(" | ")} |`),
+        ...rows.map((row) => `| ${row.map(denied_package_report_markdownCell).join(" | ")} |`),
         "",
     ].join("\n");
 }
@@ -142564,6 +142638,7 @@ function createTraceLogger(options) {
 
 
 
+
 function liveProbeRows(liveProbes) {
     return [
         ["Feed basic auth", liveProbes.feedBasicAuth],
@@ -142588,6 +142663,13 @@ function writeDeniedPackages(buildLogFacts) {
 }
 function writeDeniedPackageSummaryTable(packages) {
     const [header, ...rows] = deniedPackageReportRows(packages, "html");
+    return [
+        header.map((value) => ({ data: value, header: true })),
+        ...rows.map((row) => [...row]),
+    ];
+}
+function buildMissSummaryTable(packages) {
+    const [header, ...rows] = buildMissReportRows(packages);
     return [
         header.map((value) => ({ data: value, header: true })),
         ...rows.map((row) => [...row]),
@@ -142715,6 +142797,12 @@ function logBuildLogFacts(buildLogFacts, deniedReports, trace) {
     info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
     info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
     info(`Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`);
+    const buildMissTable = formatBuildMissReportTable(buildMissReports(buildLogFacts));
+    if (buildMissTable) {
+        for (const line of buildMissTable.trimEnd().split("\n")) {
+            info(line);
+        }
+    }
     const deniedTable = formatDeniedPackageReportTable(deniedReports);
     if (deniedTable) {
         for (const line of deniedTable.trimEnd().split("\n")) {
@@ -142746,8 +142834,14 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
         return;
     }
     const summary = summary_summary;
+    const missedReports = buildMissReports(buildLogFacts);
     if (shouldUseCompactSummary(verbose)) {
         summary.addHeading(cacheStatusHeading(cacheStatus), 3);
+        if (missedReports.length) {
+            summary
+                .addHeading("Packages built from source", 3)
+                .addTable(buildMissSummaryTable(missedReports));
+        }
         if (deniedReports.length) {
             summary
                 .addHeading("Packages denied write access", 3)
@@ -142772,6 +142866,11 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
         summaryItem("Built packages", builtCount || "unknown"),
         summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ]);
+    if (missedReports.length) {
+        summary
+            .addHeading("Packages built from source", 3)
+            .addTable(buildMissSummaryTable(missedReports));
+    }
     if (deniedReports.length) {
         summary
             .addHeading("Packages denied write access", 3)

@@ -26,6 +26,12 @@ import {
   parseBuildLog,
   WriteDeniedPackage,
 } from "./shared/build-log";
+import {
+  buildMissReportRows,
+  buildMissReports,
+  BuildMissReport,
+  formatBuildMissReportTable,
+} from "./shared/build-miss-report";
 import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
 import {
@@ -97,6 +103,17 @@ function writeDeniedPackageSummaryTable(
   packages: readonly DeniedPackageReport[],
 ): SummaryTableRows {
   const [header, ...rows] = deniedPackageReportRows(packages, "html");
+
+  return [
+    header.map((value) => ({ data: value, header: true })),
+    ...rows.map((row) => [...row]),
+  ];
+}
+
+function buildMissSummaryTable(
+  packages: readonly BuildMissReport[],
+): SummaryTableRows {
+  const [header, ...rows] = buildMissReportRows(packages);
 
   return [
     header.map((value) => ({ data: value, header: true })),
@@ -319,6 +336,16 @@ function logBuildLogFacts(
     `Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`,
   );
 
+  const buildMissTable = formatBuildMissReportTable(
+    buildMissReports(buildLogFacts),
+  );
+
+  if (buildMissTable) {
+    for (const line of buildMissTable.trimEnd().split("\n")) {
+      core.info(line);
+    }
+  }
+
   const deniedTable = formatDeniedPackageReportTable(deniedReports);
 
   if (deniedTable) {
@@ -382,9 +409,16 @@ async function writeSummary(
   }
 
   const summary = core.summary;
+  const missedReports = buildMissReports(buildLogFacts);
 
   if (shouldUseCompactSummary(verbose)) {
     summary.addHeading(cacheStatusHeading(cacheStatus), 3);
+
+    if (missedReports.length) {
+      summary
+        .addHeading("Packages built from source", 3)
+        .addTable(buildMissSummaryTable(missedReports));
+    }
 
     if (deniedReports.length) {
       summary
@@ -414,6 +448,11 @@ async function writeSummary(
       summaryItem("Built packages", builtCount || "unknown"),
       summaryItem("Uploaded packages", uploadedCount || "unknown"),
     ]);
+  if (missedReports.length) {
+    summary
+      .addHeading("Packages built from source", 3)
+      .addTable(buildMissSummaryTable(missedReports));
+  }
   if (deniedReports.length) {
     summary
       .addHeading("Packages denied write access", 3)
