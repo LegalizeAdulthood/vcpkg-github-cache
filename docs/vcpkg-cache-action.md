@@ -687,7 +687,7 @@ maintenance guidance.
 - [x] Verify trn summaries and logs; verify diagnostics artifacts only when
   debug is enabled.
 - [x] Add a CI workflow status badge to the README.
-- [ ] Add a `CODE_OF_CONDUCT.md` community health file.
+- [x] Add a `CODE_OF_CONDUCT.md` community health file.
 - [ ] Add a `CONTRIBUTING.md` community health file.
 - [ ] Add a `SECURITY.md` community health file.
 - [ ] Add issue hygiene automation or document why it is not needed.
