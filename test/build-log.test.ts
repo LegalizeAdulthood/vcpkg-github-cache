@@ -84,6 +84,19 @@ Restored 33 package(s) from NuGet in 8.7 s.
     expect(facts.failedHttpStatuses).toEqual([]);
   });
 
+  test("ignores CMake and MSBuild lines that look like build starts", () => {
+    const facts = parseBuildLog(`
+-- Building for: Visual Studio 17 2022
+Restored 25 package(s) from NuGet in 10 s.
+  Building Custom Rule D:/a/project/project/algos/CMakeLists.txt
+  Building documentation text file
+`);
+
+    expect(facts.restoredCount).toBe(25);
+    expect(facts.builtCount).toBeUndefined();
+    expect(facts.builtPackages).toEqual([]);
+  });
+
   test("counts restored packages when NuGet lists package identities", () => {
     const facts = parseBuildLog(`
 Restored NuGet package boost_config_x64-linux.1.90.0-vcpkgabcdef.

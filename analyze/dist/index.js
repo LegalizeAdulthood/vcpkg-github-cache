@@ -140895,6 +140895,7 @@ function shouldProbePackageMetadata(debug, failOnPolicy, tokenKind, buildLogFact
  */
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
 const GITHUB_LOG_PREFIX_PATTERN = /^\ufeff?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+/;
+const VCPKG_PACKAGE_SPEC_PATTERN = /^[A-Za-z0-9_.+-]+:[A-Za-z0-9_.+-]+(?:@[^\s]+)?$/;
 const VCPKG_NUGET_VERSION_PATTERN = /-vcpkg[0-9a-f]{64}$/i;
 const URL_PATTERN = /https:\/\/[^\s"'<>]+/gi;
 function unique(values) {
@@ -140909,7 +140910,8 @@ function cleanLine(line) {
 function packageListLine(line) {
     const trimmed = line.trim();
     const packageLine = trimmed.replace(/^\*\s+/, "");
-    if (/^[A-Za-z0-9_.+-][^\s]*:[^\s]+@[^\s]+$/.test(packageLine)) {
+    if (VCPKG_PACKAGE_SPEC_PATTERN.test(packageLine) &&
+        packageLine.includes("@")) {
         return packageLine;
     }
     return undefined;
@@ -140927,7 +140929,10 @@ function builtPackage(line) {
         return undefined;
     }
     const match = /^Building\s+(.+?)(?:\.\.\.)?$/.exec(line.trim());
-    return match?.[1];
+    if (!match || !VCPKG_PACKAGE_SPEC_PATTERN.test(match[1])) {
+        return undefined;
+    }
+    return match[1];
 }
 function completedSubmissionCacheCount(line) {
     const match = /Completed submission\b.*\bto\s+(\d+)\s+binary cache\(s\)/i.exec(line);
@@ -140967,7 +140972,7 @@ function writeDeniedPackage(line) {
     };
 }
 function packageSpecToNugetPackageId(packageSpec) {
-    const match = /^(.+):([^:@\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
+    const match = /^([A-Za-z0-9_.+-]+):([A-Za-z0-9_.+-]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
     if (!match) {
         return undefined;
     }
@@ -141816,6 +141821,18 @@ function classifyCache(input) {
             `NuGet ${input.liveProbes.nugetVersion.status}`,
         ]);
     }
+    if (httpAuthFailure(input.liveProbes.feedBasicAuth)) {
+        return result("auth-failure", "auth", [
+            `token path ${tokenDetail(input.tokenKind)}`,
+            `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
+        ]);
+    }
+    if (input.buildLogFacts) {
+        const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
+        if (diagnosis.cacheStatus !== "unknown") {
+            return diagnosis;
+        }
+    }
     if (textQuotaFailure(input.restoreProbe.result.output) ||
         textQuotaFailure(input.restoreProbe.result.detail)) {
         return result("quota-failure", "quota", [
@@ -141823,17 +141840,13 @@ function classifyCache(input) {
             input.restoreProbe.result.detail,
         ]);
     }
-    if (httpAuthFailure(input.liveProbes.feedBasicAuth) ||
-        textAuthFailure(input.restoreProbe.result.output) ||
+    if (textAuthFailure(input.restoreProbe.result.output) ||
         textAuthFailure(input.restoreProbe.result.detail)) {
         return result("auth-failure", "auth", [
             `token path ${tokenDetail(input.tokenKind)}`,
             `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
             input.restoreProbe.result.detail,
         ]);
-    }
-    if (input.buildLogFacts) {
-        return withPackageQuotaRisk(classifyBuildLog(input), input);
     }
     return withPackageQuotaRisk(classifyWithoutBuildLog(input), input);
 }

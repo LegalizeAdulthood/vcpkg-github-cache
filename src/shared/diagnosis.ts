@@ -339,6 +339,21 @@ export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
     ]);
   }
 
+  if (httpAuthFailure(input.liveProbes.feedBasicAuth)) {
+    return result("auth-failure", "auth", [
+      `token path ${tokenDetail(input.tokenKind)}`,
+      `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
+    ]);
+  }
+
+  if (input.buildLogFacts) {
+    const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
+
+    if (diagnosis.cacheStatus !== "unknown") {
+      return diagnosis;
+    }
+  }
+
   if (
     textQuotaFailure(input.restoreProbe.result.output) ||
     textQuotaFailure(input.restoreProbe.result.detail)
@@ -350,7 +365,6 @@ export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
   }
 
   if (
-    httpAuthFailure(input.liveProbes.feedBasicAuth) ||
     textAuthFailure(input.restoreProbe.result.output) ||
     textAuthFailure(input.restoreProbe.result.detail)
   ) {
@@ -359,10 +373,6 @@ export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
       `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
       input.restoreProbe.result.detail,
     ]);
-  }
-
-  if (input.buildLogFacts) {
-    return withPackageQuotaRisk(classifyBuildLog(input), input);
   }
 
   return withPackageQuotaRisk(classifyWithoutBuildLog(input), input);

@@ -95,6 +95,42 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).toContain("restore 2/2");
   });
 
+  test("trusts a warm build log over an exact restore TLS failure", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: undefined,
+        builtPackages: [],
+        failedHttpStatuses: [],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageHandleTimes: [],
+        quotaMessages: [],
+        requestedCount: 4,
+        restoredCount: 4,
+        restoredPackages: [],
+        submissionsStarted: 0,
+        uploadedCount: undefined,
+        uploadsAttempted: 0,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 0,
+      },
+      liveProbes: liveProbes(),
+      requestedCount: 4,
+      restoreProbe: restoreProbe(
+        "failed",
+        "NuGet restore failed; restored 0/4 packages",
+        0,
+        "Authentication failed; CERTIFICATE_VERIFY_FAILED",
+      ),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("warm-hit");
+    expect(diagnosis.failureKind).toBe("");
+    expect(diagnosis.diagnosis).toContain("restore 4/4");
+  });
+
   test("keeps partial hit status when only misses fail to upload", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {

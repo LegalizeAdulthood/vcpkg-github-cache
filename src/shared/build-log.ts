@@ -37,6 +37,8 @@ export interface PackageHandleTime {
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
 const GITHUB_LOG_PREFIX_PATTERN =
   /^\ufeff?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+/;
+const VCPKG_PACKAGE_SPEC_PATTERN =
+  /^[A-Za-z0-9_.+-]+:[A-Za-z0-9_.+-]+(?:@[^\s]+)?$/;
 const VCPKG_NUGET_VERSION_PATTERN = /-vcpkg[0-9a-f]{64}$/i;
 const URL_PATTERN = /https:\/\/[^\s"'<>]+/gi;
 
@@ -56,7 +58,10 @@ function packageListLine(line: string): string | undefined {
   const trimmed = line.trim();
   const packageLine = trimmed.replace(/^\*\s+/, "");
 
-  if (/^[A-Za-z0-9_.+-][^\s]*:[^\s]+@[^\s]+$/.test(packageLine)) {
+  if (
+    VCPKG_PACKAGE_SPEC_PATTERN.test(packageLine) &&
+    packageLine.includes("@")
+  ) {
     return packageLine;
   }
 
@@ -82,7 +87,11 @@ function builtPackage(line: string): string | undefined {
 
   const match = /^Building\s+(.+?)(?:\.\.\.)?$/.exec(line.trim());
 
-  return match?.[1];
+  if (!match || !VCPKG_PACKAGE_SPEC_PATTERN.test(match[1])) {
+    return undefined;
+  }
+
+  return match[1];
 }
 
 function completedSubmissionCacheCount(line: string): number | undefined {
@@ -150,7 +159,9 @@ function writeDeniedPackage(line: string): WriteDeniedPackage | undefined {
 export function packageSpecToNugetPackageId(
   packageSpec: string,
 ): string | undefined {
-  const match = /^(.+):([^:@\s]+)(?:@[^\s]+)?$/.exec(packageSpec.trim());
+  const match = /^([A-Za-z0-9_.+-]+):([A-Za-z0-9_.+-]+)(?:@[^\s]+)?$/.exec(
+    packageSpec.trim(),
+  );
 
   if (!match) {
     return undefined;
