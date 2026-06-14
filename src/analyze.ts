@@ -27,6 +27,7 @@ import {
   WriteDeniedPackage,
 } from "./shared/build-log";
 import {
+  buildMissPackageIdentities,
   buildMissReportRows,
   buildMissReports,
   BuildMissReport,
@@ -54,6 +55,7 @@ import {
 import {
   discoverPackageConfigs,
   PackageIdentity,
+  packageIdentityKey,
 } from "./shared/package-config";
 import {
   PACKAGE_QUOTA_RISK_PRIVATE_STORAGE,
@@ -113,7 +115,7 @@ function writeDeniedPackageSummaryTable(
 function buildMissSummaryTable(
   packages: readonly BuildMissReport[],
 ): SummaryTableRows {
-  const [header, ...rows] = buildMissReportRows(packages);
+  const [header, ...rows] = buildMissReportRows(packages, "html");
 
   return [
     header.map((value) => ({ data: value, header: true })),
@@ -188,18 +190,37 @@ function logPackageQuotaRisks(
   }
 }
 
+function uniquePackageIdentities(
+  values: readonly PackageIdentity[],
+): readonly PackageIdentity[] {
+  const output = new Map<string, PackageIdentity>();
+
+  for (const value of values) {
+    const key = packageIdentityKey(value);
+
+    if (!output.has(key)) {
+      output.set(key, value);
+    }
+  }
+
+  return [...output.values()];
+}
+
 function packageMetadataIdentities(
   buildLogFacts: BuildLogFacts | undefined,
   requestedPackages: readonly PackageIdentity[],
 ): readonly PackageIdentity[] {
   const deniedPackages = writeDeniedPackages(buildLogFacts);
+  const builtPackages = buildMissPackageIdentities(buildLogFacts);
 
-  return deniedPackages.length
-    ? deniedPackages.map((value) => ({
-        id: value.packageId,
-        version: value.version,
-      }))
-    : requestedPackages;
+  return uniquePackageIdentities([
+    ...deniedPackages.map((value) => ({
+      id: value.packageId,
+      version: value.version,
+    })),
+    ...builtPackages,
+    ...requestedPackages,
+  ]);
 }
 
 async function deniedPackageReports(
@@ -302,6 +323,7 @@ function buildLogRows(
 function logBuildLogFacts(
   buildLogFacts: BuildLogFacts | undefined,
   deniedReports: readonly DeniedPackageReport[],
+  missedReports: readonly BuildMissReport[],
   trace: boolean,
 ): void {
   if (!buildLogFacts) {
@@ -336,9 +358,7 @@ function logBuildLogFacts(
     `Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`,
   );
 
-  const buildMissTable = formatBuildMissReportTable(
-    buildMissReports(buildLogFacts),
-  );
+  const buildMissTable = formatBuildMissReportTable(missedReports);
 
   if (buildMissTable) {
     for (const line of buildMissTable.trimEnd().split("\n")) {
@@ -402,6 +422,7 @@ async function writeSummary(
   builtCount: string,
   uploadedCount: string,
   deniedReports: readonly DeniedPackageReport[],
+  missedReports: readonly BuildMissReport[],
   verbose: boolean,
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
@@ -409,8 +430,6 @@ async function writeSummary(
   }
 
   const summary = core.summary;
-  const missedReports = buildMissReports(buildLogFacts);
-
   if (shouldUseCompactSummary(verbose)) {
     summary.addHeading(cacheStatusHeading(cacheStatus), 3);
 
@@ -595,6 +614,7 @@ export async function run(): Promise<void> {
     async () =>
       deniedPackageReports(buildLogFacts, packageMetadata, vcpkg.root),
   );
+  const missedReports = buildMissReports(buildLogFacts, packageMetadata);
 
   if (debug) {
     try {
@@ -662,7 +682,7 @@ export async function run(): Promise<void> {
     core.info(`NuGet username: ${username}`);
     logProbeOutputs(liveProbes, trace);
     logRestoreProbe(restoreProbe, trace);
-    logBuildLogFacts(buildLogFacts, deniedReports, trace);
+    logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace);
   }
   logPackageQuotaRisks(packageMetadata);
 
@@ -708,6 +728,7 @@ export async function run(): Promise<void> {
     builtCount,
     uploadedCount,
     deniedReports,
+    missedReports,
     logDetails,
   );
 

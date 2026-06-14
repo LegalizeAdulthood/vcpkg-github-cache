@@ -43,6 +43,13 @@ Feeds used:
         packageSpec: "ncurses:x64-linux",
       },
     ]);
+    expect(facts.packageUploadStatuses).toEqual([
+      {
+        packageId: "ncurses_x64-linux",
+        packageSpec: "ncurses:x64-linux",
+        status: "succeeded",
+      },
+    ]);
     expect(facts.nugetConfigPaths).toEqual([
       "/home/runner/.nuget/NuGet/NuGet.Config",
     ]);
@@ -67,6 +74,13 @@ Completed submission of boost:x64-linux to 0 binary cache(s)
     ]);
     expect(facts.uploadedCount).toBeUndefined();
     expect(facts.zeroCacheSubmissions).toBe(1);
+    expect(facts.packageUploadStatuses).toEqual([
+      {
+        packageId: "boost_x64-linux",
+        packageSpec: "boost:x64-linux",
+        status: "failed",
+      },
+    ]);
     expect(facts.writeDeniedPackages).toEqual([]);
   });
 

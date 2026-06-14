@@ -205,6 +205,13 @@ describe("diagnostics artifact", () => {
               packageSpec: "fmt:x64-windows",
             },
           ],
+          packageUploadStatuses: [
+            {
+              packageId: "fmt_x64-windows",
+              packageSpec: "fmt:x64-windows",
+              status: "failed",
+            },
+          ],
           quotaMessages: [],
           requestedCount: 1,
           restoredCount: 0,

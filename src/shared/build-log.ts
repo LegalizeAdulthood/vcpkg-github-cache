@@ -12,6 +12,7 @@ export interface BuildLogFacts {
   readonly feeds: readonly string[];
   readonly nugetConfigPaths: readonly string[];
   readonly packageHandleTimes: readonly PackageHandleTime[];
+  readonly packageUploadStatuses: readonly PackageUploadStatus[];
   readonly quotaMessages: readonly string[];
   readonly requestedCount?: number;
   readonly restoredCount?: number;
@@ -32,6 +33,14 @@ export interface PackageHandleTime {
   readonly elapsed: string;
   readonly packageId: string;
   readonly packageSpec: string;
+}
+
+export type PackageUploadState = "failed" | "succeeded" | "unknown";
+
+export interface PackageUploadStatus {
+  readonly packageId: string;
+  readonly packageSpec: string;
+  readonly status: PackageUploadState;
 }
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
@@ -94,11 +103,30 @@ function builtPackage(line: string): string | undefined {
   return match[1];
 }
 
-function completedSubmissionCacheCount(line: string): number | undefined {
+function startingSubmissionPackage(line: string): string | undefined {
   const match =
-    /Completed submission\b.*\bto\s+(\d+)\s+binary cache\(s\)/i.exec(line);
+    /Starting submission of\s+(.+?)\s+to\s+\d+\s+binary cache\(s\)/i.exec(line);
 
-  return match ? parseCount(match[1]) : undefined;
+  return match?.[1];
+}
+
+function uploadingPackage(line: string): string | undefined {
+  const match = /Uploading binaries for\s+(.+?)\s+to\s+NuGet\b/i.exec(line);
+
+  return match?.[1];
+}
+
+function completedSubmission(
+  line: string,
+): { cacheCount: number; packageSpec: string } | undefined {
+  const match =
+    /Completed submission of\s+(.+?)\s+to\s+(\d+)\s+binary cache\(s\)/i.exec(
+      line,
+    );
+
+  return match
+    ? { cacheCount: parseCount(match[2]), packageSpec: match[1] }
+    : undefined;
 }
 
 function containsAuthFailure(line: string): boolean {
@@ -168,6 +196,14 @@ export function packageSpecToNugetPackageId(
   }
 
   return `${match[1]}_${match[2]}`;
+}
+
+export function packageSpecVersion(packageSpec: string): string | undefined {
+  const match = /^[A-Za-z0-9_.+-]+:[A-Za-z0-9_.+-]+@([^\s]+)$/.exec(
+    packageSpec.trim(),
+  );
+
+  return match?.[1];
 }
 
 function packageHandleTime(line: string): PackageHandleTime | undefined {
@@ -242,6 +278,41 @@ function uniquePackageHandleTimes(
   return output;
 }
 
+const PACKAGE_UPLOAD_STATE_RANK: Readonly<Record<PackageUploadState, number>> =
+  {
+    failed: 1,
+    succeeded: 2,
+    unknown: 0,
+  };
+
+function rememberPackageUploadStatus(
+  statuses: Map<string, PackageUploadStatus>,
+  packageSpec: string,
+  status: PackageUploadState,
+): void {
+  const packageId = packageSpecToNugetPackageId(packageSpec);
+
+  if (!packageId) {
+    return;
+  }
+
+  const current = statuses.get(packageId);
+
+  if (
+    current &&
+    PACKAGE_UPLOAD_STATE_RANK[current.status] >
+      PACKAGE_UPLOAD_STATE_RANK[status]
+  ) {
+    return;
+  }
+
+  statuses.set(packageId, {
+    packageId,
+    packageSpec,
+    status,
+  });
+}
+
 export function parseBuildLog(content: string): BuildLogFacts {
   const packageListPackages: string[] = [];
   const restoredPackages: string[] = [];
@@ -252,6 +323,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   const feeds: string[] = [];
   const nugetConfigPaths: string[] = [];
   const packageHandleTimes: PackageHandleTime[] = [];
+  const packageUploadStatuses = new Map<string, PackageUploadStatus>();
   const writeDeniedPackages: WriteDeniedPackage[] = [];
   let capturePackageList = false;
   let captureFeeds = false;
@@ -339,22 +411,41 @@ export function parseBuildLog(content: string): BuildLogFacts {
       builtPackages.push(built);
     }
 
-    if (/Starting submission\b/i.test(line)) {
+    const startingSubmission = startingSubmissionPackage(line);
+
+    if (startingSubmission) {
       submissionsStarted += 1;
+      rememberPackageUploadStatus(
+        packageUploadStatuses,
+        startingSubmission,
+        "unknown",
+      );
     }
 
-    if (/Uploading binaries\b.*\bNuGet\b/i.test(line)) {
+    const uploadedPackage = uploadingPackage(line);
+
+    if (uploadedPackage) {
       uploadsAttempted += 1;
+      rememberPackageUploadStatus(
+        packageUploadStatuses,
+        uploadedPackage,
+        "unknown",
+      );
     }
 
-    const submittedCacheCount = completedSubmissionCacheCount(line);
+    const submission = completedSubmission(line);
 
-    if (submittedCacheCount !== undefined) {
-      if (submittedCacheCount === 0) {
+    if (submission) {
+      if (submission.cacheCount === 0) {
         zeroCacheSubmissions += 1;
       } else {
         uploadedCount += 1;
       }
+      rememberPackageUploadStatus(
+        packageUploadStatuses,
+        submission.packageSpec,
+        submission.cacheCount === 0 ? "failed" : "succeeded",
+      );
     }
 
     const status = failedHttpStatus(line);
@@ -404,6 +495,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     feeds: unique(feeds),
     nugetConfigPaths: unique(nugetConfigPaths),
     packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
+    packageUploadStatuses: [...packageUploadStatuses.values()],
     quotaMessages: unique(quotaMessages),
     requestedCount: unique(packageListPackages).length || undefined,
     restoredCount: parsedRestoredCount ?? (restoredPackageCount || undefined),

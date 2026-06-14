@@ -140884,7 +140884,8 @@ function shouldProbePackageMetadata(debug, failOnPolicy, tokenKind, buildLogFact
     return (debug ||
         failOnPolicy === "private-package" ||
         tokenKind === "pat" ||
-        Boolean(buildLogFacts?.writeDeniedPackages.length));
+        Boolean(buildLogFacts?.builtPackages?.length) ||
+        Boolean(buildLogFacts?.writeDeniedPackages?.length));
 }
 
 ;// CONCATENATED MODULE: ./src/shared/build-log.ts
@@ -140934,9 +140935,19 @@ function builtPackage(line) {
     }
     return match[1];
 }
-function completedSubmissionCacheCount(line) {
-    const match = /Completed submission\b.*\bto\s+(\d+)\s+binary cache\(s\)/i.exec(line);
-    return match ? parseCount(match[1]) : undefined;
+function startingSubmissionPackage(line) {
+    const match = /Starting submission of\s+(.+?)\s+to\s+\d+\s+binary cache\(s\)/i.exec(line);
+    return match?.[1];
+}
+function uploadingPackage(line) {
+    const match = /Uploading binaries for\s+(.+?)\s+to\s+NuGet\b/i.exec(line);
+    return match?.[1];
+}
+function completedSubmission(line) {
+    const match = /Completed submission of\s+(.+?)\s+to\s+(\d+)\s+binary cache\(s\)/i.exec(line);
+    return match
+        ? { cacheCount: parseCount(match[2]), packageSpec: match[1] }
+        : undefined;
 }
 function containsAuthFailure(line) {
     return (/\b(?:Unauthorized|Forbidden|authentication failed|access denied)\b/i.test(line) || /\b(?:HTTP\s+|status(?:\s+code)?[^\d]{0,40})(?:401|403)\b/i.test(line));
@@ -140977,6 +140988,10 @@ function packageSpecToNugetPackageId(packageSpec) {
         return undefined;
     }
     return `${match[1]}_${match[2]}`;
+}
+function packageSpecVersion(packageSpec) {
+    const match = /^[A-Za-z0-9_.+-]+:[A-Za-z0-9_.+-]+@([^\s]+)$/.exec(packageSpec.trim());
+    return match?.[1];
 }
 function packageHandleTime(line) {
     const match = /^Elapsed time to handle\s+(.+):\s+(.+)$/i.exec(line.trim());
@@ -141028,6 +141043,28 @@ function uniquePackageHandleTimes(values) {
     }
     return output;
 }
+const PACKAGE_UPLOAD_STATE_RANK = {
+    failed: 1,
+    succeeded: 2,
+    unknown: 0,
+};
+function rememberPackageUploadStatus(statuses, packageSpec, status) {
+    const packageId = packageSpecToNugetPackageId(packageSpec);
+    if (!packageId) {
+        return;
+    }
+    const current = statuses.get(packageId);
+    if (current &&
+        PACKAGE_UPLOAD_STATE_RANK[current.status] >
+            PACKAGE_UPLOAD_STATE_RANK[status]) {
+        return;
+    }
+    statuses.set(packageId, {
+        packageId,
+        packageSpec,
+        status,
+    });
+}
 function parseBuildLog(content) {
     const packageListPackages = [];
     const restoredPackages = [];
@@ -141038,6 +141075,7 @@ function parseBuildLog(content) {
     const feeds = [];
     const nugetConfigPaths = [];
     const packageHandleTimes = [];
+    const packageUploadStatuses = new Map();
     const writeDeniedPackages = [];
     let capturePackageList = false;
     let captureFeeds = false;
@@ -141105,20 +141143,25 @@ function parseBuildLog(content) {
         if (built) {
             builtPackages.push(built);
         }
-        if (/Starting submission\b/i.test(line)) {
+        const startingSubmission = startingSubmissionPackage(line);
+        if (startingSubmission) {
             submissionsStarted += 1;
+            rememberPackageUploadStatus(packageUploadStatuses, startingSubmission, "unknown");
         }
-        if (/Uploading binaries\b.*\bNuGet\b/i.test(line)) {
+        const uploadedPackage = uploadingPackage(line);
+        if (uploadedPackage) {
             uploadsAttempted += 1;
+            rememberPackageUploadStatus(packageUploadStatuses, uploadedPackage, "unknown");
         }
-        const submittedCacheCount = completedSubmissionCacheCount(line);
-        if (submittedCacheCount !== undefined) {
-            if (submittedCacheCount === 0) {
+        const submission = completedSubmission(line);
+        if (submission) {
+            if (submission.cacheCount === 0) {
                 zeroCacheSubmissions += 1;
             }
             else {
                 uploadedCount += 1;
             }
+            rememberPackageUploadStatus(packageUploadStatuses, submission.packageSpec, submission.cacheCount === 0 ? "failed" : "succeeded");
         }
         const status = failedHttpStatus(line);
         if (status) {
@@ -141155,6 +141198,7 @@ function parseBuildLog(content) {
         feeds: unique(feeds),
         nugetConfigPaths: unique(nugetConfigPaths),
         packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
+        packageUploadStatuses: [...packageUploadStatuses.values()],
         quotaMessages: unique(quotaMessages),
         requestedCount: unique(packageListPackages).length || undefined,
         restoredCount: parsedRestoredCount ?? (restoredPackageCount || undefined),
@@ -141167,97 +141211,6 @@ function parseBuildLog(content) {
     };
 }
 
-;// CONCATENATED MODULE: ./src/shared/build-miss-report.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-
-const COLUMNS = [
-    {
-        header: "Package",
-        required: true,
-        value: (report) => report.packageSpec,
-    },
-    {
-        header: "Build Time",
-        value: (report) => report.buildTime,
-    },
-];
-function hasValue(value) {
-    return value !== undefined && value.length > 0;
-}
-function reportColumnIncluded(column, reports) {
-    return (column.required === true ||
-        reports.some((report) => hasValue(column.value(report))));
-}
-function reportColumns(reports) {
-    return COLUMNS.filter((column) => reportColumnIncluded(column, reports));
-}
-function reportValue(column, report) {
-    return column.value(report) || "unknown";
-}
-function markdownCell(value) {
-    return value.replace(/\|/g, "\\|");
-}
-function buildTimeByPackageId(buildLogFacts) {
-    return new Map(buildLogFacts.packageHandleTimes.map((value) => [
-        value.packageId,
-        value.elapsed,
-    ]));
-}
-function buildMissReports(buildLogFacts) {
-    if (!buildLogFacts) {
-        return [];
-    }
-    const handleTimes = buildTimeByPackageId(buildLogFacts);
-    return buildLogFacts.builtPackages.map((packageSpec) => {
-        const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
-        return {
-            buildTime: handleTimes.get(packageId),
-            packageId,
-            packageSpec,
-        };
-    });
-}
-function buildMissReportRows(reports) {
-    const columns = reportColumns(reports);
-    return [
-        columns.map((column) => column.header),
-        ...reports.map((report) => columns.map((column) => reportValue(column, report))),
-    ];
-}
-function formatBuildMissReportTable(reports) {
-    if (!reports.length) {
-        return "";
-    }
-    const [header, ...rows] = buildMissReportRows(reports);
-    return [
-        `| ${header.map(markdownCell).join(" | ")} |`,
-        `| ${header.map(() => "---").join(" | ")} |`,
-        ...rows.map((row) => `| ${row.map(markdownCell).join(" | ")} |`),
-        "",
-    ].join("\n");
-}
-
-;// CONCATENATED MODULE: ./src/shared/cache.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-function buildFeedUrl(owner) {
-    return `https://nuget.pkg.github.com/${owner}/index.json`;
-}
-function buildBinarySources(feedUrl, access) {
-    const resolvedAccess = access.trim() || "readwrite";
-    return `clear;nuget,${feedUrl},${resolvedAccess}`;
-}
-function buildDisabledBinarySources() {
-    return "clear";
-}
-
 ;// CONCATENATED MODULE: ./src/shared/denied-package-report.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -141265,7 +141218,7 @@ function buildDisabledBinarySources() {
  * Copyright 2026 Richard Thomson
  */
 const VCPKG_VERSION_SUFFIX = /-vcpkg[0-9a-f]{64}$/i;
-const denied_package_report_COLUMNS = [
+const COLUMNS = [
     {
         header: "Package ID",
         required: true,
@@ -141302,28 +141255,28 @@ const denied_package_report_COLUMNS = [
         value: (report) => report.quotaRisk,
     },
 ];
-function denied_package_report_hasValue(value) {
+function hasValue(value) {
     return value !== undefined && value.length > 0;
 }
 function hasQuotaRisk(value) {
-    return denied_package_report_hasValue(value) && value.trim().toLowerCase() !== "none";
+    return hasValue(value) && value.trim().toLowerCase() !== "none";
 }
-function denied_package_report_reportColumnIncluded(column, reports) {
+function reportColumnIncluded(column, reports) {
     if (column.required) {
         return true;
     }
     if (column.include) {
         return column.include(reports);
     }
-    return reports.some((report) => denied_package_report_hasValue(column.value(report, "text")));
+    return reports.some((report) => hasValue(column.value(report, "text")));
 }
-function denied_package_report_reportColumns(reports) {
-    return denied_package_report_COLUMNS.filter((column) => denied_package_report_reportColumnIncluded(column, reports));
+function reportColumns(reports) {
+    return COLUMNS.filter((column) => reportColumnIncluded(column, reports));
 }
-function denied_package_report_reportValue(column, report, format) {
+function reportValue(column, report, format) {
     return column.value(report, format) || "unknown";
 }
-function denied_package_report_markdownCell(value) {
+function markdownCell(value) {
     return value.replace(/\|/g, "\\|");
 }
 function htmlEscape(value) {
@@ -141355,10 +141308,10 @@ function displayPackageVersion(version) {
     return trimmed.length > 0 ? trimmed : version;
 }
 function deniedPackageReportRows(reports, format = "text") {
-    const columns = denied_package_report_reportColumns(reports);
+    const columns = reportColumns(reports);
     return [
         columns.map((column) => column.header),
-        ...reports.map((report) => columns.map((column) => denied_package_report_reportValue(column, report, format))),
+        ...reports.map((report) => columns.map((column) => reportValue(column, report, format))),
     ];
 }
 function formatDeniedPackageReportTable(reports) {
@@ -141367,9 +141320,9 @@ function formatDeniedPackageReportTable(reports) {
     }
     const [header, ...rows] = deniedPackageReportRows(reports, "markdown");
     return [
-        `| ${header.map(denied_package_report_markdownCell).join(" | ")} |`,
+        `| ${header.map(markdownCell).join(" | ")} |`,
         `| ${header.map(() => "---").join(" | ")} |`,
-        ...rows.map((row) => `| ${row.map(denied_package_report_markdownCell).join(" | ")} |`),
+        ...rows.map((row) => `| ${row.map(markdownCell).join(" | ")} |`),
         "",
     ].join("\n");
 }
@@ -141388,6 +141341,166 @@ function formatDeniedPackageReportLine(report) {
         `write denied: ${report.packageId} ${displayPackageVersion(report.version)}`,
         details.length ? ` (${details.join(", ")})` : "",
     ].join("");
+}
+
+;// CONCATENATED MODULE: ./src/shared/build-miss-report.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+const build_miss_report_COLUMNS = [
+    {
+        header: "Package ID",
+        required: true,
+        value: build_miss_report_packageIdValue,
+    },
+    {
+        header: "Version",
+        required: true,
+        value: (report) => displayPackageVersion(report.version),
+    },
+    {
+        header: "Build Time",
+        value: (report) => report.buildTime,
+    },
+    {
+        header: "Upload",
+        required: true,
+        value: (report) => report.uploadStatus,
+    },
+];
+function build_miss_report_hasValue(value) {
+    return value !== undefined && value.length > 0;
+}
+function build_miss_report_reportColumnIncluded(column, reports) {
+    return (column.required === true ||
+        reports.some((report) => build_miss_report_hasValue(column.value(report, "text"))));
+}
+function build_miss_report_reportColumns(reports) {
+    return build_miss_report_COLUMNS.filter((column) => build_miss_report_reportColumnIncluded(column, reports));
+}
+function build_miss_report_reportValue(column, report, format) {
+    return column.value(report, format) || "unknown";
+}
+function build_miss_report_markdownCell(value) {
+    return value.replace(/\|/g, "\\|");
+}
+function build_miss_report_htmlEscape(value) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+function build_miss_report_linkValue(text, url, format) {
+    if (!url || format === "text") {
+        return text;
+    }
+    if (format === "html") {
+        return `<a href="${build_miss_report_htmlEscape(url)}">${build_miss_report_htmlEscape(text)}</a>`;
+    }
+    return `[${text}](${url})`;
+}
+function build_miss_report_packageIdValue(report, format) {
+    return build_miss_report_linkValue(report.packageId, report.packageSettingsUrl, format);
+}
+function buildTimeByPackageId(buildLogFacts) {
+    return new Map(buildLogFacts.packageHandleTimes.map((value) => [
+        value.packageId,
+        value.elapsed,
+    ]));
+}
+function packageMetadataResults(packageMetadata) {
+    return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
+}
+function uploadStatusByPackageId(buildLogFacts) {
+    return new Map(buildLogFacts.packageUploadStatuses.map((value) => [
+        value.packageId,
+        value.status,
+    ]));
+}
+function deniedPackageIds(buildLogFacts) {
+    return new Set(buildLogFacts.writeDeniedPackages.map((value) => value.packageId));
+}
+function uploadStatus(packageId, uploads, deniedPackages) {
+    if (deniedPackages.has(packageId)) {
+        return "failed";
+    }
+    return uploads.get(packageId) ?? "unknown";
+}
+function packageIdentity(packageSpec) {
+    const id = packageSpecToNugetPackageId(packageSpec);
+    const version = packageSpecVersion(packageSpec);
+    return id && version ? { id, version } : undefined;
+}
+function buildMissPackageIdentities(buildLogFacts) {
+    if (!buildLogFacts) {
+        return [];
+    }
+    return buildLogFacts.builtPackages.flatMap((packageSpec) => {
+        const identity = packageIdentity(packageSpec);
+        return identity ? [identity] : [];
+    });
+}
+function buildMissReports(buildLogFacts, packageMetadata) {
+    if (!buildLogFacts) {
+        return [];
+    }
+    const handleTimes = buildTimeByPackageId(buildLogFacts);
+    const metadata = packageMetadataResults(packageMetadata);
+    const uploads = uploadStatusByPackageId(buildLogFacts);
+    const deniedPackages = deniedPackageIds(buildLogFacts);
+    return buildLogFacts.builtPackages.map((packageSpec) => {
+        const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
+        const result = metadata.get(packageId);
+        return {
+            buildTime: handleTimes.get(packageId),
+            packageId,
+            packageSettingsUrl: result?.settingsUrl,
+            packageSpec,
+            uploadStatus: uploadStatus(packageId, uploads, deniedPackages),
+            version: packageSpecVersion(packageSpec) ?? "unknown",
+        };
+    });
+}
+function buildMissReportRows(reports, format = "text") {
+    const columns = build_miss_report_reportColumns(reports);
+    return [
+        columns.map((column) => column.header),
+        ...reports.map((report) => columns.map((column) => build_miss_report_reportValue(column, report, format))),
+    ];
+}
+function formatBuildMissReportTable(reports) {
+    if (!reports.length) {
+        return "";
+    }
+    const [header, ...rows] = buildMissReportRows(reports, "markdown");
+    return [
+        `| ${header.map(build_miss_report_markdownCell).join(" | ")} |`,
+        `| ${header.map(() => "---").join(" | ")} |`,
+        ...rows.map((row) => `| ${row.map(build_miss_report_markdownCell).join(" | ")} |`),
+        "",
+    ].join("\n");
+}
+
+;// CONCATENATED MODULE: ./src/shared/cache.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+function buildFeedUrl(owner) {
+    return `https://nuget.pkg.github.com/${owner}/index.json`;
+}
+function buildBinarySources(feedUrl, access) {
+    const resolvedAccess = access.trim() || "readwrite";
+    return `clear;nuget,${feedUrl},${resolvedAccess}`;
+}
+function buildDisabledBinarySources() {
+    return "clear";
 }
 
 ;// CONCATENATED MODULE: ./src/shared/package-metadata.ts
@@ -142682,7 +142795,7 @@ function writeDeniedPackageSummaryTable(packages) {
     ];
 }
 function buildMissSummaryTable(packages) {
-    const [header, ...rows] = buildMissReportRows(packages);
+    const [header, ...rows] = buildMissReportRows(packages, "html");
     return [
         header.map((value) => ({ data: value, header: true })),
         ...rows.map((row) => [...row]),
@@ -142719,7 +142832,7 @@ function packageHandleTimes(buildLogFacts) {
         value.elapsed,
     ]));
 }
-function packageMetadataResults(packageMetadata) {
+function analyze_packageMetadataResults(packageMetadata) {
     return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
 }
 function logPackageQuotaRisks(packageMetadata) {
@@ -142729,18 +142842,31 @@ function logPackageQuotaRisks(packageMetadata) {
         }
     }
 }
+function uniquePackageIdentities(values) {
+    const output = new Map();
+    for (const value of values) {
+        const key = packageIdentityKey(value);
+        if (!output.has(key)) {
+            output.set(key, value);
+        }
+    }
+    return [...output.values()];
+}
 function packageMetadataIdentities(buildLogFacts, requestedPackages) {
     const deniedPackages = writeDeniedPackages(buildLogFacts);
-    return deniedPackages.length
-        ? deniedPackages.map((value) => ({
+    const builtPackages = buildMissPackageIdentities(buildLogFacts);
+    return uniquePackageIdentities([
+        ...deniedPackages.map((value) => ({
             id: value.packageId,
             version: value.version,
-        }))
-        : requestedPackages;
+        })),
+        ...builtPackages,
+        ...requestedPackages,
+    ]);
 }
 async function analyze_deniedPackageReports(buildLogFacts, packageMetadata, vcpkgRoot) {
     const handleTimes = packageHandleTimes(buildLogFacts);
-    const metadata = packageMetadataResults(packageMetadata);
+    const metadata = analyze_packageMetadataResults(packageMetadata);
     return await Promise.all(writeDeniedPackages(buildLogFacts).map(async (value) => {
         const result = metadata.get(value.packageId);
         return {
@@ -142795,7 +142921,7 @@ function buildLogRows(buildLogFacts) {
         summaryItem("Build log write-denied packages", buildLogFacts.writeDeniedPackages.length.toString()),
     ];
 }
-function logBuildLogFacts(buildLogFacts, deniedReports, trace) {
+function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace) {
     if (!buildLogFacts) {
         return;
     }
@@ -142810,7 +142936,7 @@ function logBuildLogFacts(buildLogFacts, deniedReports, trace) {
     info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
     info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
     info(`Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`);
-    const buildMissTable = formatBuildMissReportTable(buildMissReports(buildLogFacts));
+    const buildMissTable = formatBuildMissReportTable(missedReports);
     if (buildMissTable) {
         for (const line of buildMissTable.trimEnd().split("\n")) {
             info(line);
@@ -142842,12 +142968,11 @@ async function readBuildLogFacts(buildLog, workspace, traceLogger) {
     const content = await traceLogger.step("read build log", async () => (0,promises_.readFile)(buildLogPath, "utf8"));
     return await traceLogger.step("parse build log", async () => parseBuildLog(content));
 }
-async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, verbose) {
+async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, verbose) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     const summary = summary_summary;
-    const missedReports = buildMissReports(buildLogFacts);
     if (shouldUseCompactSummary(verbose)) {
         summary.addHeading(cacheStatusHeading(cacheStatus), 3);
         if (missedReports.length) {
@@ -142973,6 +143098,7 @@ async function run() {
         ? `will fail on ${diagnosis.failureKind}`
         : `will not fail on ${diagnosis.failureKind || "none"}`);
     const deniedReports = await traceLogger.step("collect denied package details", async () => analyze_deniedPackageReports(buildLogFacts, packageMetadata, vcpkg.root));
+    const missedReports = buildMissReports(buildLogFacts, packageMetadata);
     if (debug) {
         try {
             diagnosticsArtifact = await traceLogger.step("upload diagnostics artifact", async () => uploadDiagnosticsArtifact({
@@ -143025,7 +143151,7 @@ async function run() {
         info(`NuGet username: ${username}`);
         logProbeOutputs(liveProbes, trace);
         logRestoreProbe(restoreProbe, trace);
-        logBuildLogFacts(buildLogFacts, deniedReports, trace);
+        logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace);
     }
     logPackageQuotaRisks(packageMetadata);
     if (logDetails) {
@@ -143050,7 +143176,7 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(diagnosis.diagnosis, diagnosis.cacheStatus, diagnosis.failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, logDetails);
+    await writeSummary(diagnosis.diagnosis, diagnosis.cacheStatus, diagnosis.failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, logDetails);
     if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {
         setFailed(diagnosis.diagnosis);
     }

@@ -31,6 +31,7 @@ export function shouldProbePackageMetadata(
     debug ||
     failOnPolicy === "private-package" ||
     tokenKind === "pat" ||
-    Boolean(buildLogFacts?.writeDeniedPackages.length)
+    Boolean(buildLogFacts?.builtPackages?.length) ||
+    Boolean(buildLogFacts?.writeDeniedPackages?.length)
   );
 }

@@ -8,10 +8,15 @@ import { describe, expect, test } from "vitest";
 
 import { BuildLogFacts } from "../src/shared/build-log";
 import {
+  buildMissPackageIdentities,
   buildMissReportRows,
   buildMissReports,
   formatBuildMissReportTable,
 } from "../src/shared/build-miss-report";
+import { PackageMetadataProbe } from "../src/shared/package-metadata";
+
+const SETTINGS_URL =
+  "https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings";
 
 function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
   return {
@@ -21,6 +26,7 @@ function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
     feeds: [],
     nugetConfigPaths: [],
     packageHandleTimes: [],
+    packageUploadStatuses: [],
     quotaMessages: [],
     restoredPackages: [],
     submissionsStarted: 0,
@@ -28,6 +34,23 @@ function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
     writeDeniedPackages: [],
     zeroCacheSubmissions: 0,
     ...values,
+  };
+}
+
+function packageMetadata(): PackageMetadataProbe {
+  return {
+    limit: 20,
+    owner: "octo",
+    probedPackageIds: 1,
+    requestedPackageIds: 1,
+    results: [
+      {
+        detail: "HTTP 200 OK",
+        name: "fmt_x64-windows",
+        settingsUrl: SETTINGS_URL,
+        status: "ok",
+      },
+    ],
   };
 }
 
@@ -43,25 +66,39 @@ describe("build miss report", () => {
             packageSpec: "fmt:x64-windows",
           },
         ],
+        packageUploadStatuses: [
+          {
+            packageId: "fmt_x64-windows",
+            packageSpec: "fmt:x64-windows",
+            status: "succeeded",
+          },
+        ],
       }),
+      packageMetadata(),
     );
 
     expect(reports).toEqual([
       {
         buildTime: "42 s",
         packageId: "fmt_x64-windows",
+        packageSettingsUrl: SETTINGS_URL,
         packageSpec: "fmt:x64-windows@8.0.0#1",
+        uploadStatus: "succeeded",
+        version: "8.0.0#1",
       },
       {
         buildTime: undefined,
         packageId: "zlib_x64-windows",
+        packageSettingsUrl: undefined,
         packageSpec: "zlib:x64-windows@1.3.1",
+        uploadStatus: "unknown",
+        version: "1.3.1",
       },
     ]);
     expect(buildMissReportRows(reports)).toEqual([
-      ["Package", "Build Time"],
-      ["fmt:x64-windows@8.0.0#1", "42 s"],
-      ["zlib:x64-windows@1.3.1", "unknown"],
+      ["Package ID", "Version", "Build Time", "Upload"],
+      ["fmt_x64-windows", "8.0.0#1", "42 s", "succeeded"],
+      ["zlib_x64-windows", "1.3.1", "unknown", "unknown"],
     ]);
   });
 
@@ -73,9 +110,54 @@ describe("build miss report", () => {
     );
 
     expect(buildMissReportRows(reports)).toEqual([
-      ["Package"],
-      ["fmt:x64-windows@8.0.0#1"],
+      ["Package ID", "Version", "Upload"],
+      ["fmt_x64-windows", "8.0.0#1", "unknown"],
     ]);
+  });
+
+  test("marks denied package uploads as failed", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        builtPackages: ["fmt:x64-windows@8.0.0#1"],
+        writeDeniedPackages: [
+          {
+            packageId: "fmt_x64-windows",
+            version: "8.0.0",
+          },
+        ],
+      }),
+    );
+
+    expect(buildMissReportRows(reports)).toEqual([
+      ["Package ID", "Version", "Upload"],
+      ["fmt_x64-windows", "8.0.0#1", "failed"],
+    ]);
+  });
+
+  test("links package IDs when metadata has a settings URL", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        builtPackages: ["fmt:x64-windows@8.0.0#1"],
+      }),
+      packageMetadata(),
+    );
+
+    expect(buildMissReportRows(reports, "html")[1][0]).toBe(
+      `<a href="${SETTINGS_URL}">fmt_x64-windows</a>`,
+    );
+    expect(formatBuildMissReportTable(reports)).toContain(
+      `| [fmt_x64-windows](${SETTINGS_URL}) | 8.0.0#1 | unknown |`,
+    );
+  });
+
+  test("extracts package identities from built packages", () => {
+    expect(
+      buildMissPackageIdentities(
+        buildLogFacts({
+          builtPackages: ["fmt:x64-windows@8.0.0#1", "not-a-spec"],
+        }),
+      ),
+    ).toEqual([{ id: "fmt_x64-windows", version: "8.0.0#1" }]);
   });
 
   test("formats a Markdown table for logs", () => {
@@ -86,7 +168,7 @@ describe("build miss report", () => {
     );
 
     expect(formatBuildMissReportTable(reports)).toContain(
-      "| fmt:x64-windows@8.0.0#1 |",
+      "| fmt_x64-windows | 8.0.0#1 | unknown |",
     );
   });
 });

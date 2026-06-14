@@ -14,10 +14,8 @@ import {
 } from "../src/shared/analyze-policy";
 import { BuildLogFacts } from "../src/shared/build-log";
 
-function buildLogFacts(
-  writeDeniedPackages: BuildLogFacts["writeDeniedPackages"],
-): BuildLogFacts {
-  return { writeDeniedPackages } as BuildLogFacts;
+function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
+  return values as BuildLogFacts;
 }
 
 describe("analyze policy", () => {
@@ -33,12 +31,27 @@ describe("analyze policy", () => {
         false,
         "never",
         "github",
-        buildLogFacts([{ packageId: "fmt_x64-windows", version: "8.0.0" }]),
+        buildLogFacts({
+          writeDeniedPackages: [
+            { packageId: "fmt_x64-windows", version: "8.0.0" },
+          ],
+        }),
       ),
     ).toBe(true);
     expect(
-      shouldProbePackageMetadata(false, "never", "github", buildLogFacts([])),
+      shouldProbePackageMetadata(false, "never", "github", buildLogFacts({})),
     ).toBe(false);
+  });
+
+  test("probes package metadata for built package reports", () => {
+    expect(
+      shouldProbePackageMetadata(
+        false,
+        "never",
+        "github",
+        buildLogFacts({ builtPackages: ["fmt:x64-windows@8.0.0#1"] }),
+      ),
+    ).toBe(true);
   });
 
   test("logs analysis details only for debug or trace", () => {
