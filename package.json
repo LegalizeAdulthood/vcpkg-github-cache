@@ -22,8 +22,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@actions/artifact": "^2.3.2",
+    "@actions/artifact": "^5.0.3",
     "@actions/core": "^3.0.1"
+  },
+  "overrides": {
+    "undici": "^6.26.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.0",
