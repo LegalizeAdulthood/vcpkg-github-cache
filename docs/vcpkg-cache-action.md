@@ -690,7 +690,7 @@ maintenance guidance.
 - [x] Add a `CODE_OF_CONDUCT.md` community health file.
 - [x] Add a `CONTRIBUTING.md` community health file.
 - [x] Add a `SECURITY.md` community health file.
-- [ ] Add issue hygiene automation or document why it is not needed.
+- [x] Skip issue hygiene automation; stale issue marking is not useful here.
 - [ ] Verify repository security features and vulnerability reporting.
 - [ ] Push the exact release tag, such as `v1.0.0`, to create the draft
   release.
