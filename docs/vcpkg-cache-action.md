@@ -672,32 +672,6 @@ GitHub Packages cache is readable, but writes are not available for this
 event.  This is expected for some pull request events.
 ```
 
-## Release Checklist
-
-Before moving the `v1` tag.  Community checks follow GitHub's action
-maintenance guidance.
-
-- [x] Run `npm run check`.
-- [x] Confirm `setup/dist` and `analyze/dist` are committed.
-- [x] Confirm root `action.yml` runs setup from `setup/dist/index.js`.
-- [x] Verify ReadMe examples use
-  `LegalizeAdulthood/vcpkg-github-cache@v1` for setup and
-  `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for diagnostics.
-- [x] Run the trn integration workflow on `develop`.
-- [x] Verify trn summaries and logs; verify diagnostics artifacts only when
-  debug is enabled.
-- [x] Add a CI workflow status badge to the ReadMe.
-- [x] Add a `CODE_OF_CONDUCT.md` community health file.
-- [x] Add a `CONTRIBUTING.md` community health file.
-- [x] Add a `SECURITY.md` community health file.
-- [x] Skip issue hygiene automation; stale issue marking is not useful here.
-- [x] Verify repository security features and vulnerability reporting.
-- [ ] Push the exact release tag, such as `v1.0.0`, to create the draft
-  release.
-- [ ] Create a GitHub release that describes setup, analyze, and known
-  package permission limits.
-- [ ] Move the `v1` tag to the release commit.
-
 ## Marketplace Publishing Notes
 
 GitHub Marketplace discovers the root action metadata.  The root action is
