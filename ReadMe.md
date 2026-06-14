@@ -6,6 +6,10 @@ Copyright 2026 Richard Thomson
 
 # vcpkg GitHub Packages Cache
 
+[![GitHub Release](https://img.shields.io/github/v/release/LegalizeAdulthood/vcpkg-github-cache?label=Latest+Release)](https://github.com/LegalizeAdulthood/vcpkg-github-cache/releases)
+[![CI](https://github.com/LegalizeAdulthood/vcpkg-github-cache/actions/workflows/ci.yml/badge.svg)](https://github.com/LegalizeAdulthood/vcpkg-github-cache/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/LegalizeAdulthood/vcpkg-github-cache?label=License)](https://github.com/LegalizeAdulthood/vcpkg-github-cache/blob/master/LICENSE.txt)
+
 This repository contains GitHub Actions for vcpkg binary caching backed by
 GitHub Packages NuGet feeds.  The action makes the normal `GITHUB_TOKEN`
 path easy for public repositories while still supporting explicit PAT mode
@@ -343,3 +347,5 @@ requests to seed new binary cache packages.
 [package-access]: https://docs.github.com/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
 [package-billing]: https://docs.github.com/billing/concepts/product-billing/github-packages
 [workflow-events]: https://docs.github.com/actions/using-workflows/events-that-trigger-workflows
+[ci]: /LegalizeAdulthood/vcpkg-github-cache/actions/workflows/ci.yml/badge.svg
+[ci-workflow]: /LegalizeAdulthood/vcpkg-github-cache/actions/workflows/ci.yml
