@@ -680,15 +680,15 @@ maintenance guidance.
 - [x] Run `npm run check`.
 - [x] Confirm `setup/dist` and `analyze/dist` are committed.
 - [x] Confirm root `action.yml` runs setup from `setup/dist/index.js`.
-- [x] Verify README examples use
+- [x] Verify ReadMe examples use
   `LegalizeAdulthood/vcpkg-github-cache@v1` for setup and
   `LegalizeAdulthood/vcpkg-github-cache/analyze@v1` for diagnostics.
 - [x] Run the trn integration workflow on `develop`.
 - [x] Verify trn summaries and logs; verify diagnostics artifacts only when
   debug is enabled.
-- [x] Add a CI workflow status badge to the README.
+- [x] Add a CI workflow status badge to the ReadMe.
 - [x] Add a `CODE_OF_CONDUCT.md` community health file.
-- [ ] Add a `CONTRIBUTING.md` community health file.
+- [x] Add a `CONTRIBUTING.md` community health file.
 - [ ] Add a `SECURITY.md` community health file.
 - [ ] Add issue hygiene automation or document why it is not needed.
 - [ ] Verify repository security features and vulnerability reporting.
