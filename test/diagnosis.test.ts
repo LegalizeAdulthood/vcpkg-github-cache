@@ -63,6 +63,25 @@ function packageMetadata(): PackageMetadataProbe {
   };
 }
 
+function packageVersionMetadata(): PackageMetadataProbe {
+  return {
+    limit: 20,
+    owner: "octo",
+    probedPackageIds: 1,
+    requestedPackageIds: 1,
+    results: [
+      {
+        detail: "HTTP 200 OK",
+        name: "zlib_x64-linux",
+        status: "ok",
+        versionNames: [
+          "1.3.1-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ],
+      },
+    ],
+  };
+}
+
 describe("cache diagnosis", () => {
   test("classifies a warm build log hit", () => {
     const diagnosis = classifyCache({
@@ -73,6 +92,7 @@ describe("cache diagnosis", () => {
         failedHttpStatuses: [],
         feeds: [],
         nugetConfigPaths: [],
+        packageAbiHashes: [],
         packageHandleTimes: [],
         packageUploadStatuses: [],
         quotaMessages: [],
@@ -105,6 +125,7 @@ describe("cache diagnosis", () => {
         failedHttpStatuses: [],
         feeds: [],
         nugetConfigPaths: [],
+        packageAbiHashes: [],
         packageHandleTimes: [],
         packageUploadStatuses: [],
         quotaMessages: [],
@@ -142,6 +163,7 @@ describe("cache diagnosis", () => {
         failedHttpStatuses: ["403"],
         feeds: [],
         nugetConfigPaths: [],
+        packageAbiHashes: [],
         packageHandleTimes: [],
         packageUploadStatuses: [],
         quotaMessages: [],
@@ -170,6 +192,58 @@ describe("cache diagnosis", () => {
     expect(shouldFailDiagnosis(diagnosis, "upload-failure")).toBe(true);
   });
 
+  test("treats failed uploads as already present when the version exists", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: 1,
+        builtPackages: ["zlib:x64-linux@1.3.1"],
+        failedHttpStatuses: [],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageAbiHashes: [
+          {
+            abiHash:
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            packageId: "zlib_x64-linux",
+            packageSpec: "zlib:x64-linux",
+          },
+        ],
+        packageHandleTimes: [],
+        packageUploadStatuses: [
+          {
+            packageId: "zlib_x64-linux",
+            packageSpec: "zlib:x64-linux",
+            status: "failed",
+          },
+        ],
+        quotaMessages: [],
+        requestedCount: 2,
+        restoredCount: 1,
+        restoredPackages: [],
+        submissionsStarted: 1,
+        uploadedCount: undefined,
+        uploadsAttempted: 1,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 1,
+      },
+      liveProbes: liveProbes(),
+      packageMetadata: packageVersionMetadata(),
+      requestedCount: 2,
+      restoreProbe: restoreProbe(
+        "failed",
+        "NuGet restore failed; restored 1/2 packages",
+        1,
+      ),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("partial-hit");
+    expect(diagnosis.failureKind).toBe("cache-miss");
+    expect(diagnosis.diagnosis).toContain("already present 1");
+    expect(diagnosis.diagnosis).not.toContain("upload failure");
+  });
+
   test("classifies cold zero-cache submissions as upload failures", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {
@@ -179,6 +253,7 @@ describe("cache diagnosis", () => {
         failedHttpStatuses: ["403"],
         feeds: [],
         nugetConfigPaths: [],
+        packageAbiHashes: [],
         packageHandleTimes: [],
         packageUploadStatuses: [],
         quotaMessages: [],

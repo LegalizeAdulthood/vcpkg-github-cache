@@ -25,6 +25,7 @@ function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
     failedHttpStatuses: [],
     feeds: [],
     nugetConfigPaths: [],
+    packageAbiHashes: [],
     packageHandleTimes: [],
     packageUploadStatuses: [],
     quotaMessages: [],
@@ -49,6 +50,9 @@ function packageMetadata(): PackageMetadataProbe {
         name: "fmt_x64-windows",
         settingsUrl: SETTINGS_URL,
         status: "ok",
+        versionNames: [
+          "8.0.0-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ],
       },
     ],
   };
@@ -118,6 +122,14 @@ describe("build miss report", () => {
   test("marks denied package uploads as failed", () => {
     const reports = buildMissReports(
       buildLogFacts({
+        packageAbiHashes: [
+          {
+            abiHash:
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            packageId: "fmt_x64-windows",
+            packageSpec: "fmt:x64-windows",
+          },
+        ],
         builtPackages: ["fmt:x64-windows@8.0.0#1"],
         writeDeniedPackages: [
           {
@@ -126,11 +138,41 @@ describe("build miss report", () => {
           },
         ],
       }),
+      packageMetadata(),
     );
 
     expect(buildMissReportRows(reports)).toEqual([
       ["Package ID", "Version", "Upload"],
       ["fmt_x64-windows", "8.0.0#1", "failed"],
+    ]);
+  });
+
+  test("marks failed uploads as already present when the version exists", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        builtPackages: ["fmt:x64-windows@8.0.0#1"],
+        packageAbiHashes: [
+          {
+            abiHash:
+              "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            packageId: "fmt_x64-windows",
+            packageSpec: "fmt:x64-windows",
+          },
+        ],
+        packageUploadStatuses: [
+          {
+            packageId: "fmt_x64-windows",
+            packageSpec: "fmt:x64-windows",
+            status: "failed",
+          },
+        ],
+      }),
+      packageMetadata(),
+    );
+
+    expect(buildMissReportRows(reports)).toEqual([
+      ["Package ID", "Version", "Upload"],
+      ["fmt_x64-windows", "8.0.0#1", "already present"],
     ]);
   });
 

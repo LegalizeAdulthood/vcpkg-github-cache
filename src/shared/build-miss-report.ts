@@ -15,6 +15,7 @@ import { PackageIdentity } from "./package-config";
 import {
   PackageMetadataProbe,
   PackageMetadataResult,
+  packageVersionExists,
 } from "./package-metadata";
 
 export interface BuildMissReport {
@@ -152,6 +153,17 @@ function uploadStatusByPackageId(
   );
 }
 
+function packageAbiHashByPackageId(
+  buildLogFacts: BuildLogFacts,
+): ReadonlyMap<string, string> {
+  return new Map(
+    buildLogFacts.packageAbiHashes.map((value) => [
+      value.packageId,
+      value.abiHash,
+    ]),
+  );
+}
+
 function deniedPackageIds(buildLogFacts: BuildLogFacts): ReadonlySet<string> {
   return new Set(
     buildLogFacts.writeDeniedPackages.map((value) => value.packageId),
@@ -162,12 +174,23 @@ function uploadStatus(
   packageId: string,
   uploads: ReadonlyMap<string, PackageUploadState>,
   deniedPackages: ReadonlySet<string>,
+  metadata: ReadonlyMap<string, PackageMetadataResult>,
+  abiHashes: ReadonlyMap<string, string>,
 ): PackageUploadState {
   if (deniedPackages.has(packageId)) {
     return "failed";
   }
 
-  return uploads.get(packageId) ?? "unknown";
+  const status = uploads.get(packageId) ?? "unknown";
+
+  if (
+    status === "failed" &&
+    packageVersionExists(metadata.get(packageId), abiHashes.get(packageId))
+  ) {
+    return "already present";
+  }
+
+  return status;
 }
 
 function packageIdentity(packageSpec: string): PackageIdentity | undefined {
@@ -202,6 +225,7 @@ export function buildMissReports(
   const handleTimes = buildTimeByPackageId(buildLogFacts);
   const metadata = packageMetadataResults(packageMetadata);
   const uploads = uploadStatusByPackageId(buildLogFacts);
+  const abiHashes = packageAbiHashByPackageId(buildLogFacts);
   const deniedPackages = deniedPackageIds(buildLogFacts);
 
   return buildLogFacts.builtPackages.map((packageSpec) => {
@@ -213,7 +237,13 @@ export function buildMissReports(
       packageId,
       packageSettingsUrl: result?.settingsUrl,
       packageSpec,
-      uploadStatus: uploadStatus(packageId, uploads, deniedPackages),
+      uploadStatus: uploadStatus(
+        packageId,
+        uploads,
+        deniedPackages,
+        metadata,
+        abiHashes,
+      ),
       version: packageSpecVersion(packageSpec) ?? "unknown",
     };
   });

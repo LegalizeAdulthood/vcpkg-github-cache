@@ -198,6 +198,7 @@ describe("diagnostics artifact", () => {
           failedHttpStatuses: ["403"],
           feeds: ["https://nuget.pkg.github.com/octo/index.json"],
           nugetConfigPaths: ["C:\\Users\\runner\\NuGet.Config"],
+          packageAbiHashes: [],
           packageHandleTimes: [
             {
               elapsed: "42 s",

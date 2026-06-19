@@ -13,6 +13,8 @@ import {
   packageMetadataUrl,
   packageQuotaRisk,
   packageSettingsUrl,
+  packageVersionExists,
+  packageVersionsUrl,
   runPackageMetadataProbe,
 } from "../src/shared/package-metadata";
 
@@ -31,6 +33,16 @@ describe("package metadata probes", () => {
     expect(packageSettingsUrl("users", "octo", "fmt:x64-windows")).toBe(
       "https://github.com/users/octo/packages/nuget/fmt%3Ax64-windows/settings",
     );
+    expect(
+      packageVersionsUrl(
+        "https://api.github.com/",
+        "users",
+        "octo",
+        "fmt:x64-windows",
+      ),
+    ).toBe(
+      "https://api.github.com/users/octo/packages/nuget/fmt%3Ax64-windows/versions?per_page=100",
+    );
   });
 
   test("queries package visibility and repository association", async () => {
@@ -43,6 +55,19 @@ describe("package metadata probes", () => {
       ],
       request: async (request) => {
         requests.push(request);
+
+        if (request.url.endsWith("/versions?per_page=100")) {
+          return {
+            body: JSON.stringify([
+              {
+                name: "1.0.0-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              },
+            ]),
+            statusCode: 200,
+            statusMessage: "OK",
+          };
+        }
+
         return {
           body: JSON.stringify({
             html_url: "https://github.com/octo/repo/packages/1",
@@ -62,7 +87,7 @@ describe("package metadata probes", () => {
       token: "token",
     });
 
-    expect(requests).toHaveLength(1);
+    expect(requests).toHaveLength(2);
     expect(requests[0].url).toBe(
       "https://api.github.com/users/octo/packages/nuget/fmt",
     );
@@ -78,10 +103,22 @@ describe("package metadata probes", () => {
       settingsUrl: "https://github.com/users/octo/packages/nuget/fmt/settings",
       status: "ok",
       versionCount: 3,
+      versionNames: [
+        "1.0.0-vcpkg0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      ],
       visibility: "public",
     });
     expect(packageMetadataQuotaRiskCount(probe)).toBe(0);
+    expect(
+      packageVersionExists(
+        probe.results[0],
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      ),
+    ).toBe(true);
     expect(formatPackageMetadataProbe(probe)).toContain("versions: 3");
+    expect(formatPackageMetadataProbe(probe)).toContain(
+      "version names: 1.0.0-vcpkg0123456789abcdef",
+    );
     expect(formatPackageMetadataProbe(probe)).toContain("quota risk: none");
   });
 
@@ -98,6 +135,14 @@ describe("package metadata probes", () => {
             body: "{}",
             statusCode: 404,
             statusMessage: "Not Found",
+          };
+        }
+
+        if (request.url.endsWith("/versions?per_page=100")) {
+          return {
+            body: JSON.stringify([{ name: "1.0.0-vcpkgabcdef" }]),
+            statusCode: 200,
+            statusMessage: "OK",
           };
         }
 
@@ -118,6 +163,7 @@ describe("package metadata probes", () => {
     expect(requests).toEqual([
       "https://api.github.com/users/octo-org/packages/nuget/zlib",
       "https://api.github.com/orgs/octo-org/packages/nuget/zlib",
+      "https://api.github.com/orgs/octo-org/packages/nuget/zlib/versions?per_page=100",
     ]);
     expect(probe.results[0]).toMatchObject({
       endpoint: "orgs",

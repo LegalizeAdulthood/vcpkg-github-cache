@@ -141009,6 +141009,22 @@ function packageHandleTime(line) {
         packageSpec,
     };
 }
+function packageAbiHash(line) {
+    const match = /^(.+?)\s+package ABI:\s+([0-9a-f]{64})$/i.exec(line.trim());
+    if (!match) {
+        return undefined;
+    }
+    const packageSpec = match[1];
+    const packageId = packageSpecToNugetPackageId(packageSpec);
+    if (!packageId) {
+        return undefined;
+    }
+    return {
+        abiHash: match[2].toLowerCase(),
+        packageId,
+        packageSpec,
+    };
+}
 function nugetConfigPath(line) {
     const trimmed = line.trim();
     if (/NuGet\.Config$/i.test(trimmed) ||
@@ -141043,7 +141059,19 @@ function uniquePackageHandleTimes(values) {
     }
     return output;
 }
+function uniquePackageAbiHashes(values) {
+    const seen = new Set();
+    const output = [];
+    for (const value of values) {
+        if (!seen.has(value.packageId)) {
+            seen.add(value.packageId);
+            output.push(value);
+        }
+    }
+    return output;
+}
 const PACKAGE_UPLOAD_STATE_RANK = {
+    "already present": 1,
     failed: 1,
     succeeded: 2,
     unknown: 0,
@@ -141074,6 +141102,7 @@ function parseBuildLog(content) {
     const quotaMessages = [];
     const feeds = [];
     const nugetConfigPaths = [];
+    const packageAbiHashes = [];
     const packageHandleTimes = [];
     const packageUploadStatuses = new Map();
     const writeDeniedPackages = [];
@@ -141175,6 +141204,10 @@ function parseBuildLog(content) {
         if (handleTime) {
             packageHandleTimes.push(handleTime);
         }
+        const abiHash = packageAbiHash(line);
+        if (abiHash) {
+            packageAbiHashes.push(abiHash);
+        }
         if (status === "403" && failedUpload) {
             writeDeniedPackages.push(failedUpload);
         }
@@ -141197,6 +141230,7 @@ function parseBuildLog(content) {
         failedHttpStatuses: unique(failedHttpStatuses),
         feeds: unique(feeds),
         nugetConfigPaths: unique(nugetConfigPaths),
+        packageAbiHashes: uniquePackageAbiHashes(packageAbiHashes),
         packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
         packageUploadStatuses: [...packageUploadStatuses.values()],
         quotaMessages: unique(quotaMessages),
@@ -141343,12 +141377,274 @@ function formatDeniedPackageReportLine(report) {
     ].join("");
 }
 
+;// CONCATENATED MODULE: ./src/shared/package-metadata.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+const DEFAULT_API_URL = "https://api.github.com";
+const DEFAULT_LIMIT = 20;
+const DEFAULT_TIMEOUT_MILLISECONDS = 10000;
+const OWNER_ENDPOINTS = ["users", "orgs"];
+const PACKAGE_QUOTA_RISK_PRIVATE_STORAGE = "private package storage";
+function uniquePackageIds(packageIdentities) {
+    return [
+        ...new Set(packageIdentities
+            .map((identity) => identity.id.trim())
+            .filter((identity) => identity.length > 0)),
+    ];
+}
+function boundedPackageIds(packageIdentities, limit) {
+    return uniquePackageIds(packageIdentities).slice(0, limit);
+}
+function trimApiUrl(apiUrl) {
+    return apiUrl.replace(/\/+$/g, "");
+}
+function packageMetadataUrl(apiUrl, endpoint, owner, packageName) {
+    return `${trimApiUrl(apiUrl)}/${endpoint}/${encodeURIComponent(owner)}/packages/nuget/${encodeURIComponent(packageName)}`;
+}
+function packageSettingsUrl(endpoint, owner, packageName) {
+    return `https://github.com/${endpoint}/${encodeURIComponent(owner)}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
+}
+function packageVersionsUrl(apiUrl, endpoint, owner, packageName) {
+    return `${packageMetadataUrl(apiUrl, endpoint, owner, packageName)}/versions?per_page=100`;
+}
+function statusDetail(response) {
+    const statusCode = response.statusCode ?? 0;
+    const statusMessage = response.statusMessage ?? "";
+    return `HTTP ${statusCode}${statusMessage ? ` ${statusMessage}` : ""}`;
+}
+function responseSucceeded(response) {
+    const statusCode = response.statusCode ?? 0;
+    return statusCode >= 200 && statusCode < 300;
+}
+function responseMissing(response) {
+    return response.statusCode === 404;
+}
+function stringField(object, key) {
+    const value = object?.[key];
+    return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+function numberField(object, key) {
+    const value = object?.[key];
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : undefined;
+}
+function objectField(object, key) {
+    const value = object?.[key];
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : undefined;
+}
+function packageQuotaRisk(visibility) {
+    const normalized = visibility?.trim().toLowerCase();
+    if (normalized === "public") {
+        return "none";
+    }
+    if (normalized === "private" || normalized === "internal") {
+        return PACKAGE_QUOTA_RISK_PRIVATE_STORAGE;
+    }
+    return "unknown";
+}
+function parseMetadataResponse(packageName, endpoint, owner, response, versionNames) {
+    try {
+        const metadata = JSON.parse(response.body);
+        const repository = objectField(metadata, "repository");
+        const name = stringField(metadata, "name") ?? packageName;
+        return {
+            detail: statusDetail(response),
+            endpoint,
+            name,
+            packageType: stringField(metadata, "package_type"),
+            quotaRisk: packageQuotaRisk(stringField(metadata, "visibility")),
+            repository: stringField(repository, "full_name"),
+            repositoryUrl: stringField(repository, "html_url"),
+            settingsUrl: packageSettingsUrl(endpoint, owner, name),
+            status: "ok",
+            url: stringField(metadata, "html_url"),
+            versionCount: numberField(metadata, "version_count"),
+            versionNames,
+            visibility: stringField(metadata, "visibility"),
+        };
+    }
+    catch (error) {
+        return {
+            detail: error instanceof Error ? error.message : String(error),
+            endpoint,
+            name: packageName,
+            status: "failed",
+        };
+    }
+}
+function parsePackageVersionNames(response) {
+    if (!responseSucceeded(response)) {
+        return undefined;
+    }
+    try {
+        const versions = JSON.parse(response.body);
+        if (!Array.isArray(versions)) {
+            return undefined;
+        }
+        return versions.flatMap((version) => {
+            if (!version || typeof version !== "object") {
+                return [];
+            }
+            const name = stringField(version, "name");
+            return name ? [name] : [];
+        });
+    }
+    catch {
+        return undefined;
+    }
+}
+async function requestPackageMetadataDefault(probe, timeoutMilliseconds = DEFAULT_TIMEOUT_MILLISECONDS) {
+    return await new Promise((resolve, reject) => {
+        const request = (0,external_node_https_.request)(new external_node_url_.URL(probe.url), {
+            headers: {
+                Accept: "application/vnd.github+json",
+                "User-Agent": "vcpkg-github-cache-action",
+                ...probe.headers,
+            },
+            method: "GET",
+        }, (response) => {
+            let body = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+                body += chunk;
+            });
+            response.on("end", () => {
+                resolve({
+                    body,
+                    statusCode: response.statusCode,
+                    statusMessage: response.statusMessage,
+                });
+            });
+        });
+        request.setTimeout(timeoutMilliseconds, () => {
+            request.destroy(new Error(`HTTP probe timed out after ${timeoutMilliseconds} ms`));
+        });
+        request.on("error", reject);
+        request.end();
+    });
+}
+async function queryPackageMetadata(packageName, options, request) {
+    let missingResult;
+    for (const endpoint of OWNER_ENDPOINTS) {
+        try {
+            const response = await request({
+                headers: {
+                    Authorization: `Bearer ${options.token}`,
+                },
+                url: packageMetadataUrl(options.apiUrl ?? DEFAULT_API_URL, endpoint, options.feedOwner, packageName),
+            });
+            if (responseSucceeded(response)) {
+                const versionResponse = await request({
+                    headers: {
+                        Authorization: `Bearer ${options.token}`,
+                    },
+                    url: packageVersionsUrl(options.apiUrl ?? DEFAULT_API_URL, endpoint, options.feedOwner, packageName),
+                });
+                return parseMetadataResponse(packageName, endpoint, options.feedOwner, response, parsePackageVersionNames(versionResponse));
+            }
+            const result = {
+                detail: statusDetail(response),
+                endpoint,
+                name: packageName,
+                status: responseMissing(response) ? "missing" : "failed",
+            };
+            if (!responseMissing(response)) {
+                return result;
+            }
+            missingResult = result;
+        }
+        catch (error) {
+            return {
+                detail: error instanceof Error ? error.message : String(error),
+                endpoint,
+                name: packageName,
+                status: "failed",
+            };
+        }
+    }
+    return (missingResult ?? {
+        detail: "package metadata not found",
+        name: packageName,
+        status: "missing",
+    });
+}
+async function runPackageMetadataProbe(options) {
+    const limit = options.maxPackages ?? DEFAULT_LIMIT;
+    const packageIds = boundedPackageIds(options.packageIdentities, limit);
+    const request = options.request ??
+        ((probe) => requestPackageMetadataDefault(probe, options.timeoutMilliseconds));
+    const results = await Promise.all(packageIds.map((packageName) => queryPackageMetadata(packageName, options, request)));
+    return {
+        limit,
+        owner: options.feedOwner,
+        probedPackageIds: packageIds.length,
+        requestedPackageIds: uniquePackageIds(options.packageIdentities).length,
+        results,
+    };
+}
+function packageMetadataQuotaRiskCount(probe) {
+    return (probe?.results ?? []).filter((result) => result.quotaRisk === PACKAGE_QUOTA_RISK_PRIVATE_STORAGE).length;
+}
+function packageVersionExists(result, abiHash) {
+    if (!abiHash) {
+        return false;
+    }
+    const suffix = `-vcpkg${abiHash.toLowerCase()}`;
+    return (result?.versionNames ?? []).some((version) => version.toLowerCase() === suffix.slice(1) ||
+        version.toLowerCase().endsWith(suffix));
+}
+function optional(value) {
+    return value && value.length > 0 ? value : "unknown";
+}
+function formatResult(result) {
+    return [
+        `package: ${result.name}`,
+        `status: ${result.status}`,
+        `detail: ${result.detail}`,
+        `endpoint: ${optional(result.endpoint)}`,
+        `type: ${optional(result.packageType)}`,
+        `versions: ${result.versionCount?.toString() ?? "unknown"}`,
+        `version names: ${result.versionNames?.join(", ") || "unknown"}`,
+        `visibility: ${optional(result.visibility)}`,
+        `quota risk: ${optional(result.quotaRisk)}`,
+        `repository: ${optional(result.repository)}`,
+        `repository url: ${optional(result.repositoryUrl)}`,
+        `settings url: ${optional(result.settingsUrl)}`,
+        `url: ${optional(result.url)}`,
+    ];
+}
+function formatPackageMetadataProbe(probe) {
+    if (!probe) {
+        return "package metadata probe not supplied\n";
+    }
+    const output = [
+        `owner: ${probe.owner}`,
+        `requested package ids: ${probe.requestedPackageIds}`,
+        `probed package ids: ${probe.probedPackageIds}`,
+        `limit: ${probe.limit}`,
+        "",
+    ];
+    for (const result of probe.results) {
+        output.push(...formatResult(result), "");
+    }
+    return `${output.join("\n")}\n`;
+}
+
 ;// CONCATENATED MODULE: ./src/shared/build-miss-report.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Copyright 2026 Richard Thomson
  */
+
 
 
 const build_miss_report_COLUMNS = [
@@ -141422,14 +141718,25 @@ function uploadStatusByPackageId(buildLogFacts) {
         value.status,
     ]));
 }
+function packageAbiHashByPackageId(buildLogFacts) {
+    return new Map(buildLogFacts.packageAbiHashes.map((value) => [
+        value.packageId,
+        value.abiHash,
+    ]));
+}
 function deniedPackageIds(buildLogFacts) {
     return new Set(buildLogFacts.writeDeniedPackages.map((value) => value.packageId));
 }
-function uploadStatus(packageId, uploads, deniedPackages) {
+function uploadStatus(packageId, uploads, deniedPackages, metadata, abiHashes) {
     if (deniedPackages.has(packageId)) {
         return "failed";
     }
-    return uploads.get(packageId) ?? "unknown";
+    const status = uploads.get(packageId) ?? "unknown";
+    if (status === "failed" &&
+        packageVersionExists(metadata.get(packageId), abiHashes.get(packageId))) {
+        return "already present";
+    }
+    return status;
 }
 function packageIdentity(packageSpec) {
     const id = packageSpecToNugetPackageId(packageSpec);
@@ -141452,6 +141759,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
     const handleTimes = buildTimeByPackageId(buildLogFacts);
     const metadata = packageMetadataResults(packageMetadata);
     const uploads = uploadStatusByPackageId(buildLogFacts);
+    const abiHashes = packageAbiHashByPackageId(buildLogFacts);
     const deniedPackages = deniedPackageIds(buildLogFacts);
     return buildLogFacts.builtPackages.map((packageSpec) => {
         const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
@@ -141461,7 +141769,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
             packageId,
             packageSettingsUrl: result?.settingsUrl,
             packageSpec,
-            uploadStatus: uploadStatus(packageId, uploads, deniedPackages),
+            uploadStatus: uploadStatus(packageId, uploads, deniedPackages, metadata, abiHashes),
             version: packageSpecVersion(packageSpec) ?? "unknown",
         };
     });
@@ -141501,227 +141809,6 @@ function buildBinarySources(feedUrl, access) {
 }
 function buildDisabledBinarySources() {
     return "clear";
-}
-
-;// CONCATENATED MODULE: ./src/shared/package-metadata.ts
-/*
- * SPDX-License-Identifier: GPL-3.0-only
- *
- * Copyright 2026 Richard Thomson
- */
-
-
-const DEFAULT_API_URL = "https://api.github.com";
-const DEFAULT_LIMIT = 20;
-const DEFAULT_TIMEOUT_MILLISECONDS = 10000;
-const OWNER_ENDPOINTS = ["users", "orgs"];
-const PACKAGE_QUOTA_RISK_PRIVATE_STORAGE = "private package storage";
-function uniquePackageIds(packageIdentities) {
-    return [
-        ...new Set(packageIdentities
-            .map((identity) => identity.id.trim())
-            .filter((identity) => identity.length > 0)),
-    ];
-}
-function boundedPackageIds(packageIdentities, limit) {
-    return uniquePackageIds(packageIdentities).slice(0, limit);
-}
-function trimApiUrl(apiUrl) {
-    return apiUrl.replace(/\/+$/g, "");
-}
-function packageMetadataUrl(apiUrl, endpoint, owner, packageName) {
-    return `${trimApiUrl(apiUrl)}/${endpoint}/${encodeURIComponent(owner)}/packages/nuget/${encodeURIComponent(packageName)}`;
-}
-function packageSettingsUrl(endpoint, owner, packageName) {
-    return `https://github.com/${endpoint}/${encodeURIComponent(owner)}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
-}
-function statusDetail(response) {
-    const statusCode = response.statusCode ?? 0;
-    const statusMessage = response.statusMessage ?? "";
-    return `HTTP ${statusCode}${statusMessage ? ` ${statusMessage}` : ""}`;
-}
-function responseSucceeded(response) {
-    const statusCode = response.statusCode ?? 0;
-    return statusCode >= 200 && statusCode < 300;
-}
-function responseMissing(response) {
-    return response.statusCode === 404;
-}
-function stringField(object, key) {
-    const value = object?.[key];
-    return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-function numberField(object, key) {
-    const value = object?.[key];
-    return typeof value === "number" && Number.isFinite(value)
-        ? value
-        : undefined;
-}
-function objectField(object, key) {
-    const value = object?.[key];
-    return value && typeof value === "object" && !Array.isArray(value)
-        ? value
-        : undefined;
-}
-function packageQuotaRisk(visibility) {
-    const normalized = visibility?.trim().toLowerCase();
-    if (normalized === "public") {
-        return "none";
-    }
-    if (normalized === "private" || normalized === "internal") {
-        return PACKAGE_QUOTA_RISK_PRIVATE_STORAGE;
-    }
-    return "unknown";
-}
-function parseMetadataResponse(packageName, endpoint, owner, response) {
-    try {
-        const metadata = JSON.parse(response.body);
-        const repository = objectField(metadata, "repository");
-        const name = stringField(metadata, "name") ?? packageName;
-        return {
-            detail: statusDetail(response),
-            endpoint,
-            name,
-            packageType: stringField(metadata, "package_type"),
-            quotaRisk: packageQuotaRisk(stringField(metadata, "visibility")),
-            repository: stringField(repository, "full_name"),
-            repositoryUrl: stringField(repository, "html_url"),
-            settingsUrl: packageSettingsUrl(endpoint, owner, name),
-            status: "ok",
-            url: stringField(metadata, "html_url"),
-            versionCount: numberField(metadata, "version_count"),
-            visibility: stringField(metadata, "visibility"),
-        };
-    }
-    catch (error) {
-        return {
-            detail: error instanceof Error ? error.message : String(error),
-            endpoint,
-            name: packageName,
-            status: "failed",
-        };
-    }
-}
-async function requestPackageMetadataDefault(probe, timeoutMilliseconds = DEFAULT_TIMEOUT_MILLISECONDS) {
-    return await new Promise((resolve, reject) => {
-        const request = (0,external_node_https_.request)(new external_node_url_.URL(probe.url), {
-            headers: {
-                Accept: "application/vnd.github+json",
-                "User-Agent": "vcpkg-github-cache-action",
-                ...probe.headers,
-            },
-            method: "GET",
-        }, (response) => {
-            let body = "";
-            response.setEncoding("utf8");
-            response.on("data", (chunk) => {
-                body += chunk;
-            });
-            response.on("end", () => {
-                resolve({
-                    body,
-                    statusCode: response.statusCode,
-                    statusMessage: response.statusMessage,
-                });
-            });
-        });
-        request.setTimeout(timeoutMilliseconds, () => {
-            request.destroy(new Error(`HTTP probe timed out after ${timeoutMilliseconds} ms`));
-        });
-        request.on("error", reject);
-        request.end();
-    });
-}
-async function queryPackageMetadata(packageName, options, request) {
-    let missingResult;
-    for (const endpoint of OWNER_ENDPOINTS) {
-        try {
-            const response = await request({
-                headers: {
-                    Authorization: `Bearer ${options.token}`,
-                },
-                url: packageMetadataUrl(options.apiUrl ?? DEFAULT_API_URL, endpoint, options.feedOwner, packageName),
-            });
-            if (responseSucceeded(response)) {
-                return parseMetadataResponse(packageName, endpoint, options.feedOwner, response);
-            }
-            const result = {
-                detail: statusDetail(response),
-                endpoint,
-                name: packageName,
-                status: responseMissing(response) ? "missing" : "failed",
-            };
-            if (!responseMissing(response)) {
-                return result;
-            }
-            missingResult = result;
-        }
-        catch (error) {
-            return {
-                detail: error instanceof Error ? error.message : String(error),
-                endpoint,
-                name: packageName,
-                status: "failed",
-            };
-        }
-    }
-    return (missingResult ?? {
-        detail: "package metadata not found",
-        name: packageName,
-        status: "missing",
-    });
-}
-async function runPackageMetadataProbe(options) {
-    const limit = options.maxPackages ?? DEFAULT_LIMIT;
-    const packageIds = boundedPackageIds(options.packageIdentities, limit);
-    const request = options.request ??
-        ((probe) => requestPackageMetadataDefault(probe, options.timeoutMilliseconds));
-    const results = await Promise.all(packageIds.map((packageName) => queryPackageMetadata(packageName, options, request)));
-    return {
-        limit,
-        owner: options.feedOwner,
-        probedPackageIds: packageIds.length,
-        requestedPackageIds: uniquePackageIds(options.packageIdentities).length,
-        results,
-    };
-}
-function packageMetadataQuotaRiskCount(probe) {
-    return (probe?.results ?? []).filter((result) => result.quotaRisk === PACKAGE_QUOTA_RISK_PRIVATE_STORAGE).length;
-}
-function optional(value) {
-    return value && value.length > 0 ? value : "unknown";
-}
-function formatResult(result) {
-    return [
-        `package: ${result.name}`,
-        `status: ${result.status}`,
-        `detail: ${result.detail}`,
-        `endpoint: ${optional(result.endpoint)}`,
-        `type: ${optional(result.packageType)}`,
-        `versions: ${result.versionCount?.toString() ?? "unknown"}`,
-        `visibility: ${optional(result.visibility)}`,
-        `quota risk: ${optional(result.quotaRisk)}`,
-        `repository: ${optional(result.repository)}`,
-        `repository url: ${optional(result.repositoryUrl)}`,
-        `settings url: ${optional(result.settingsUrl)}`,
-        `url: ${optional(result.url)}`,
-    ];
-}
-function formatPackageMetadataProbe(probe) {
-    if (!probe) {
-        return "package metadata probe not supplied\n";
-    }
-    const output = [
-        `owner: ${probe.owner}`,
-        `requested package ids: ${probe.requestedPackageIds}`,
-        `probed package ids: ${probe.probedPackageIds}`,
-        `limit: ${probe.limit}`,
-        "",
-    ];
-    for (const result of probe.results) {
-        output.push(...formatResult(result), "");
-    }
-    return `${output.join("\n")}\n`;
 }
 
 ;// CONCATENATED MODULE: ./src/shared/diagnosis.ts
@@ -141771,18 +141858,44 @@ function textQuotaFailure(value) {
 function successfulUploads(buildLogFacts) {
     return count(buildLogFacts?.uploadedCount);
 }
-function uploadFailure(buildLogFacts) {
+function diagnosis_packageMetadataResults(packageMetadata) {
+    return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
+}
+function packageAbiHashes(buildLogFacts) {
+    return new Map((buildLogFacts?.packageAbiHashes ?? []).map((value) => [
+        value.packageId,
+        value.abiHash,
+    ]));
+}
+function packageAlreadyPresent(packageId, buildLogFacts, packageMetadata) {
+    return packageVersionExists(diagnosis_packageMetadataResults(packageMetadata).get(packageId), packageAbiHashes(buildLogFacts).get(packageId));
+}
+function alreadyPresentUploads(buildLogFacts, packageMetadata) {
+    return (buildLogFacts?.packageUploadStatuses ?? []).filter((value) => value.status === "failed" &&
+        packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata)).length;
+}
+function failedUploads(buildLogFacts, packageMetadata) {
+    return (buildLogFacts?.packageUploadStatuses ?? []).filter((value) => value.status === "failed" &&
+        !packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata)).length;
+}
+function uploadFailure(input) {
+    const buildLogFacts = input.buildLogFacts;
     if (!buildLogFacts) {
         return false;
+    }
+    if (buildLogFacts.packageUploadStatuses.length) {
+        return failedUploads(buildLogFacts, input.packageMetadata) > 0;
     }
     const uploads = successfulUploads(buildLogFacts);
     return (buildLogFacts.zeroCacheSubmissions > 0 ||
         (buildLogFacts.uploadsAttempted > 0 &&
             uploads < buildLogFacts.uploadsAttempted));
 }
-function uploadFailureEvidence(buildLogFacts, uploadedCount) {
+function uploadFailureEvidence(buildLogFacts, packageMetadata, uploadedCount) {
+    const alreadyPresent = alreadyPresentUploads(buildLogFacts, packageMetadata);
     return [
         `upload failure ${uploadedCount}/${buildLogFacts?.uploadsAttempted ?? 0}`,
+        alreadyPresent ? `already present ${alreadyPresent}` : "",
         `zero-cache submissions ${buildLogFacts?.zeroCacheSubmissions ?? 0}`,
         buildLogFacts?.authMessages.length
             ? `auth messages ${buildLogFacts.authMessages.length}`
@@ -141809,7 +141922,8 @@ function classifyBuildLog(input) {
     const restoredCount = effectiveRestoredCount(input);
     const builtCount = count(input.buildLogFacts?.builtCount);
     const uploadedCount = successfulUploads(input.buildLogFacts);
-    const failedUploads = uploadFailure(input.buildLogFacts);
+    const alreadyPresent = alreadyPresentUploads(input.buildLogFacts, input.packageMetadata);
+    const failedUploads = uploadFailure(input);
     const baseEvidence = [
         `token path ${tokenDetail(input.tokenKind)}`,
         requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
@@ -141839,25 +141953,27 @@ function classifyBuildLog(input) {
         if (failedUploads) {
             return result("partial-hit", "upload-failure", [
                 ...baseEvidence,
-                ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+                ...uploadFailureEvidence(input.buildLogFacts, input.packageMetadata, uploadedCount),
             ]);
         }
         return result("partial-hit", "cache-miss", [
             ...baseEvidence,
             uploadedCount > 0 ? `upload ${uploadedCount}` : "upload unknown",
+            alreadyPresent ? `already present ${alreadyPresent}` : "",
         ]);
     }
     if (requestedCount > 0 && restoredCount === 0 && builtCount > 0) {
         if (failedUploads) {
             return result("upload-failure", "upload-failure", [
                 ...baseEvidence,
-                ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+                ...uploadFailureEvidence(input.buildLogFacts, input.packageMetadata, uploadedCount),
             ]);
         }
         if (uploadedCount > 0) {
             return result("cold-seed", "cache-miss", [
                 ...baseEvidence,
                 `upload ${uploadedCount}`,
+                alreadyPresent ? `already present ${alreadyPresent}` : "",
             ]);
         }
         return result("cache-disabled", "cache-miss", baseEvidence);
@@ -141865,7 +141981,7 @@ function classifyBuildLog(input) {
     if (failedUploads) {
         return result("upload-failure", "upload-failure", [
             ...baseEvidence,
-            ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+            ...uploadFailureEvidence(input.buildLogFacts, input.packageMetadata, uploadedCount),
         ]);
     }
     return result("unknown", "", baseEvidence);

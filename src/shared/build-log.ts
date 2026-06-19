@@ -11,6 +11,7 @@ export interface BuildLogFacts {
   readonly failedHttpStatuses: readonly string[];
   readonly feeds: readonly string[];
   readonly nugetConfigPaths: readonly string[];
+  readonly packageAbiHashes: readonly PackageAbiHash[];
   readonly packageHandleTimes: readonly PackageHandleTime[];
   readonly packageUploadStatuses: readonly PackageUploadStatus[];
   readonly quotaMessages: readonly string[];
@@ -35,7 +36,17 @@ export interface PackageHandleTime {
   readonly packageSpec: string;
 }
 
-export type PackageUploadState = "failed" | "succeeded" | "unknown";
+export interface PackageAbiHash {
+  readonly abiHash: string;
+  readonly packageId: string;
+  readonly packageSpec: string;
+}
+
+export type PackageUploadState =
+  | "already present"
+  | "failed"
+  | "succeeded"
+  | "unknown";
 
 export interface PackageUploadStatus {
   readonly packageId: string;
@@ -227,6 +238,27 @@ function packageHandleTime(line: string): PackageHandleTime | undefined {
   };
 }
 
+function packageAbiHash(line: string): PackageAbiHash | undefined {
+  const match = /^(.+?)\s+package ABI:\s+([0-9a-f]{64})$/i.exec(line.trim());
+
+  if (!match) {
+    return undefined;
+  }
+
+  const packageSpec = match[1];
+  const packageId = packageSpecToNugetPackageId(packageSpec);
+
+  if (!packageId) {
+    return undefined;
+  }
+
+  return {
+    abiHash: match[2].toLowerCase(),
+    packageId,
+    packageSpec,
+  };
+}
+
 function nugetConfigPath(line: string): string | undefined {
   const trimmed = line.trim();
 
@@ -278,8 +310,25 @@ function uniquePackageHandleTimes(
   return output;
 }
 
+function uniquePackageAbiHashes(
+  values: readonly PackageAbiHash[],
+): readonly PackageAbiHash[] {
+  const seen = new Set<string>();
+  const output: PackageAbiHash[] = [];
+
+  for (const value of values) {
+    if (!seen.has(value.packageId)) {
+      seen.add(value.packageId);
+      output.push(value);
+    }
+  }
+
+  return output;
+}
+
 const PACKAGE_UPLOAD_STATE_RANK: Readonly<Record<PackageUploadState, number>> =
   {
+    "already present": 1,
     failed: 1,
     succeeded: 2,
     unknown: 0,
@@ -322,6 +371,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   const quotaMessages: string[] = [];
   const feeds: string[] = [];
   const nugetConfigPaths: string[] = [];
+  const packageAbiHashes: PackageAbiHash[] = [];
   const packageHandleTimes: PackageHandleTime[] = [];
   const packageUploadStatuses = new Map<string, PackageUploadStatus>();
   const writeDeniedPackages: WriteDeniedPackage[] = [];
@@ -466,6 +516,12 @@ export function parseBuildLog(content: string): BuildLogFacts {
       packageHandleTimes.push(handleTime);
     }
 
+    const abiHash = packageAbiHash(line);
+
+    if (abiHash) {
+      packageAbiHashes.push(abiHash);
+    }
+
     if (status === "403" && failedUpload) {
       writeDeniedPackages.push(failedUpload);
     }
@@ -494,6 +550,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     failedHttpStatuses: unique(failedHttpStatuses),
     feeds: unique(feeds),
     nugetConfigPaths: unique(nugetConfigPaths),
+    packageAbiHashes: uniquePackageAbiHashes(packageAbiHashes),
     packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
     packageUploadStatuses: [...packageUploadStatuses.values()],
     quotaMessages: unique(quotaMessages),

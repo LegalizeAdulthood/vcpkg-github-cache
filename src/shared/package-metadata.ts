@@ -53,6 +53,7 @@ export interface PackageMetadataResult {
   readonly status: PackageMetadataStatus;
   readonly url?: string;
   readonly versionCount?: number;
+  readonly versionNames?: readonly string[];
   readonly visibility?: string;
 }
 
@@ -108,6 +109,20 @@ export function packageSettingsUrl(
   return `https://github.com/${endpoint}/${encodeURIComponent(
     owner,
   )}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
+}
+
+export function packageVersionsUrl(
+  apiUrl: string,
+  endpoint: PackageOwnerEndpoint,
+  owner: string,
+  packageName: string,
+): string {
+  return `${packageMetadataUrl(
+    apiUrl,
+    endpoint,
+    owner,
+    packageName,
+  )}/versions?per_page=100`;
 }
 
 function statusDetail(response: PackageMetadataHttpResponse): string {
@@ -176,6 +191,7 @@ function parseMetadataResponse(
   endpoint: PackageOwnerEndpoint,
   owner: string,
   response: PackageMetadataHttpResponse,
+  versionNames: readonly string[] | undefined,
 ): PackageMetadataResult {
   try {
     const metadata = JSON.parse(response.body) as Readonly<
@@ -196,6 +212,7 @@ function parseMetadataResponse(
       status: "ok",
       url: stringField(metadata, "html_url"),
       versionCount: numberField(metadata, "version_count"),
+      versionNames,
       visibility: stringField(metadata, "visibility"),
     };
   } catch (error) {
@@ -205,6 +222,37 @@ function parseMetadataResponse(
       name: packageName,
       status: "failed",
     };
+  }
+}
+
+function parsePackageVersionNames(
+  response: PackageMetadataHttpResponse,
+): readonly string[] | undefined {
+  if (!responseSucceeded(response)) {
+    return undefined;
+  }
+
+  try {
+    const versions = JSON.parse(response.body) as unknown;
+
+    if (!Array.isArray(versions)) {
+      return undefined;
+    }
+
+    return versions.flatMap((version) => {
+      if (!version || typeof version !== "object") {
+        return [];
+      }
+
+      const name = stringField(
+        version as Readonly<Record<string, unknown>>,
+        "name",
+      );
+
+      return name ? [name] : [];
+    });
+  } catch {
+    return undefined;
   }
 }
 
@@ -272,11 +320,24 @@ async function queryPackageMetadata(
       });
 
       if (responseSucceeded(response)) {
+        const versionResponse = await request({
+          headers: {
+            Authorization: `Bearer ${options.token}`,
+          },
+          url: packageVersionsUrl(
+            options.apiUrl ?? DEFAULT_API_URL,
+            endpoint,
+            options.feedOwner,
+            packageName,
+          ),
+        });
+
         return parseMetadataResponse(
           packageName,
           endpoint,
           options.feedOwner,
           response,
+          parsePackageVersionNames(versionResponse),
         );
       }
 
@@ -343,6 +404,23 @@ export function packageMetadataQuotaRiskCount(
   ).length;
 }
 
+export function packageVersionExists(
+  result: PackageMetadataResult | undefined,
+  abiHash: string | undefined,
+): boolean {
+  if (!abiHash) {
+    return false;
+  }
+
+  const suffix = `-vcpkg${abiHash.toLowerCase()}`;
+
+  return (result?.versionNames ?? []).some(
+    (version) =>
+      version.toLowerCase() === suffix.slice(1) ||
+      version.toLowerCase().endsWith(suffix),
+  );
+}
+
 function optional(value: string | undefined): string {
   return value && value.length > 0 ? value : "unknown";
 }
@@ -355,6 +433,7 @@ function formatResult(result: PackageMetadataResult): readonly string[] {
     `endpoint: ${optional(result.endpoint)}`,
     `type: ${optional(result.packageType)}`,
     `versions: ${result.versionCount?.toString() ?? "unknown"}`,
+    `version names: ${result.versionNames?.join(", ") || "unknown"}`,
     `visibility: ${optional(result.visibility)}`,
     `quota risk: ${optional(result.quotaRisk)}`,
     `repository: ${optional(result.repository)}`,

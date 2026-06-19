@@ -10,6 +10,8 @@ import { TokenKind } from "./inputs";
 import {
   packageMetadataQuotaRiskCount,
   PackageMetadataProbe,
+  PackageMetadataResult,
+  packageVersionExists,
 } from "./package-metadata";
 import { RestoreProbe } from "./restore-probe";
 
@@ -117,9 +119,67 @@ function successfulUploads(buildLogFacts: BuildLogFacts | undefined): number {
   return count(buildLogFacts?.uploadedCount);
 }
 
-function uploadFailure(buildLogFacts: BuildLogFacts | undefined): boolean {
+function packageMetadataResults(
+  packageMetadata: PackageMetadataProbe | undefined,
+): ReadonlyMap<string, PackageMetadataResult> {
+  return new Map(
+    (packageMetadata?.results ?? []).map((value) => [value.name, value]),
+  );
+}
+
+function packageAbiHashes(
+  buildLogFacts: BuildLogFacts | undefined,
+): ReadonlyMap<string, string> {
+  return new Map(
+    (buildLogFacts?.packageAbiHashes ?? []).map((value) => [
+      value.packageId,
+      value.abiHash,
+    ]),
+  );
+}
+
+function packageAlreadyPresent(
+  packageId: string,
+  buildLogFacts: BuildLogFacts | undefined,
+  packageMetadata: PackageMetadataProbe | undefined,
+): boolean {
+  return packageVersionExists(
+    packageMetadataResults(packageMetadata).get(packageId),
+    packageAbiHashes(buildLogFacts).get(packageId),
+  );
+}
+
+function alreadyPresentUploads(
+  buildLogFacts: BuildLogFacts | undefined,
+  packageMetadata: PackageMetadataProbe | undefined,
+): number {
+  return (buildLogFacts?.packageUploadStatuses ?? []).filter(
+    (value) =>
+      value.status === "failed" &&
+      packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata),
+  ).length;
+}
+
+function failedUploads(
+  buildLogFacts: BuildLogFacts | undefined,
+  packageMetadata: PackageMetadataProbe | undefined,
+): number {
+  return (buildLogFacts?.packageUploadStatuses ?? []).filter(
+    (value) =>
+      value.status === "failed" &&
+      !packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata),
+  ).length;
+}
+
+function uploadFailure(input: CacheDiagnosisInput): boolean {
+  const buildLogFacts = input.buildLogFacts;
+
   if (!buildLogFacts) {
     return false;
+  }
+
+  if (buildLogFacts.packageUploadStatuses.length) {
+    return failedUploads(buildLogFacts, input.packageMetadata) > 0;
   }
 
   const uploads = successfulUploads(buildLogFacts);
@@ -133,10 +193,14 @@ function uploadFailure(buildLogFacts: BuildLogFacts | undefined): boolean {
 
 function uploadFailureEvidence(
   buildLogFacts: BuildLogFacts | undefined,
+  packageMetadata: PackageMetadataProbe | undefined,
   uploadedCount: number,
 ): string[] {
+  const alreadyPresent = alreadyPresentUploads(buildLogFacts, packageMetadata);
+
   return [
     `upload failure ${uploadedCount}/${buildLogFacts?.uploadsAttempted ?? 0}`,
+    alreadyPresent ? `already present ${alreadyPresent}` : "",
     `zero-cache submissions ${buildLogFacts?.zeroCacheSubmissions ?? 0}`,
     buildLogFacts?.authMessages.length
       ? `auth messages ${buildLogFacts.authMessages.length}`
@@ -172,7 +236,11 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   const restoredCount = effectiveRestoredCount(input);
   const builtCount = count(input.buildLogFacts?.builtCount);
   const uploadedCount = successfulUploads(input.buildLogFacts);
-  const failedUploads = uploadFailure(input.buildLogFacts);
+  const alreadyPresent = alreadyPresentUploads(
+    input.buildLogFacts,
+    input.packageMetadata,
+  );
+  const failedUploads = uploadFailure(input);
   const baseEvidence = [
     `token path ${tokenDetail(input.tokenKind)}`,
     requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
@@ -209,13 +277,18 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
     if (failedUploads) {
       return result("partial-hit", "upload-failure", [
         ...baseEvidence,
-        ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+        ...uploadFailureEvidence(
+          input.buildLogFacts,
+          input.packageMetadata,
+          uploadedCount,
+        ),
       ]);
     }
 
     return result("partial-hit", "cache-miss", [
       ...baseEvidence,
       uploadedCount > 0 ? `upload ${uploadedCount}` : "upload unknown",
+      alreadyPresent ? `already present ${alreadyPresent}` : "",
     ]);
   }
 
@@ -223,7 +296,11 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
     if (failedUploads) {
       return result("upload-failure", "upload-failure", [
         ...baseEvidence,
-        ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+        ...uploadFailureEvidence(
+          input.buildLogFacts,
+          input.packageMetadata,
+          uploadedCount,
+        ),
       ]);
     }
 
@@ -231,6 +308,7 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
       return result("cold-seed", "cache-miss", [
         ...baseEvidence,
         `upload ${uploadedCount}`,
+        alreadyPresent ? `already present ${alreadyPresent}` : "",
       ]);
     }
 
@@ -240,7 +318,11 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   if (failedUploads) {
     return result("upload-failure", "upload-failure", [
       ...baseEvidence,
-      ...uploadFailureEvidence(input.buildLogFacts, uploadedCount),
+      ...uploadFailureEvidence(
+        input.buildLogFacts,
+        input.packageMetadata,
+        uploadedCount,
+      ),
     ]);
   }
 
