@@ -134,7 +134,12 @@ describe("setup script emission", () => {
     expect(script).toContain("ensure_openbsd_libcurl_compat");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
     expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
-    expect(script).toContain("Patched OpenBSD vcpkg Ninja handling");
+    expect(script).toContain("Patched OpenBSD vcpkg core Ninja handling");
+    expect(script).toContain("ports/vcpkg-cmake/vcpkg_cmake_configure.cmake");
+    expect(script).toContain(
+      "find_program(NINJA NAMES ninja ninja-build REQUIRED)",
+    );
+    expect(script).toContain("Patched OpenBSD vcpkg-cmake Ninja handling");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");

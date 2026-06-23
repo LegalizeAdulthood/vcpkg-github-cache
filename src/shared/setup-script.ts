@@ -191,47 +191,113 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line("patch_openbsd_vcpkg_cmake_ninja() {");
   if (openBsdTarget) {
     script.line(
-      '  cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_configure_cmake.cmake"',
+      '  core_cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_configure_cmake.cmake"',
     );
-    script.line('  if [ ! -f "${cmake_file}" ]; then');
+    script.line('  if [ -f "${core_cmake_file}" ]; then');
+    script.line(
+      '    if grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${core_cmake_file}"; then',
+    );
+    script.command("      printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("OpenBSD vcpkg core Ninja patch already applied"),
+    ]);
+    script.line("    else");
+    script.line(
+      '      tmp_core_cmake_file="${core_cmake_file}.vcpkg-github-cache.tmp"',
+    );
+    script.line("      if ! awk '");
+    script.line(
+      '        /if\\("\\$\\{generator\\}" STREQUAL "Ninja" AND NOT DEFINED ENV\\{VCPKG_FORCE_SYSTEM_BINARIES\\}\\)/ {',
+    );
+    script.line('          sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")');
+    script.line("          patched = 1");
+    script.line("        }");
+    script.line("        { print }");
+    script.line("        END { if (!patched) exit 1 }");
+    script.line(
+      '      \' "${core_cmake_file}" > "${tmp_core_cmake_file}"; then',
+    );
+    script.line('        rm -f "${tmp_core_cmake_file}"');
+    script.command("        printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Unable to patch OpenBSD vcpkg core Ninja handling"),
+    ]);
+    script.line("        exit 1");
+    script.line("      fi");
+    script.line('      mv "${tmp_core_cmake_file}" "${core_cmake_file}"');
+    script.command("      printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Patched OpenBSD vcpkg core Ninja handling"),
+    ]);
+    script.line("  fi");
+    script.line("  else");
     script.command("    printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("OpenBSD vcpkg Ninja patch skipped: CMake helper missing"),
+      posixLiteral(
+        "OpenBSD vcpkg core Ninja patch skipped: CMake helper missing",
+      ),
     ]);
-    script.line("    return");
     script.line("  fi");
     script.line(
-      '  if grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${cmake_file}"; then',
+      '  port_cmake_file="${VCPKG_ROOT}/ports/vcpkg-cmake/vcpkg_cmake_configure.cmake"',
     );
-    script.command("    printf", [
-      posixLiteral("%s\\n"),
-      posixLiteral("OpenBSD vcpkg Ninja patch already applied"),
-    ]);
-    script.line("    return");
-    script.line("  fi");
-    script.line('  tmp_cmake_file="${cmake_file}.vcpkg-github-cache.tmp"');
-    script.line("  if ! awk '");
+    script.line('  if [ -f "${port_cmake_file}" ]; then');
     script.line(
-      '    /if\\("\\$\\{generator\\}" STREQUAL "Ninja" AND NOT DEFINED ENV\\{VCPKG_FORCE_SYSTEM_BINARIES\\}\\)/ {',
+      '    if grep -q "find_program(NINJA NAMES ninja ninja-build REQUIRED)" "${port_cmake_file}"; then',
     );
-    script.line('      sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")');
-    script.line("      patched = 1");
-    script.line("    }");
-    script.line("    { print }");
-    script.line("    END { if (!patched) exit 1 }");
-    script.line('  \' "${cmake_file}" > "${tmp_cmake_file}"; then');
-    script.line('    rm -f "${tmp_cmake_file}"');
+    script.command("      printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("OpenBSD vcpkg-cmake Ninja patch already applied"),
+    ]);
+    script.line("    else");
+    script.line(
+      '      tmp_port_cmake_file="${port_cmake_file}.vcpkg-github-cache.tmp"',
+    );
+    script.line("      if ! awk '");
+    script.line(
+      "        /^[[:space:]]*vcpkg_find_acquire_program\\(NINJA\\)[[:space:]]*$/ {",
+    );
+    script.line(
+      '          indent = substr($0, 1, index($0, "vcpkg_find_acquire_program") - 1)',
+    );
+    script.line('          print indent "if(VCPKG_HOST_IS_OPENBSD)"');
+    script.line(
+      '          print indent "    find_program(NINJA NAMES ninja ninja-build REQUIRED)"',
+    );
+    script.line('          print indent "else()"');
+    script.line(
+      '          print indent "    vcpkg_find_acquire_program(NINJA)"',
+    );
+    script.line('          print indent "endif()"');
+    script.line("          patched = 1");
+    script.line("          next");
+    script.line("        }");
+    script.line("        { print }");
+    script.line("        END { if (!patched) exit 1 }");
+    script.line(
+      '      \' "${port_cmake_file}" > "${tmp_port_cmake_file}"; then',
+    );
+    script.line('        rm -f "${tmp_port_cmake_file}"');
+    script.command("        printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Unable to patch OpenBSD vcpkg-cmake Ninja handling"),
+    ]);
+    script.line("        exit 1");
+    script.line("      fi");
+    script.line('      mv "${tmp_port_cmake_file}" "${port_cmake_file}"');
+    script.command("      printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Patched OpenBSD vcpkg-cmake Ninja handling"),
+    ]);
+    script.line("  fi");
+    script.line("  else");
     script.command("    printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("Unable to patch OpenBSD vcpkg Ninja handling"),
+      posixLiteral(
+        "OpenBSD vcpkg-cmake Ninja patch skipped: port helper missing",
+      ),
     ]);
-    script.line("    exit 1");
     script.line("  fi");
-    script.line('  mv "${tmp_cmake_file}" "${cmake_file}"');
-    script.command("  printf", [
-      posixLiteral("%s\\n"),
-      posixLiteral("Patched OpenBSD vcpkg Ninja handling"),
-    ]);
   } else {
     script.line("  :");
   }
