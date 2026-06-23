@@ -407,6 +407,14 @@ export function shouldFailDiagnosis(
 }
 
 export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
+  if (input.buildLogFacts) {
+    const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
+
+    if (diagnosis.cacheStatus !== "unknown") {
+      return diagnosis;
+    }
+  }
+
   if (
     input.liveProbes.vcpkgVersion.status === "failed" ||
     input.liveProbes.vcpkgNuget.status === "failed" ||
@@ -426,14 +434,6 @@ export function classifyCache(input: CacheDiagnosisInput): CacheDiagnosis {
       `token path ${tokenDetail(input.tokenKind)}`,
       `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
     ]);
-  }
-
-  if (input.buildLogFacts) {
-    const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
-
-    if (diagnosis.cacheStatus !== "unknown") {
-      return diagnosis;
-    }
   }
 
   if (

@@ -154,6 +154,45 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).toContain("restore 4/4");
   });
 
+  test("trusts a warm build log over host-side tooling failures", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: undefined,
+        builtPackages: [],
+        failedHttpStatuses: [],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageAbiHashes: [],
+        packageHandleTimes: [],
+        packageUploadStatuses: [],
+        quotaMessages: [],
+        requestedCount: 59,
+        restoredCount: 59,
+        restoredPackages: [],
+        submissionsStarted: 0,
+        uploadedCount: undefined,
+        uploadsAttempted: 0,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 0,
+      },
+      liveProbes: {
+        ...liveProbes(),
+        nugetSources: probe("skipped", "NuGet command unavailable"),
+        nugetVersion: probe("skipped", "NuGet command unavailable"),
+        vcpkgNuget: probe("failed", "Exec format error"),
+        vcpkgVersion: probe("failed", "Exec format error"),
+      },
+      requestedCount: 59,
+      restoreProbe: restoreProbe("skipped", "NuGet command unavailable"),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("warm-hit");
+    expect(diagnosis.failureKind).toBe("");
+    expect(diagnosis.diagnosis).toContain("restore 59/59");
+  });
+
   test("keeps partial hit status when only misses fail to upload", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {

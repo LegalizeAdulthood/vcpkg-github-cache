@@ -142039,6 +142039,12 @@ function shouldFailDiagnosis(diagnosis, policy) {
     return policy !== "never" && diagnosis.failureKind === policy;
 }
 function classifyCache(input) {
+    if (input.buildLogFacts) {
+        const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
+        if (diagnosis.cacheStatus !== "unknown") {
+            return diagnosis;
+        }
+    }
     if (input.liveProbes.vcpkgVersion.status === "failed" ||
         input.liveProbes.vcpkgNuget.status === "failed" ||
         input.liveProbes.nugetVersion.status === "failed" ||
@@ -142055,12 +142061,6 @@ function classifyCache(input) {
             `token path ${tokenDetail(input.tokenKind)}`,
             `feed basic auth ${input.liveProbes.feedBasicAuth.detail}`,
         ]);
-    }
-    if (input.buildLogFacts) {
-        const diagnosis = withPackageQuotaRisk(classifyBuildLog(input), input);
-        if (diagnosis.cacheStatus !== "unknown") {
-            return diagnosis;
-        }
     }
     if (textQuotaFailure(input.restoreProbe.result.output) ||
         textQuotaFailure(input.restoreProbe.result.detail)) {
@@ -142632,6 +142632,26 @@ function normalizeTokenKind(value) {
         return "pat";
     }
     throw new Error(`Unsupported token-kind: ${value}`);
+}
+function normalizeSetupExecutionMode(value) {
+    const normalized = (value ?? "run").trim().toLowerCase();
+    if (normalized === "" || normalized === "run") {
+        return "run";
+    }
+    if (normalized === "emit-script") {
+        return "emit-script";
+    }
+    throw new Error(`Unsupported execution-mode: ${value}`);
+}
+function normalizeSetupTargetOs(value) {
+    const normalized = (value ?? "current").trim().toLowerCase();
+    if (normalized === "" || normalized === "current") {
+        return "current";
+    }
+    if (normalized === "freebsd") {
+        return "freebsd";
+    }
+    throw new Error(`Unsupported target-os: ${value}`);
 }
 function ownerFromRepository(repository) {
     const [owner, name] = (repository ?? "").split("/");
