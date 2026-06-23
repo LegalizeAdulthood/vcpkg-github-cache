@@ -243,44 +243,38 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Emit binary source environment
-
-   Write `VCPKG_BINARY_SOURCES` to `setup.env` using the same value that run
-   mode would export.  Add tests proving the token is absent and the feed URL
-   and access mode are correct.
-
-2. Emit vcpkg bootstrap and NuGet fetch
+1. Emit vcpkg bootstrap and NuGet fetch
 
    Render POSIX commands that bootstrap vcpkg when requested and call
    `vcpkg fetch nuget` when NuGet installation is requested.  The script
    should derive the target-side NuGet command from the target-side vcpkg
    output, not from the Ubuntu host.
 
-3. Emit FreeBSD Mono setup
+2. Emit FreeBSD Mono setup
 
    For `target-os=freebsd`, render cache-owned Mono setup when
    `install-mono=true` and Mono is missing.  Use FreeBSD package management
    only for cache prerequisites.  Do not install project tools here.
 
-4. Emit NuGet source configuration
+3. Emit NuGet source configuration
 
    Render commands to add or update the GitHub Packages NuGet source and set
    the API key for the feed.  Use runtime environment variables for secrets.
    Keep source name, feed owner, username, and feed URL non-secret.
 
-5. Add setup summaries and diagnostics
+4. Add setup summaries and diagnostics
 
    Emit a compact step summary in script-emission mode.  Include the script
    path, environment path, target OS, feed URL, and binary source mode.  Do
    not claim target-side vcpkg or NuGet versions from the host action.
 
-6. Document FreeBSD VM use
+5. Document FreeBSD VM use
 
    Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
    `copyback: true`, `usesh: true`, setup script execution, `setup.env`
    dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
 
-7. Verify with a FreeBSD workflow
+6. Verify with a FreeBSD workflow
 
    Add or update a consuming workflow to run a FreeBSD VM build, copy back
    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that

@@ -11,6 +11,7 @@ import {
   posixLiteral,
   posixRuntimeExpression,
   PosixScript,
+  quotePosixShellLiteral,
 } from "./posix-script";
 import { SetupPlan } from "./setup-plan";
 
@@ -81,11 +82,13 @@ export function renderMinimalSetupScript(plan: SetupPlan): string {
   return script.render();
 }
 
-export function renderMinimalSetupEnvironment(): string {
+export function renderMinimalSetupEnvironment(plan: SetupPlan): string {
   const script = new PosixScript();
 
   script.line("# vcpkg-github-cache setup environment");
-  script.line("# VCPKG_BINARY_SOURCES is emitted by a later setup slice.");
+  script.line(
+    `export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`,
+  );
 
   return script.render();
 }
@@ -100,7 +103,7 @@ export async function emitSetupFiles(
 
   await mkdir(directory, { recursive: true });
   await writeFile(setupScriptPath, renderMinimalSetupScript(plan), "utf8");
-  await writeFile(setupEnvPath, renderMinimalSetupEnvironment(), "utf8");
+  await writeFile(setupEnvPath, renderMinimalSetupEnvironment(plan), "utf8");
 
   return {
     setupEnvOutput: outputPath(plan.scriptDirectory, SETUP_ENV_NAME),

@@ -31454,10 +31454,10 @@ function renderMinimalSetupScript(plan) {
     ]);
     return script.render();
 }
-function renderMinimalSetupEnvironment() {
+function renderMinimalSetupEnvironment(plan) {
     const script = new PosixScript();
     script.line("# vcpkg-github-cache setup environment");
-    script.line("# VCPKG_BINARY_SOURCES is emitted by a later setup slice.");
+    script.line(`export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`);
     return script.render();
 }
 async function emitSetupFiles(plan, workspace) {
@@ -31466,7 +31466,7 @@ async function emitSetupFiles(plan, workspace) {
     const setupEnvPath = external_node_path_namespaceObject.join(directory, SETUP_ENV_NAME);
     await (0,promises_namespaceObject.mkdir)(directory, { recursive: true });
     await (0,promises_namespaceObject.writeFile)(setupScriptPath, renderMinimalSetupScript(plan), "utf8");
-    await (0,promises_namespaceObject.writeFile)(setupEnvPath, renderMinimalSetupEnvironment(), "utf8");
+    await (0,promises_namespaceObject.writeFile)(setupEnvPath, renderMinimalSetupEnvironment(plan), "utf8");
     return {
         setupEnvOutput: outputPath(plan.scriptDirectory, SETUP_ENV_NAME),
         setupEnvPath,

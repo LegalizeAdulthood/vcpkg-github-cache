@@ -40,11 +40,22 @@ describe("setup script emission", () => {
     );
   });
 
-  test("renders a dot-sourceable placeholder environment file", () => {
-    expect(renderMinimalSetupEnvironment()).toBe(
+  test("renders a dot-sourceable binary source environment file", () => {
+    const plan = buildSetupPlan({
+      accessInput: "readwrite",
+      executionModeInput: "emit-script",
+      feedOwnerInput: "octo",
+      targetOsInput: "freebsd",
+    });
+    const env = renderMinimalSetupEnvironment(plan);
+
+    expect(env).toBe(
       "# vcpkg-github-cache setup environment\n" +
-        "# VCPKG_BINARY_SOURCES is emitted by a later setup slice.\n",
+        "export VCPKG_BINARY_SOURCES='clear;nuget,https://nuget.pkg.github.com/octo/index.json,readwrite'\n",
     );
+    expect(env).toContain("https://nuget.pkg.github.com/octo/index.json");
+    expect(env).toContain("readwrite");
+    expect(env).not.toContain("VCPKG_GITHUB_CACHE_TOKEN");
   });
 
   test("writes setup files and returns relative output paths", async () => {
@@ -65,7 +76,7 @@ describe("setup script emission", () => {
       "Target OS: freebsd",
     );
     await expect(readFile(files.setupEnvPath, "utf8")).resolves.toContain(
-      "setup environment",
+      "export VCPKG_BINARY_SOURCES=",
     );
   });
 });
