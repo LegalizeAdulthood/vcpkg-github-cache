@@ -225,6 +225,7 @@ describe("setup script emission", () => {
     const env = renderSetupEnvironment(plan);
 
     expect(env).toContain("export VCPKG_BINARY_SOURCES=");
+    expect(env).toContain("export VCPKG_FORCE_SYSTEM_BINARIES=1");
     expect(env).toContain('openbsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(env).toContain(
       'openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',

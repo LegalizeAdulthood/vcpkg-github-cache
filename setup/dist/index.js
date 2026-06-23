@@ -32112,6 +32112,7 @@ function renderSetupEnvironment(plan) {
     script.line("# vcpkg-github-cache setup environment");
     script.line(`export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`);
     if (plan.targetOs === "openbsd") {
+        script.line("export VCPKG_FORCE_SYSTEM_BINARIES=1");
         script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
         script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
         script.line("fi");
