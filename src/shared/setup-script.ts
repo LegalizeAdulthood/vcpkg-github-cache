@@ -56,6 +56,92 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line('  command -v "$1" >/dev/null 2>&1');
   script.line("}");
   script.blank();
+  script.line("ensure_freebsd_bootstrap_packages() {");
+  script.line('  missing_packages=""');
+  script.line("  if ! command_exists curl; then");
+  script.line('    missing_packages="${missing_packages} curl"');
+  script.line("  fi");
+  script.line("  if ! command_exists zip; then");
+  script.line('    missing_packages="${missing_packages} zip"');
+  script.line("  fi");
+  script.line("  if ! command_exists unzip; then");
+  script.line('    missing_packages="${missing_packages} unzip"');
+  script.line("  fi");
+  script.line('  if [ -n "${missing_packages}" ]; then');
+  script.command("    printf", [
+    posixLiteral("%s%s\\n"),
+    posixLiteral("Installing FreeBSD vcpkg bootstrap packages:"),
+    posixRuntimeExpression('"${missing_packages}"'),
+  ]);
+  script.line("    pkg install -y ${missing_packages}");
+  script.line("  fi");
+  script.line("}");
+  script.blank();
+  script.line("has_freebsd_nuget_tool() {");
+  script.line("  awk '");
+  script.line('    /"name": "nuget"/ { in_nuget = 1 }');
+  script.line('    in_nuget && /"os": "freebsd"/ { found = 1 }');
+  script.line("    in_nuget && /^[[:space:]]*}/ { in_nuget = 0 }");
+  script.line("    END { exit found ? 0 : 1 }");
+  script.line('  \' "${VCPKG_ROOT}/scripts/vcpkg-tools.json"');
+  script.line("}");
+  script.blank();
+  script.line("enable_freebsd_nuget_tool() {");
+  script.line('  tools_json="${VCPKG_ROOT}/scripts/vcpkg-tools.json"');
+  script.line("  if has_freebsd_nuget_tool; then");
+  script.command("    printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("FreeBSD NuGet tool metadata already available"),
+  ]);
+  script.line("    return");
+  script.line("  fi");
+  script.line('  tmp_tools_json="${tools_json}.tmp"');
+  script.line("  if ! awk '");
+  script.line('    BEGIN { in_block = 0; block = ""; patched = 0 }');
+  script.line("    in_block {");
+  script.line('      block = block $0 "\\n"');
+  script.line("      if ($0 ~ /^[[:space:]]*}[,]?[[:space:]]*$/) {");
+  script.line("        in_block = 0");
+  script.line("        if (!patched &&");
+  script.line(
+    '            block ~ /"name"[[:space:]]*:[[:space:]]*"nuget"/ &&',
+  );
+  script.line('            block ~ /"os"[[:space:]]*:[[:space:]]*"linux"/) {');
+  script.line('          printf "%s", block');
+  script.line("          freebsd_block = block");
+  script.line('          sub(/"os"[[:space:]]*:[[:space:]]*"linux"/,');
+  script.line('              "\\"os\\": \\"freebsd\\"", freebsd_block)');
+  script.line('          printf "%s", freebsd_block');
+  script.line("          patched = 1");
+  script.line("          next");
+  script.line("        }");
+  script.line('        printf "%s", block');
+  script.line("        next");
+  script.line("      }");
+  script.line("      next");
+  script.line("    }");
+  script.line("    !patched && $0 ~ /^[[:space:]]*{[[:space:]]*$/ {");
+  script.line("      in_block = 1");
+  script.line('      block = $0 "\\n"');
+  script.line("      next");
+  script.line("    }");
+  script.line("    { print }");
+  script.line("    END { if (!patched) exit 1 }");
+  script.line('  \' "${tools_json}" > "${tmp_tools_json}"; then');
+  script.line('    rm -f "${tmp_tools_json}"');
+  script.command("    printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("Unable to add FreeBSD NuGet tool metadata to vcpkg"),
+  ]);
+  script.line("    exit 1");
+  script.line("  fi");
+  script.line('  mv "${tmp_tools_json}" "${tools_json}"');
+  script.command("  printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("Added FreeBSD NuGet tool metadata to vcpkg"),
+  ]);
+  script.line("}");
+  script.blank();
   script.line(
     ': "${VCPKG_GITHUB_CACHE_TOKEN:?VCPKG_GITHUB_CACHE_TOKEN is required}"',
   );
@@ -89,6 +175,9 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.blank();
 
   if (plan.bootstrap) {
+    if (plan.targetOs === "freebsd") {
+      script.line("ensure_freebsd_bootstrap_packages");
+    }
     script.command("printf", [
       posixLiteral("%s\\n"),
       posixLiteral("Bootstrapping vcpkg"),
@@ -142,7 +231,20 @@ export function renderSetupScript(plan: SetupPlan): string {
       posixLiteral("%s\\n"),
       posixLiteral("Fetching NuGet with vcpkg"),
     ]);
-    script.line('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    if (plan.targetOs === "freebsd") {
+      script.line("enable_freebsd_nuget_tool");
+    }
+    script.line('if ! nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1); then');
+    script.command("  printf", [
+      posixLiteral("%s\\n"),
+      posixRuntimeExpression('"${nuget_output}"'),
+    ]);
+    script.command("  printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("vcpkg fetch nuget failed"),
+    ]);
+    script.line("  exit 1");
+    script.line("fi");
     script.command("printf", [
       posixLiteral("%s\\n"),
       posixRuntimeExpression('"${nuget_output}"'),

@@ -56,12 +56,20 @@ describe("setup script emission", () => {
 
     expect(script).toContain('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
+    expect(script).toContain("ensure_freebsd_bootstrap_packages");
+    expect(script).toContain("pkg install -y ${missing_packages}");
+    expect(script).toContain("has_freebsd_nuget_tool");
+    expect(script).toContain("enable_freebsd_nuget_tool");
+    expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
     expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     expect(script).toContain("Ensuring Mono is available");
     expect(script).toContain("if command_exists mono; then");
     expect(script).toContain("pkg install -y mono");
     expect(script).toContain("if ! command_exists mono; then");
-    expect(script).toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    expect(script).toContain(
+      'if ! nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1); then',
+    );
+    expect(script).toContain("vcpkg fetch nuget failed");
     expect(script).toContain("nuget_exe=$(");
     expect(script).toContain("[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$");
     expect(script).toContain(
@@ -110,7 +118,9 @@ describe("setup script emission", () => {
     expect(script).toContain("vcpkg bootstrap skipped");
     expect(script).toContain("NuGet fetch skipped");
     expect(script).not.toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
-    expect(script).not.toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    expect(script).not.toContain(
+      'nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1)',
+    );
     expect(script).not.toContain("run_nuget 'sources' 'Add'");
     expect(script).not.toContain("run_nuget 'setapikey'");
     expect(script).not.toContain("pkg install -y mono");
