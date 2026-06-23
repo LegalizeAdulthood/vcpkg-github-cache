@@ -56,6 +56,14 @@ describe("package metadata probes", () => {
       request: async (request) => {
         requests.push(request);
 
+        if (request.url === "https://api.github.com/users/octo") {
+          return {
+            body: JSON.stringify({ type: "User" }),
+            statusCode: 200,
+            statusMessage: "OK",
+          };
+        }
+
         if (request.url.endsWith("/versions?per_page=100")) {
           return {
             body: JSON.stringify([
@@ -87,13 +95,14 @@ describe("package metadata probes", () => {
       token: "token",
     });
 
-    expect(requests).toHaveLength(2);
-    expect(requests[0].url).toBe(
+    expect(requests).toHaveLength(3);
+    expect(requests[1].url).toBe(
       "https://api.github.com/users/octo/packages/nuget/fmt",
     );
-    expect(requests[0].headers.Authorization).toBe("Bearer token");
+    expect(requests[1].headers.Authorization).toBe("Bearer token");
     expect(probe.requestedPackageIds).toBe(1);
     expect(probe.probedPackageIds).toBe(1);
+    expect(probe.ownerEndpoint).toBe("users");
     expect(probe.results[0]).toMatchObject({
       endpoint: "users",
       name: "fmt",
@@ -122,7 +131,7 @@ describe("package metadata probes", () => {
     expect(formatPackageMetadataProbe(probe)).toContain("quota risk: none");
   });
 
-  test("falls back from user to organization package metadata", async () => {
+  test("uses organization package metadata after owner lookup", async () => {
     const requests: string[] = [];
     const probe = await runPackageMetadataProbe({
       feedOwner: "octo-org",
@@ -130,11 +139,11 @@ describe("package metadata probes", () => {
       request: async (request) => {
         requests.push(request.url);
 
-        if (request.url.includes("/users/")) {
+        if (request.url === "https://api.github.com/users/octo-org") {
           return {
-            body: "{}",
-            statusCode: 404,
-            statusMessage: "Not Found",
+            body: JSON.stringify({ type: "Organization" }),
+            statusCode: 200,
+            statusMessage: "OK",
           };
         }
 
@@ -161,10 +170,11 @@ describe("package metadata probes", () => {
     });
 
     expect(requests).toEqual([
-      "https://api.github.com/users/octo-org/packages/nuget/zlib",
+      "https://api.github.com/users/octo-org",
       "https://api.github.com/orgs/octo-org/packages/nuget/zlib",
       "https://api.github.com/orgs/octo-org/packages/nuget/zlib/versions?per_page=100",
     ]);
+    expect(probe.ownerEndpoint).toBe("orgs");
     expect(probe.results[0]).toMatchObject({
       endpoint: "orgs",
       quotaRisk: "private package storage",
@@ -174,6 +184,37 @@ describe("package metadata probes", () => {
       visibility: "private",
     });
     expect(packageMetadataQuotaRiskCount(probe)).toBe(1);
+  });
+
+  test("links missing package metadata when owner lookup succeeds", async () => {
+    const probe = await runPackageMetadataProbe({
+      feedOwner: "octo",
+      packageIdentities: [{ id: "vcpkg-tool_freebsd-x64", version: "1" }],
+      request: async (request) => {
+        if (request.url === "https://api.github.com/users/octo") {
+          return {
+            body: JSON.stringify({ type: "User" }),
+            statusCode: 200,
+            statusMessage: "OK",
+          };
+        }
+
+        return {
+          body: "{}",
+          statusCode: 404,
+          statusMessage: "Not Found",
+        };
+      },
+      token: "token",
+    });
+
+    expect(probe.results[0]).toMatchObject({
+      endpoint: "users",
+      name: "vcpkg-tool_freebsd-x64",
+      settingsUrl:
+        "https://github.com/users/octo/packages/nuget/vcpkg-tool_freebsd-x64/settings",
+      status: "missing",
+    });
   });
 
   test("classifies package quota risk from visibility", () => {
@@ -195,6 +236,15 @@ describe("package metadata probes", () => {
       ],
       request: async (request) => {
         requests.push(request.url);
+
+        if (request.url === "https://api.github.com/users/octo") {
+          return {
+            body: JSON.stringify({ type: "User" }),
+            statusCode: 200,
+            statusMessage: "OK",
+          };
+        }
+
         return { body: "{}", statusCode: 404, statusMessage: "Not Found" };
       },
       token: "token",
@@ -202,7 +252,11 @@ describe("package metadata probes", () => {
 
     expect(probe.requestedPackageIds).toBe(3);
     expect(probe.probedPackageIds).toBe(2);
-    expect(requests).toHaveLength(4);
+    expect(requests).toEqual([
+      "https://api.github.com/users/octo",
+      "https://api.github.com/users/octo/packages/nuget/a",
+      "https://api.github.com/users/octo/packages/nuget/b",
+    ]);
     expect(formatPackageMetadataProbe(probe)).toContain("limit: 2");
   });
 });

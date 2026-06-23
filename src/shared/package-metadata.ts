@@ -26,6 +26,7 @@ export interface PackageMetadataHttpResponse {
 export interface PackageMetadataProbe {
   readonly limit: number;
   readonly owner: string;
+  readonly ownerEndpoint?: PackageOwnerEndpoint;
   readonly probedPackageIds: number;
   readonly requestedPackageIds: number;
   readonly results: readonly PackageMetadataResult[];
@@ -109,6 +110,10 @@ export function packageSettingsUrl(
   return `https://github.com/${endpoint}/${encodeURIComponent(
     owner,
   )}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
+}
+
+function ownerMetadataUrl(apiUrl: string, owner: string): string {
+  return `${trimApiUrl(apiUrl)}/users/${encodeURIComponent(owner)}`;
 }
 
 export function packageVersionsUrl(
@@ -302,10 +307,11 @@ async function queryPackageMetadata(
   packageName: string,
   options: PackageMetadataProbeOptions,
   request: PackageMetadataRequester,
+  ownerEndpoint: PackageOwnerEndpoint | undefined,
 ): Promise<PackageMetadataResult> {
   let missingResult: PackageMetadataResult | undefined;
 
-  for (const endpoint of OWNER_ENDPOINTS) {
+  for (const endpoint of ownerEndpoint ? [ownerEndpoint] : OWNER_ENDPOINTS) {
     try {
       const response = await request({
         headers: {
@@ -345,6 +351,9 @@ async function queryPackageMetadata(
         detail: statusDetail(response),
         endpoint,
         name: packageName,
+        settingsUrl: ownerEndpoint
+          ? packageSettingsUrl(endpoint, options.feedOwner, packageName)
+          : undefined,
         status: responseMissing(response) ? "missing" : "failed",
       };
 
@@ -372,6 +381,44 @@ async function queryPackageMetadata(
   );
 }
 
+async function queryOwnerEndpoint(
+  options: PackageMetadataProbeOptions,
+  request: PackageMetadataRequester,
+): Promise<PackageOwnerEndpoint | undefined> {
+  try {
+    const response = await request({
+      headers: {
+        Authorization: `Bearer ${options.token}`,
+      },
+      url: ownerMetadataUrl(
+        options.apiUrl ?? DEFAULT_API_URL,
+        options.feedOwner,
+      ),
+    });
+
+    if (!responseSucceeded(response)) {
+      return undefined;
+    }
+
+    const metadata = JSON.parse(response.body) as Readonly<
+      Record<string, unknown>
+    >;
+    const type = stringField(metadata, "type")?.trim().toLowerCase();
+
+    if (type === "organization") {
+      return "orgs";
+    }
+
+    if (type === "user") {
+      return "users";
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
 export async function runPackageMetadataProbe(
   options: PackageMetadataProbeOptions,
 ): Promise<PackageMetadataProbe> {
@@ -381,15 +428,20 @@ export async function runPackageMetadataProbe(
     options.request ??
     ((probe) =>
       requestPackageMetadataDefault(probe, options.timeoutMilliseconds));
+  const ownerEndpoint =
+    packageIds.length > 0
+      ? await queryOwnerEndpoint(options, request)
+      : undefined;
   const results = await Promise.all(
     packageIds.map((packageName) =>
-      queryPackageMetadata(packageName, options, request),
+      queryPackageMetadata(packageName, options, request, ownerEndpoint),
     ),
   );
 
   return {
     limit,
     owner: options.feedOwner,
+    ownerEndpoint,
     probedPackageIds: packageIds.length,
     requestedPackageIds: uniquePackageIds(options.packageIdentities).length,
     results,
@@ -452,6 +504,7 @@ export function formatPackageMetadataProbe(
 
   const output = [
     `owner: ${probe.owner}`,
+    `owner endpoint: ${optional(probe.ownerEndpoint)}`,
     `requested package ids: ${probe.requestedPackageIds}`,
     `probed package ids: ${probe.probedPackageIds}`,
     `limit: ${probe.limit}`,
