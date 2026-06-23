@@ -6,32 +6,19 @@
 
 import * as core from "@actions/core";
 
-import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
-import {
-  normalizeSetupExecutionMode,
-  normalizeSetupTargetOs,
-  normalizeTokenKind,
-  parseBoolean,
-  resolveFeedOwner,
-  resolveUsername,
-} from "./shared/inputs";
 import { ensureMonoAvailable } from "./shared/mono";
 import { configureNugetSource } from "./shared/nuget";
 import { setupOutput } from "./shared/setup-output";
+import { buildSetupPlan } from "./shared/setup-plan";
 import { createTraceLogger } from "./shared/trace";
 import {
   buildNugetCommand,
   bootstrapVcpkg,
   fetchNuget,
   readVcpkgVersion,
-  resolveVcpkgPaths,
   verifyVcpkgExecutable,
 } from "./shared/vcpkg";
-
-function optionalInput(name: string, defaultValue = ""): string {
-  return core.getInput(name).trim() || defaultValue;
-}
 
 function summaryItem(label: string, value: string): string {
   return `${label}: ${value}`;
@@ -66,109 +53,96 @@ export async function run(): Promise<void> {
   const token = core.getInput("token", { required: true });
   core.setSecret(token);
 
-  const tokenKind = normalizeTokenKind(optionalInput("token-kind", "github"));
-  const feedOwner = resolveFeedOwner(
-    core.getInput("feed-owner"),
-    process.env.GITHUB_REPOSITORY,
-  );
-  const username = resolveUsername(
-    core.getInput("username"),
-    tokenKind,
-    feedOwner,
-    process.env.GITHUB_ACTOR,
-  );
-  const feedUrl = buildFeedUrl(feedOwner);
-  const bootstrap = parseBoolean(optionalInput("bootstrap", "true"));
-  const debug = parseBoolean(optionalInput("debug", "false"));
-  const installMono = parseBoolean(optionalInput("install-mono", "true"));
-  const installNuget = parseBoolean(optionalInput("install-nuget", "true"));
-  const sourceName = optionalInput("source-name", "GitHubPackages");
-  const trace = parseBoolean(optionalInput("trace", "false"));
-  const access = optionalInput("access", "readwrite");
-  const executionMode = normalizeSetupExecutionMode(
-    optionalInput("execution-mode", "run"),
-  );
-  const targetOs = normalizeSetupTargetOs(
-    optionalInput("target-os", "current"),
-  );
-  const scriptDirectory = optionalInput(
-    "script-directory",
-    ".vcpkg-github-cache",
-  );
-  const vcpkg = resolveVcpkgPaths(
-    optionalInput("vcpkg-root", "vcpkg"),
-    process.env.GITHUB_WORKSPACE,
-  );
+  const plan = buildSetupPlan({
+    accessInput: core.getInput("access"),
+    actor: process.env.GITHUB_ACTOR,
+    bootstrapInput: core.getInput("bootstrap"),
+    debugInput: core.getInput("debug"),
+    executionModeInput: core.getInput("execution-mode"),
+    feedOwnerInput: core.getInput("feed-owner"),
+    installMonoInput: core.getInput("install-mono"),
+    installNugetInput: core.getInput("install-nuget"),
+    repository: process.env.GITHUB_REPOSITORY,
+    scriptDirectoryInput: core.getInput("script-directory"),
+    sourceNameInput: core.getInput("source-name"),
+    targetOsInput: core.getInput("target-os"),
+    tokenKindInput: core.getInput("token-kind"),
+    traceInput: core.getInput("trace"),
+    usernameInput: core.getInput("username"),
+    vcpkgRootInput: core.getInput("vcpkg-root"),
+    workspace: process.env.GITHUB_WORKSPACE,
+  });
   const traceLogger = createTraceLogger({
-    enabled: trace,
+    enabled: plan.trace,
     log: (message) => core.info(message),
     secrets: [token],
   });
   const tracedRun = traceLogger.commandRunner(runCommand);
 
-  if (debug || trace) {
-    core.info(`Debug: ${debug ? "enabled" : "disabled"}`);
-    core.info(`Trace: ${trace ? "enabled" : "disabled"}`);
+  if (plan.debug || plan.trace) {
+    core.info(`Debug: ${plan.debug ? "enabled" : "disabled"}`);
+    core.info(`Trace: ${plan.trace ? "enabled" : "disabled"}`);
   }
 
-  if (trace) {
+  if (plan.trace) {
     traceLogger.input("token", token);
-    traceLogger.input("token-kind", tokenKind);
-    traceLogger.input("feed-owner", feedOwner);
-    traceLogger.input("username", username);
-    traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
-    traceLogger.input("bootstrap", bootstrap ? "true" : "false");
-    traceLogger.input("install-mono", installMono ? "true" : "false");
-    traceLogger.input("install-nuget", installNuget ? "true" : "false");
-    traceLogger.input("source-name", sourceName);
-    traceLogger.input("access", access);
-    traceLogger.input("execution-mode", executionMode);
-    traceLogger.input("target-os", targetOs);
-    traceLogger.input("script-directory", scriptDirectory);
+    traceLogger.input("token-kind", plan.tokenKind);
+    traceLogger.input("feed-owner", plan.feedOwner);
+    traceLogger.input("username", plan.username);
+    traceLogger.input("vcpkg-root", plan.vcpkgRootInput);
+    traceLogger.input("bootstrap", plan.bootstrap ? "true" : "false");
+    traceLogger.input("install-mono", plan.installMono ? "true" : "false");
+    traceLogger.input("install-nuget", plan.installNuget ? "true" : "false");
+    traceLogger.input("source-name", plan.sourceName);
+    traceLogger.input("access", plan.access);
+    traceLogger.input("execution-mode", plan.executionMode);
+    traceLogger.input("target-os", plan.targetOs);
+    traceLogger.input("script-directory", plan.scriptDirectory);
     traceLogger.value("platform", `${process.platform}/${process.arch}`);
-    traceLogger.value("feed URL", feedUrl);
+    traceLogger.value("feed URL", plan.feedUrl);
+    traceLogger.value("planned binary sources", plan.binarySources);
     traceLogger.path("GITHUB_WORKSPACE", process.env.GITHUB_WORKSPACE ?? "");
-    traceLogger.path("vcpkg root", vcpkg.root);
-    traceLogger.path("vcpkg executable", vcpkg.executable);
-    traceLogger.path("vcpkg bootstrap script", vcpkg.bootstrapScript);
+    traceLogger.path("vcpkg root", plan.vcpkg.root);
+    traceLogger.path("vcpkg executable", plan.vcpkg.executable);
+    traceLogger.path("vcpkg bootstrap script", plan.vcpkg.bootstrapScript);
   }
 
-  if (executionMode === "run" && targetOs !== "current") {
+  if (plan.executionMode === "run" && plan.targetOs !== "current") {
     throw new Error(
       "target-os is only supported with execution-mode=emit-script",
     );
   }
 
-  if (executionMode === "emit-script") {
+  if (plan.executionMode === "emit-script") {
     throw new Error("execution-mode=emit-script is not implemented yet");
   }
 
-  if (bootstrap) {
+  if (plan.bootstrap) {
     traceLogger.decision("bootstrap vcpkg", "enabled by input");
-    core.info(`Bootstrapping vcpkg at ${vcpkg.root}`);
+    core.info(`Bootstrapping vcpkg at ${plan.vcpkg.root}`);
     await traceLogger.step("bootstrap vcpkg", async () =>
-      bootstrapVcpkg(vcpkg, tracedRun),
+      bootstrapVcpkg(plan.vcpkg, tracedRun),
     );
   } else {
     traceLogger.decision("bootstrap vcpkg", "skipped by input");
   }
 
   await traceLogger.step("verify vcpkg executable", async () =>
-    verifyVcpkgExecutable(vcpkg.executable),
+    verifyVcpkgExecutable(plan.vcpkg.executable),
   );
   const vcpkgVersion = await traceLogger.step("read vcpkg version", async () =>
-    readVcpkgVersion(vcpkg, tracedRun),
+    readVcpkgVersion(plan.vcpkg, tracedRun),
   );
   let nugetCommand = "";
   let nugetConfigured = false;
 
-  if (installNuget) {
+  if (plan.installNuget) {
     traceLogger.decision("NuGet setup", "enabled by input");
     const mono = await traceLogger.step("ensure Mono", async () =>
-      ensureMonoAvailable(installMono, process.platform, tracedRun),
+      ensureMonoAvailable(plan.installMono, process.platform, tracedRun),
     );
     const nugetPath = await traceLogger.step("fetch NuGet", async () =>
-      fetchNuget(vcpkg, tracedRun),
+      fetchNuget(plan.vcpkg, tracedRun),
     );
     const nuget = buildNugetCommand(nugetPath);
     nugetCommand = nuget.display;
@@ -178,39 +152,39 @@ export async function run(): Promise<void> {
       configureNugetSource(
         nuget,
         {
-          feedUrl,
-          sourceName,
+          feedUrl: plan.feedUrl,
+          sourceName: plan.sourceName,
           token,
-          username,
+          username: plan.username,
         },
         {
-          debug,
+          debug: plan.debug,
           log: (message) => core.info(message),
           run: tracedRun,
-          trace,
+          trace: plan.trace,
         },
       ),
     );
     nugetConfigured = true;
 
-    if (trace) {
+    if (plan.trace) {
       core.info(`Mono required: ${mono.required ? "true" : "false"}`);
       core.info(
         `Mono installed by action: ${mono.installed ? "true" : "false"}`,
       );
-      core.info(`NuGet source configured: ${sourceName}`);
+      core.info(`NuGet source configured: ${plan.sourceName}`);
     }
   } else {
     traceLogger.decision("NuGet setup", "skipped by input");
   }
 
   const { binarySources, diagnosis } = setupOutput(
-    feedUrl,
-    access,
+    plan.feedUrl,
+    plan.access,
     nugetConfigured,
   );
 
-  core.setOutput("feed-url", feedUrl);
+  core.setOutput("feed-url", plan.feedUrl);
   core.setOutput("binary-sources", binarySources);
   core.setOutput("nuget-command", nugetCommand);
   core.setOutput("vcpkg-version", vcpkgVersion);
@@ -219,26 +193,28 @@ export async function run(): Promise<void> {
 
   core.info(diagnosis);
 
-  if (debug || trace) {
-    core.info(`Token path: ${tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
-    core.info(`Feed owner: ${feedOwner}`);
-    core.info(`NuGet username: ${username}`);
-    core.info(`vcpkg root: ${vcpkg.root}`);
+  if (plan.debug || plan.trace) {
+    core.info(
+      `Token path: ${plan.tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`,
+    );
+    core.info(`Feed owner: ${plan.feedOwner}`);
+    core.info(`NuGet username: ${plan.username}`);
+    core.info(`vcpkg root: ${plan.vcpkg.root}`);
     core.info(`vcpkg version: ${vcpkgVersion}`);
   }
 
-  if (trace) {
+  if (plan.trace) {
     core.info(`binary-sources: ${binarySources}`);
     core.info(`${BINARY_SOURCES_ENV}: ${binarySources}`);
     core.info(`nuget-command: ${nugetCommand}`);
   }
 
-  if (debug || trace) {
+  if (plan.debug || plan.trace) {
     await writeSummary(
       diagnosis,
-      feedUrl,
+      plan.feedUrl,
       nugetCommand,
-      vcpkg.root,
+      plan.vcpkg.root,
       vcpkgVersion,
     );
   }

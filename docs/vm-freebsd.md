@@ -243,68 +243,61 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Extract a setup plan
-
-   Refactor the existing setup path into a small data model containing feed
-   URL, source name, username, access mode, vcpkg root, bootstrap choice,
-   NuGet choice, Mono choice, and binary sources.  Existing run behavior must
-   stay unchanged.
-
-2. Add POSIX script rendering helpers
+1. Add POSIX script rendering helpers
 
    Add deterministic line-oriented rendering and shell single-quoting helpers.
    Test literal quoting, empty strings, embedded single quotes, and variable
    references that must expand at runtime.
 
-3. Emit minimal setup files
+2. Emit minimal setup files
 
    In `execution-mode=emit-script`, create `script-directory`, write
    `setup.sh` and `setup.env`, set `setup-script` and `setup-env` outputs,
    and skip host-side setup.  The first emitted script may only validate its
    environment and print non-secret diagnostics.
 
-4. Emit binary source environment
+3. Emit binary source environment
 
    Write `VCPKG_BINARY_SOURCES` to `setup.env` using the same value that run
    mode would export.  Add tests proving the token is absent and the feed URL
    and access mode are correct.
 
-5. Emit vcpkg bootstrap and NuGet fetch
+4. Emit vcpkg bootstrap and NuGet fetch
 
    Render POSIX commands that bootstrap vcpkg when requested and call
    `vcpkg fetch nuget` when NuGet installation is requested.  The script
    should derive the target-side NuGet command from the target-side vcpkg
    output, not from the Ubuntu host.
 
-6. Emit FreeBSD Mono setup
+5. Emit FreeBSD Mono setup
 
    For `target-os=freebsd`, render cache-owned Mono setup when
    `install-mono=true` and Mono is missing.  Use FreeBSD package management
    only for cache prerequisites.  Do not install project tools here.
 
-7. Emit NuGet source configuration
+6. Emit NuGet source configuration
 
    Render commands to add or update the GitHub Packages NuGet source and set
    the API key for the feed.  Use runtime environment variables for secrets.
    Keep source name, feed owner, username, and feed URL non-secret.
 
-8. Add setup summaries and diagnostics
+7. Add setup summaries and diagnostics
 
    Emit a compact step summary in script-emission mode.  Include the script
    path, environment path, target OS, feed URL, and binary source mode.  Do
    not claim target-side vcpkg or NuGet versions from the host action.
 
-9. Document FreeBSD VM use
+8. Document FreeBSD VM use
 
    Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
    `copyback: true`, `usesh: true`, setup script execution, `setup.env`
    dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
 
-10. Verify with a FreeBSD workflow
+9. Verify with a FreeBSD workflow
 
-    Add or update a consuming workflow to run a FreeBSD VM build, copy back
-    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
-    vcpkg restores from and uploads to GitHub Packages from inside FreeBSD.
+   Add or update a consuming workflow to run a FreeBSD VM build, copy back
+   `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
+   vcpkg restores from and uploads to GitHub Packages from inside FreeBSD.
 
 ## Acceptance Criteria
 
