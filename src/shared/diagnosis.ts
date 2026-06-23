@@ -231,10 +231,26 @@ function effectiveRestoredCount(input: CacheDiagnosisInput): number {
   );
 }
 
+function restoreEvidence(
+  restoredCount: number,
+  requestedCount: number,
+): string {
+  if (requestedCount > 0) {
+    return `restore ${restoredCount}/${requestedCount}`;
+  }
+
+  if (restoredCount > 0) {
+    return `restore ${restoredCount}`;
+  }
+
+  return "";
+}
+
 function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   const requestedCount = effectiveRequestedCount(input);
   const restoredCount = effectiveRestoredCount(input);
   const builtCount = count(input.buildLogFacts?.builtCount);
+  const installSucceeded = input.buildLogFacts?.vcpkgInstallSucceeded === true;
   const uploadedCount = successfulUploads(input.buildLogFacts);
   const alreadyPresent = alreadyPresentUploads(
     input.buildLogFacts,
@@ -243,7 +259,7 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   const failedUploads = uploadFailure(input);
   const baseEvidence = [
     `token path ${tokenDetail(input.tokenKind)}`,
-    requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
+    restoreEvidence(restoredCount, requestedCount),
     builtCount > 0 ? `build misses ${builtCount}` : "build misses 0",
   ];
 
@@ -271,6 +287,15 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
     builtCount === 0
   ) {
     return result("warm-hit", "", baseEvidence);
+  }
+
+  if (
+    requestedCount === 0 &&
+    restoredCount > 0 &&
+    builtCount === 0 &&
+    installSucceeded
+  ) {
+    return result("warm-hit", "", [...baseEvidence, "vcpkg install succeeded"]);
   }
 
   if (restoredCount > 0 && builtCount > 0) {

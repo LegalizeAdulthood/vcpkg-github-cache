@@ -22,6 +22,7 @@ export interface BuildLogFacts {
   readonly submissionsStarted: number;
   readonly uploadedCount?: number;
   readonly uploadsAttempted: number;
+  readonly vcpkgInstallSucceeded?: boolean;
   readonly writeDeniedPackages: readonly WriteDeniedPackage[];
   readonly zeroCacheSubmissions: number;
 }
@@ -484,6 +485,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   let uploadsAttempted = 0;
   let uploadedCount = 0;
   let zeroCacheSubmissions = 0;
+  let vcpkgInstallSucceeded = false;
 
   for (const rawLine of content.split(/\r?\n/)) {
     const line = cleanLine(rawLine);
@@ -564,9 +566,13 @@ export function parseBuildLog(content: string): BuildLogFacts {
 
     if (
       /^-- Running vcpkg install - done\b/i.test(trimmed) ||
-      /^All requested installations completed successfully\b/i.test(trimmed) ||
-      /^Executing workflow step\b/i.test(trimmed)
+      /^All requested installations completed successfully\b/i.test(trimmed)
     ) {
+      vcpkgInstallSucceeded = true;
+      currentBuildPackage = undefined;
+    }
+
+    if (/^Executing workflow step\b/i.test(trimmed)) {
       currentBuildPackage = undefined;
     }
 
@@ -681,6 +687,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     submissionsStarted,
     uploadedCount: uploadedCount || undefined,
     uploadsAttempted,
+    vcpkgInstallSucceeded: vcpkgInstallSucceeded || undefined,
     writeDeniedPackages: uniqueWriteDeniedPackages(writeDeniedPackages),
     zeroCacheSubmissions,
   };

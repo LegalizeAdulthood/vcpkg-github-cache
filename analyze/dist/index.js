@@ -141179,6 +141179,7 @@ function parseBuildLog(content) {
     let uploadsAttempted = 0;
     let uploadedCount = 0;
     let zeroCacheSubmissions = 0;
+    let vcpkgInstallSucceeded = false;
     for (const rawLine of content.split(/\r?\n/)) {
         const line = cleanLine(rawLine);
         const trimmed = line.trim();
@@ -141238,8 +141239,11 @@ function parseBuildLog(content) {
             currentBuildPackage = built;
         }
         if (/^-- Running vcpkg install - done\b/i.test(trimmed) ||
-            /^All requested installations completed successfully\b/i.test(trimmed) ||
-            /^Executing workflow step\b/i.test(trimmed)) {
+            /^All requested installations completed successfully\b/i.test(trimmed)) {
+            vcpkgInstallSucceeded = true;
+            currentBuildPackage = undefined;
+        }
+        if (/^Executing workflow step\b/i.test(trimmed)) {
             currentBuildPackage = undefined;
         }
         const startingSubmission = startingSubmissionPackage(line);
@@ -141315,6 +141319,7 @@ function parseBuildLog(content) {
         submissionsStarted,
         uploadedCount: uploadedCount || undefined,
         uploadsAttempted,
+        vcpkgInstallSucceeded: vcpkgInstallSucceeded || undefined,
         writeDeniedPackages: uniqueWriteDeniedPackages(writeDeniedPackages),
         zeroCacheSubmissions,
     };
@@ -141992,16 +141997,26 @@ function effectiveRequestedCount(input) {
 function effectiveRestoredCount(input) {
     return count(input.buildLogFacts?.restoredCount ?? input.restoreProbe.restoredCount);
 }
+function restoreEvidence(restoredCount, requestedCount) {
+    if (requestedCount > 0) {
+        return `restore ${restoredCount}/${requestedCount}`;
+    }
+    if (restoredCount > 0) {
+        return `restore ${restoredCount}`;
+    }
+    return "";
+}
 function classifyBuildLog(input) {
     const requestedCount = effectiveRequestedCount(input);
     const restoredCount = effectiveRestoredCount(input);
     const builtCount = count(input.buildLogFacts?.builtCount);
+    const installSucceeded = input.buildLogFacts?.vcpkgInstallSucceeded === true;
     const uploadedCount = successfulUploads(input.buildLogFacts);
     const alreadyPresent = alreadyPresentUploads(input.buildLogFacts, input.packageMetadata);
     const failedUploads = uploadFailure(input);
     const baseEvidence = [
         `token path ${tokenDetail(input.tokenKind)}`,
-        requestedCount > 0 ? `restore ${restoredCount}/${requestedCount}` : "",
+        restoreEvidence(restoredCount, requestedCount),
         builtCount > 0 ? `build misses ${builtCount}` : "build misses 0",
     ];
     if (input.buildLogFacts?.quotaMessages.length) {
@@ -142023,6 +142038,12 @@ function classifyBuildLog(input) {
         restoredCount >= requestedCount &&
         builtCount === 0) {
         return result("warm-hit", "", baseEvidence);
+    }
+    if (requestedCount === 0 &&
+        restoredCount > 0 &&
+        builtCount === 0 &&
+        installSucceeded) {
+        return result("warm-hit", "", [...baseEvidence, "vcpkg install succeeded"]);
     }
     if (restoredCount > 0 && builtCount > 0) {
         if (failedUploads) {

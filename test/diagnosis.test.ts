@@ -193,6 +193,47 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).toContain("restore 59/59");
   });
 
+  test("trusts a completed vcpkg install when request count is unknown", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: undefined,
+        builtPackages: [],
+        failedHttpStatuses: [],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageAbiHashes: [],
+        packageHandleTimes: [],
+        packageUploadStatuses: [],
+        quotaMessages: [],
+        requestedCount: undefined,
+        restoredCount: 59,
+        restoredPackages: [],
+        submissionsStarted: 0,
+        uploadedCount: undefined,
+        uploadsAttempted: 0,
+        vcpkgInstallSucceeded: true,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 0,
+      },
+      liveProbes: {
+        ...liveProbes(),
+        nugetSources: probe("skipped", "NuGet command unavailable"),
+        nugetVersion: probe("skipped", "NuGet command unavailable"),
+        vcpkgNuget: probe("failed", "Exec format error"),
+        vcpkgVersion: probe("failed", "Exec format error"),
+      },
+      requestedCount: 0,
+      restoreProbe: restoreProbe("skipped", "NuGet command unavailable"),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("warm-hit");
+    expect(diagnosis.failureKind).toBe("");
+    expect(diagnosis.diagnosis).toContain("restore 59");
+    expect(diagnosis.diagnosis).toContain("vcpkg install succeeded");
+  });
+
   test("keeps partial hit status when only misses fail to upload", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {

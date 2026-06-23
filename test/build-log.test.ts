@@ -198,5 +198,6 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
     expect(
       formatSystemDependencyReportTable(facts.missingSystemDependencies ?? []),
     ).toContain("| Tool | Suggested Package | Needed By | Evidence |");
+    expect(facts.vcpkgInstallSucceeded).toBe(true);
   });
 });
