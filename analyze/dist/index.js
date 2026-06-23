@@ -140885,6 +140885,7 @@ function shouldProbePackageMetadata(debug, failOnPolicy, tokenKind, buildLogFact
         failOnPolicy === "private-package" ||
         tokenKind === "pat" ||
         Boolean(buildLogFacts?.builtPackages?.length) ||
+        buildLogFacts?.vcpkgTool?.status === "built-from-source" ||
         Boolean(buildLogFacts?.writeDeniedPackages?.length));
 }
 

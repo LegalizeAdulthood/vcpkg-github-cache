@@ -54,6 +54,24 @@ describe("analyze policy", () => {
     ).toBe(true);
   });
 
+  test("probes package metadata for source-built vcpkg tool reports", () => {
+    expect(
+      shouldProbePackageMetadata(
+        false,
+        "never",
+        "github",
+        buildLogFacts({
+          vcpkgTool: {
+            packageId: "vcpkg-tool_freebsd-x64",
+            publishStatus: "published",
+            status: "built-from-source",
+            version: "1.0.0-vcpkgtoolabcdef0123456789",
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+
   test("logs analysis details only for debug or trace", () => {
     expect(shouldLogAnalysisDetails(false, false)).toBe(false);
     expect(shouldLogAnalysisDetails(true, false)).toBe(true);
