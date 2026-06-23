@@ -62,6 +62,10 @@ describe("setup script emission", () => {
     expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
+    expect(script.match(/^ensure_bsd_nuget_command$/gm) ?? []).toHaveLength(1);
+    expect(
+      script.match(/^configure_github_nuget_source$/gm) ?? [],
+    ).toHaveLength(1);
     expect(script).toContain("has_bsd_nuget_tool");
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
@@ -86,14 +90,10 @@ describe("setup script emission", () => {
     expect(script).toContain("if command_exists mono; then");
     expect(script).toContain("pkg install -y mono");
     expect(script).toContain("if ! command_exists mono; then");
-    expect(script).toContain(
-      'if ! nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1); then',
+    expect(script).not.toContain(
+      'nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1)',
     );
-    expect(script).toContain("vcpkg fetch nuget failed");
-    expect(script).toContain("nuget_exe=$(");
-    expect(script).toContain(
-      "candidate ~ /\\/[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$/",
-    );
+    expect(script).not.toContain("NuGet fetch skipped");
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
@@ -134,6 +134,10 @@ describe("setup script emission", () => {
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
+    expect(script.match(/^ensure_bsd_nuget_command$/gm) ?? []).toHaveLength(1);
+    expect(
+      script.match(/^configure_github_nuget_source$/gm) ?? [],
+    ).toHaveLength(1);
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added OpenBSD NuGet tool metadata to vcpkg");
     expect(script).toContain('nuget-6.8.0-openbsd"');
@@ -150,6 +154,10 @@ describe("setup script emission", () => {
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
+    expect(script).not.toContain(
+      'nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1)',
+    );
+    expect(script).not.toContain("NuGet fetch skipped");
   });
 
   test("honors skipped Mono install when NuGet is fetched", () => {

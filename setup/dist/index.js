@@ -31962,7 +31962,7 @@ function renderSetupScript(plan) {
         ]);
     }
     script.blank();
-    if (plan.installNuget) {
+    if (plan.installNuget && !targetSettings) {
         if (plan.installMono) {
             script.command("printf", [
                 posixLiteral("%s\\n"),
@@ -32094,7 +32094,7 @@ function renderSetupScript(plan) {
             posixLiteral(plan.sourceName),
         ]);
     }
-    else {
+    else if (!plan.installNuget) {
         script.command("printf", [
             posixLiteral("%s\\n"),
             posixLiteral("NuGet fetch skipped"),

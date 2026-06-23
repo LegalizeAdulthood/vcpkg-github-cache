@@ -671,7 +671,7 @@ export function renderSetupScript(plan: SetupPlan): string {
 
   script.blank();
 
-  if (plan.installNuget) {
+  if (plan.installNuget && !targetSettings) {
     if (plan.installMono) {
       script.command("printf", [
         posixLiteral("%s\\n"),
@@ -810,7 +810,7 @@ export function renderSetupScript(plan: SetupPlan): string {
       posixLiteral("NuGet source configured: "),
       posixLiteral(plan.sourceName),
     ]);
-  } else {
+  } else if (!plan.installNuget) {
     script.command("printf", [
       posixLiteral("%s\\n"),
       posixLiteral("NuGet fetch skipped"),
