@@ -210,6 +210,70 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
     expect(facts.vcpkgInstallSucceeded).toBe(true);
   });
 
+  test("extracts OpenBSD missing system dependencies", () => {
+    const facts = parseBuildLog(`
+Bootstrapping vcpkg
+env: curl: No such file or directory
+/bin/sh: tar: not found
+-- Running vcpkg install - done
+Building sqlite3:x64-openbsd@3.50.4#1...
+pkg_add: can't find automake
+sh: gmake: not found
+-- Running vcpkg install - done
+cmake: not found
+Couldn't locate preferred shell 'bash'
+Could NOT find BISON (missing: BISON_EXECUTABLE)
+`);
+
+    expect(facts.missingSystemDependencies).toEqual([
+      {
+        evidence: "env: curl: No such file or directory",
+        neededBy: "vcpkg bootstrap",
+        suggestedPackage: "curl",
+        tool: "curl",
+      },
+      {
+        evidence: "/bin/sh: tar: not found",
+        neededBy: "vcpkg bootstrap",
+        suggestedPackage: "tar",
+        tool: "tar",
+      },
+      {
+        evidence: "pkg_add: can't find automake",
+        neededBy: "sqlite3:x64-openbsd@3.50.4#1",
+        suggestedPackage: "automake",
+        tool: "automake",
+      },
+      {
+        evidence: "sh: gmake: not found",
+        neededBy: "sqlite3:x64-openbsd@3.50.4#1",
+        suggestedPackage: "gmake",
+        tool: "gmake",
+      },
+      {
+        evidence: "cmake: not found",
+        neededBy: "project configure",
+        suggestedPackage: "cmake",
+        tool: "cmake",
+      },
+      {
+        evidence: "Couldn't locate preferred shell 'bash'",
+        neededBy: "project configure",
+        suggestedPackage: "bash",
+        tool: "bash",
+      },
+      {
+        evidence: "Could NOT find BISON (missing: BISON_EXECUTABLE)",
+        neededBy: "project configure",
+        suggestedPackage: "bison",
+        tool: "bison",
+      },
+    ]);
+    expect(
+      formatSystemDependencyReportTable(facts.missingSystemDependencies ?? []),
+    ).toContain("| Tool | Suggested Package | Needed By | Evidence |");
+  });
+
   test("extracts FreeBSD vcpkg tool source rebuilds", () => {
     const facts = parseBuildLog(`
 Restoring FreeBSD vcpkg tool package: vcpkg-tool_freebsd-x64 1.0.0-vcpkgtoolabcdef0123456789

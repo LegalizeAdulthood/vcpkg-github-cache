@@ -39,14 +39,7 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Add OpenBSD missing dependency diagnostics
-
-   Extend missing system dependency detection for OpenBSD bootstrap, vcpkg
-   ports, and project configure failures.  Keep each recognized log pattern
-   covered by a focused parser test and report missing packages in the job
-   summary.
-
-2. Add trn OpenBSD integration workflow
+1. Add trn OpenBSD integration workflow
 
    Add an OpenBSD VM job to `trn` using `vmactions/openbsd-vm@v1`,
    `target-os=openbsd`, the emitted setup script, dot-sourced setup
@@ -54,7 +47,7 @@ the caller workflow.
    staged copyback pattern used by the FreeBSD job.  Start with the minimal
    OpenBSD project prerequisites discovered during testing.
 
-3. Document OpenBSD usage
+2. Document OpenBSD usage
 
    Update the main ReadMe with an OpenBSD VM example.  Show
    `vmactions/openbsd-vm@v1`, `target-os=openbsd`, OpenBSD package setup,

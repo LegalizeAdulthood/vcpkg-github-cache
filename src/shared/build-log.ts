@@ -373,6 +373,52 @@ function missingSystemDependency(
     };
   }
 
+  const envMissing =
+    /^env:\s+([A-Za-z0-9_.+-]+):\s+No such file or directory$/i.exec(trimmed);
+
+  if (envMissing) {
+    const tool = envMissing[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? defaultNeededBy,
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const commandNotFound =
+    /^(?:(?:\/[^\s:]+\/)?(?:sh|ksh|bash):\s+)?([A-Za-z0-9_.+-]+):\s+(?:command not found|not found|No such file or directory)$/i.exec(
+      trimmed,
+    );
+
+  if (commandNotFound) {
+    const tool = commandNotFound[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? defaultNeededBy,
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const openBsdPackage =
+    /^(?:pkg_add:\s+)?(?:can't|cannot|couldn't) find\s+([A-Za-z0-9_.+-]+)\b/i.exec(
+      trimmed,
+    );
+
+  if (openBsdPackage) {
+    const tool = openBsdPackage[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? defaultNeededBy,
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
   return undefined;
 }
 
