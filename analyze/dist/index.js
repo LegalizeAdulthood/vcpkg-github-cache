@@ -141999,15 +141999,16 @@ function effectiveRestoredCount(input) {
 }
 function restoreEvidence(restoredCount, requestedCount) {
     if (requestedCount > 0) {
-        return `restore ${restoredCount}/${requestedCount}`;
+        return `restore ${restoredCount ?? "unknown"}/${requestedCount}`;
     }
-    if (restoredCount > 0) {
+    if (count(restoredCount) > 0) {
         return `restore ${restoredCount}`;
     }
     return "";
 }
 function classifyBuildLog(input) {
     const requestedCount = effectiveRequestedCount(input);
+    const restoredCountValue = input.buildLogFacts?.restoredCount ?? input.restoreProbe.restoredCount;
     const restoredCount = effectiveRestoredCount(input);
     const builtCount = count(input.buildLogFacts?.builtCount);
     const installSucceeded = input.buildLogFacts?.vcpkgInstallSucceeded === true;
@@ -142016,7 +142017,7 @@ function classifyBuildLog(input) {
     const failedUploads = uploadFailure(input);
     const baseEvidence = [
         `token path ${tokenDetail(input.tokenKind)}`,
-        restoreEvidence(restoredCount, requestedCount),
+        restoreEvidence(restoredCountValue, requestedCount),
         builtCount > 0 ? `build misses ${builtCount}` : "build misses 0",
     ];
     if (input.buildLogFacts?.quotaMessages.length) {
@@ -142039,8 +142040,7 @@ function classifyBuildLog(input) {
         builtCount === 0) {
         return result("warm-hit", "", baseEvidence);
     }
-    if (requestedCount === 0 &&
-        restoredCount > 0 &&
+    if ((requestedCount > 0 || restoredCount > 0) &&
         builtCount === 0 &&
         installSucceeded) {
         return result("warm-hit", "", [...baseEvidence, "vcpkg install succeeded"]);

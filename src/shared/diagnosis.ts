@@ -232,14 +232,14 @@ function effectiveRestoredCount(input: CacheDiagnosisInput): number {
 }
 
 function restoreEvidence(
-  restoredCount: number,
+  restoredCount: number | undefined,
   requestedCount: number,
 ): string {
   if (requestedCount > 0) {
-    return `restore ${restoredCount}/${requestedCount}`;
+    return `restore ${restoredCount ?? "unknown"}/${requestedCount}`;
   }
 
-  if (restoredCount > 0) {
+  if (count(restoredCount) > 0) {
     return `restore ${restoredCount}`;
   }
 
@@ -248,6 +248,8 @@ function restoreEvidence(
 
 function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   const requestedCount = effectiveRequestedCount(input);
+  const restoredCountValue =
+    input.buildLogFacts?.restoredCount ?? input.restoreProbe.restoredCount;
   const restoredCount = effectiveRestoredCount(input);
   const builtCount = count(input.buildLogFacts?.builtCount);
   const installSucceeded = input.buildLogFacts?.vcpkgInstallSucceeded === true;
@@ -259,7 +261,7 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   const failedUploads = uploadFailure(input);
   const baseEvidence = [
     `token path ${tokenDetail(input.tokenKind)}`,
-    restoreEvidence(restoredCount, requestedCount),
+    restoreEvidence(restoredCountValue, requestedCount),
     builtCount > 0 ? `build misses ${builtCount}` : "build misses 0",
   ];
 
@@ -290,8 +292,7 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
   }
 
   if (
-    requestedCount === 0 &&
-    restoredCount > 0 &&
+    (requestedCount > 0 || restoredCount > 0) &&
     builtCount === 0 &&
     installSucceeded
   ) {
