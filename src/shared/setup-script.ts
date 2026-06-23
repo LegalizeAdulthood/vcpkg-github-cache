@@ -51,7 +51,7 @@ const FREEBSD_TARGET: BsdTargetSettings = {
 };
 
 const OPENBSD_TARGET: BsdTargetSettings = {
-  cacheToolPackage: false,
+  cacheToolPackage: true,
   label: "OpenBSD",
   nugetDirectorySuffix: "openbsd",
   nugetSha512: FREEBSD_NUGET_SHA512,

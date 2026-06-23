@@ -131,12 +131,18 @@ describe("setup script emission", () => {
     expect(script).toContain("Added OpenBSD NuGet tool metadata to vcpkg");
     expect(script).toContain('nuget-6.8.0-openbsd"');
     expect(script).toContain('\\"os\\": \\"openbsd\\"');
+    expect(script).toContain("target-os openbsd");
+    expect(script).toContain('openbsd-release "${bsd_release}"');
+    expect(script).toContain("vcpkg-tool_openbsd-${tool_arch}");
+    expect(script).toContain("restore_bsd_vcpkg_tool_package");
+    expect(script).toContain("publish_bsd_vcpkg_tool_package");
+    expect(script).toContain("Restoring OpenBSD vcpkg tool package: ");
+    expect(script).toContain("Published OpenBSD vcpkg tool package");
+    expect(script).toContain("vcpkg bootstrap skipped: cached tool restored");
     expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
-    expect(script).not.toContain("\nrestore_bsd_vcpkg_tool_package\n");
-    expect(script).not.toContain("\npublish_bsd_vcpkg_tool_package\n");
   });
 
   test("honors skipped Mono install when NuGet is fetched", () => {

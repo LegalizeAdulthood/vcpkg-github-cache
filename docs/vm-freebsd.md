@@ -39,28 +39,21 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Cache the OpenBSD vcpkg tool package
-
-   Add OpenBSD vcpkg tool restore and publish support with package IDs such
-   as `vcpkg-tool_openbsd-${tool_arch}`.  Include the vcpkg commit, target
-   OS, target architecture, OpenBSD release, compiler identity, and schema
-   version in the tool identity hash.
-
-2. Parse OpenBSD tool package logs
+1. Parse OpenBSD tool package logs
 
    Teach the build log parser and analyzer reports to recognize OpenBSD
    vcpkg tool restore hits, source rebuilds, publish successes, publish
    failures, and skipped publishes.  Report source-built OpenBSD tool
    packages in the same "Packages built from source" table as FreeBSD.
 
-3. Add OpenBSD missing dependency diagnostics
+2. Add OpenBSD missing dependency diagnostics
 
    Extend missing system dependency detection for OpenBSD bootstrap, vcpkg
    ports, and project configure failures.  Keep each recognized log pattern
    covered by a focused parser test and report missing packages in the job
    summary.
 
-4. Add trn OpenBSD integration workflow
+3. Add trn OpenBSD integration workflow
 
    Add an OpenBSD VM job to `trn` using `vmactions/openbsd-vm@v1`,
    `target-os=openbsd`, the emitted setup script, dot-sourced setup
@@ -68,7 +61,7 @@ the caller workflow.
    staged copyback pattern used by the FreeBSD job.  Start with the minimal
    OpenBSD project prerequisites discovered during testing.
 
-5. Document OpenBSD usage
+4. Document OpenBSD usage
 
    Update the main ReadMe with an OpenBSD VM example.  Show
    `vmactions/openbsd-vm@v1`, `target-os=openbsd`, OpenBSD package setup,

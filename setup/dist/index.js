@@ -31427,7 +31427,7 @@ const FREEBSD_TARGET = {
     toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 const OPENBSD_TARGET = {
-    cacheToolPackage: false,
+    cacheToolPackage: true,
     label: "OpenBSD",
     nugetDirectorySuffix: "openbsd",
     nugetSha512: FREEBSD_NUGET_SHA512,
