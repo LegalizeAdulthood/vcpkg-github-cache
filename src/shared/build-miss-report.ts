@@ -142,6 +142,12 @@ function packageMetadataResults(
   );
 }
 
+function packageSettingsUrl(
+  result: PackageMetadataResult | undefined,
+): string | undefined {
+  return result?.status === "missing" ? undefined : result?.settingsUrl;
+}
+
 function uploadStatusByPackageId(
   buildLogFacts: BuildLogFacts,
 ): ReadonlyMap<string, PackageUploadState> {
@@ -273,7 +279,7 @@ export function buildMissReports(
     return {
       buildTime: handleTimes.get(packageId),
       packageId,
-      packageSettingsUrl: result?.settingsUrl,
+      packageSettingsUrl: packageSettingsUrl(result),
       packageSpec,
       uploadStatus: uploadStatus(
         packageId,
@@ -302,7 +308,7 @@ export function buildMissReports(
     {
       buildTime: undefined,
       packageId: tool.packageId,
-      packageSettingsUrl: result?.settingsUrl,
+      packageSettingsUrl: packageSettingsUrl(result),
       packageSpec: tool.packageId,
       uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
       version: tool.version,

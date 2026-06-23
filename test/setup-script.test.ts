@@ -57,6 +57,7 @@ describe("setup script emission", () => {
     expect(script).toContain('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
     expect(script).toContain("ensure_bsd_bootstrap_packages");
+    expect(script).toContain('missing_packages="${missing_packages} unzip"');
     expect(script).toContain("pkg install -y ${missing_packages}");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
@@ -123,6 +124,7 @@ describe("setup script emission", () => {
     expect(script).toContain("printf '%s\\n' 'Target OS: openbsd'");
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
     expect(script).toContain("ensure_bsd_bootstrap_packages");
+    expect(script).toContain('missing_packages="${missing_packages} unzip--"');
     expect(script).toContain("pkg_add -I ${missing_packages}");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");

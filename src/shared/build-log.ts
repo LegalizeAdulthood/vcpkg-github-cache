@@ -702,12 +702,10 @@ export function parseBuildLog(content: string): BuildLogFacts {
 
     if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
       bootstrappingVcpkg = true;
-      if (vcpkgToolRestoreAttempted && vcpkgToolStatus !== "restored") {
-        vcpkgToolStatus = "built-from-source";
-      }
     }
 
     if (/^Published (?:FreeBSD|OpenBSD) vcpkg tool package\b/i.test(trimmed)) {
+      vcpkgToolStatus = "built-from-source";
       vcpkgToolPublishStatus = "published";
     }
 
@@ -716,6 +714,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
         trimmed,
       )
     ) {
+      vcpkgToolStatus = "built-from-source";
       vcpkgToolPublishStatus = "failed";
     }
 

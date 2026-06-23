@@ -363,7 +363,23 @@ OpenBSD vcpkg tool package skipped: vcpkg is missing
     expect(facts.vcpkgTool).toEqual({
       packageId: "vcpkg-tool_openbsd-x64",
       publishStatus: "skipped",
-      status: "built-from-source",
+      status: "not-restored",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
+  test("does not mark the vcpkg tool built when bootstrap fails early", () => {
+    const facts = parseBuildLog(`
+Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+OpenBSD vcpkg tool package not restored
+Bootstrapping vcpkg
+Could not find unzip. Please install it.
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_openbsd-x64",
+      publishStatus: "not-attempted",
+      status: "not-restored",
       version: "1.0.0-vcpkgtoolabcdef0123456789",
     });
   });

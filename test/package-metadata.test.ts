@@ -186,7 +186,7 @@ describe("package metadata probes", () => {
     expect(packageMetadataQuotaRiskCount(probe)).toBe(1);
   });
 
-  test("links missing package metadata when owner lookup succeeds", async () => {
+  test("does not link missing package metadata", async () => {
     const probe = await runPackageMetadataProbe({
       feedOwner: "octo",
       packageIdentities: [{ id: "vcpkg-tool_freebsd-x64", version: "1" }],
@@ -211,10 +211,9 @@ describe("package metadata probes", () => {
     expect(probe.results[0]).toMatchObject({
       endpoint: "users",
       name: "vcpkg-tool_freebsd-x64",
-      settingsUrl:
-        "https://github.com/users/octo/packages/nuget/vcpkg-tool_freebsd-x64/settings",
       status: "missing",
     });
+    expect(probe.results[0].settingsUrl).toBeUndefined();
   });
 
   test("classifies package quota risk from visibility", () => {

@@ -192,6 +192,33 @@ describe("build miss report", () => {
     );
   });
 
+  test("does not link missing package IDs", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        builtPackages: ["fmt:x64-windows@8.0.0#1"],
+      }),
+      {
+        limit: 20,
+        owner: "octo",
+        probedPackageIds: 1,
+        requestedPackageIds: 1,
+        results: [
+          {
+            detail: "HTTP 404 Not Found",
+            name: "fmt_x64-windows",
+            settingsUrl: SETTINGS_URL,
+            status: "missing",
+          },
+        ],
+      },
+    );
+
+    expect(buildMissReportRows(reports, "html")[1][0]).toBe("fmt_x64-windows");
+    expect(formatBuildMissReportTable(reports)).toContain(
+      "| fmt_x64-windows | 8.0.0#1 | unknown |",
+    );
+  });
+
   test("extracts package identities from built packages", () => {
     expect(
       buildMissPackageIdentities(

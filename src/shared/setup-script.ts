@@ -110,6 +110,8 @@ export function renderSetupScript(plan: SetupPlan): string {
   const script = new PosixScript();
   const targetSettings = bsdTargetSettings(plan.targetOs);
   const bsdTarget = targetSettings ?? FREEBSD_TARGET;
+  const unzipPackageName =
+    bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
 
   script.line("#!/bin/sh");
   script.line("set -eu");
@@ -127,7 +129,9 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line('    missing_packages="${missing_packages} zip"');
   script.line("  fi");
   script.line("  if ! command_exists unzip; then");
-  script.line('    missing_packages="${missing_packages} unzip"');
+  script.line(
+    `    missing_packages="\${missing_packages} ${unzipPackageName}"`,
+  );
   script.line("  fi");
   script.line('  if [ -n "${missing_packages}" ]; then');
   script.command("    printf", [

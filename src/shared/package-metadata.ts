@@ -351,9 +351,10 @@ async function queryPackageMetadata(
         detail: statusDetail(response),
         endpoint,
         name: packageName,
-        settingsUrl: ownerEndpoint
-          ? packageSettingsUrl(endpoint, options.feedOwner, packageName)
-          : undefined,
+        settingsUrl:
+          ownerEndpoint && !responseMissing(response)
+            ? packageSettingsUrl(endpoint, options.feedOwner, packageName)
+            : undefined,
         status: responseMissing(response) ? "missing" : "failed",
       };
 

@@ -141318,14 +141318,13 @@ function parseBuildLog(content) {
         }
         if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
             bootstrappingVcpkg = true;
-            if (vcpkgToolRestoreAttempted && vcpkgToolStatus !== "restored") {
-                vcpkgToolStatus = "built-from-source";
-            }
         }
         if (/^Published (?:FreeBSD|OpenBSD) vcpkg tool package\b/i.test(trimmed)) {
+            vcpkgToolStatus = "built-from-source";
             vcpkgToolPublishStatus = "published";
         }
         if (/^(?:FreeBSD|OpenBSD) vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(trimmed)) {
+            vcpkgToolStatus = "built-from-source";
             vcpkgToolPublishStatus = "failed";
         }
         if (/^(?:FreeBSD|OpenBSD) vcpkg tool package skipped:/i.test(trimmed)) {
@@ -141740,7 +141739,7 @@ async function queryPackageMetadata(packageName, options, request, ownerEndpoint
                 detail: statusDetail(response),
                 endpoint,
                 name: packageName,
-                settingsUrl: ownerEndpoint
+                settingsUrl: ownerEndpoint && !responseMissing(response)
                     ? packageSettingsUrl(endpoint, options.feedOwner, packageName)
                     : undefined,
                 status: responseMissing(response) ? "missing" : "failed",
@@ -141931,6 +141930,9 @@ function buildTimeByPackageId(buildLogFacts) {
 function packageMetadataResults(packageMetadata) {
     return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
 }
+function build_miss_report_packageSettingsUrl(result) {
+    return result?.status === "missing" ? undefined : result?.settingsUrl;
+}
 function uploadStatusByPackageId(buildLogFacts) {
     return new Map(buildLogFacts.packageUploadStatuses.map((value) => [
         value.packageId,
@@ -142011,7 +142013,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
         return {
             buildTime: handleTimes.get(packageId),
             packageId,
-            packageSettingsUrl: result?.settingsUrl,
+            packageSettingsUrl: build_miss_report_packageSettingsUrl(result),
             packageSpec,
             uploadStatus: uploadStatus(packageId, uploads, deniedPackages, metadata, abiHashes),
             version: packageSpecVersion(packageSpec) ?? "unknown",
@@ -142029,7 +142031,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
         {
             buildTime: undefined,
             packageId: tool.packageId,
-            packageSettingsUrl: result?.settingsUrl,
+            packageSettingsUrl: build_miss_report_packageSettingsUrl(result),
             packageSpec: tool.packageId,
             uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
             version: tool.version,
