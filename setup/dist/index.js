@@ -32122,6 +32122,9 @@ function normalizeSetupTargetOs(value) {
     if (normalized === "freebsd") {
         return "freebsd";
     }
+    if (normalized === "openbsd") {
+        return "openbsd";
+    }
     throw new Error(`Unsupported target-os: ${value}`);
 }
 function ownerFromRepository(repository) {
@@ -32542,8 +32545,8 @@ async function run() {
         throw new Error("target-os is only supported with execution-mode=emit-script");
     }
     if (plan.executionMode === "emit-script") {
-        if (plan.targetOs !== "freebsd") {
-            throw new Error("target-os=freebsd is required with execution-mode=emit-script");
+        if (plan.targetOs === "current") {
+            throw new Error("target-os=freebsd or openbsd is required with execution-mode=emit-script");
         }
         const files = await emitSetupFiles(plan, process.env.GITHUB_WORKSPACE);
         const diagnosis = "vcpkg GitHub Packages cache setup script emitted";

@@ -142905,6 +142905,9 @@ function normalizeSetupTargetOs(value) {
     if (normalized === "freebsd") {
         return "freebsd";
     }
+    if (normalized === "openbsd") {
+        return "openbsd";
+    }
     throw new Error(`Unsupported target-os: ${value}`);
 }
 function ownerFromRepository(repository) {

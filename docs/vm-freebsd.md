@@ -39,14 +39,7 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Add OpenBSD target selection
-
-   Extend setup inputs so `target-os=openbsd` is accepted only with
-   `execution-mode=emit-script`.  Update target normalization, setup plan
-   tests, setup validation, setup summaries, and action input docs.  Keep
-   `target-os=freebsd` behavior unchanged.
-
-2. Factor BSD setup script helpers
+1. Factor BSD setup script helpers
 
    Split FreeBSD-specific setup script logic into shared BSD helpers plus
    per-target settings.  Keep package manager commands, target labels,
@@ -54,7 +47,7 @@ the caller workflow.
    specific.  Do this before adding OpenBSD logic so the OpenBSD slice stays
    small.
 
-3. Emit OpenBSD setup script support
+2. Emit OpenBSD setup script support
 
    Generate an OpenBSD POSIX setup script for `target-os=openbsd`.  Use
    OpenBSD package installation commands in the bootstrap and Mono paths,
@@ -62,28 +55,28 @@ the caller workflow.
    GitHub Packages NuGet source, and write `setup.env` exactly as the
    FreeBSD path does.
 
-4. Cache the OpenBSD vcpkg tool package
+3. Cache the OpenBSD vcpkg tool package
 
    Add OpenBSD vcpkg tool restore and publish support with package IDs such
    as `vcpkg-tool_openbsd-${tool_arch}`.  Include the vcpkg commit, target
    OS, target architecture, OpenBSD release, compiler identity, and schema
    version in the tool identity hash.
 
-5. Parse OpenBSD tool package logs
+4. Parse OpenBSD tool package logs
 
    Teach the build log parser and analyzer reports to recognize OpenBSD
    vcpkg tool restore hits, source rebuilds, publish successes, publish
    failures, and skipped publishes.  Report source-built OpenBSD tool
    packages in the same "Packages built from source" table as FreeBSD.
 
-6. Add OpenBSD missing dependency diagnostics
+5. Add OpenBSD missing dependency diagnostics
 
    Extend missing system dependency detection for OpenBSD bootstrap, vcpkg
    ports, and project configure failures.  Keep each recognized log pattern
    covered by a focused parser test and report missing packages in the job
    summary.
 
-7. Add trn OpenBSD integration workflow
+6. Add trn OpenBSD integration workflow
 
    Add an OpenBSD VM job to `trn` using `vmactions/openbsd-vm@v1`,
    `target-os=openbsd`, the emitted setup script, dot-sourced setup
@@ -91,7 +84,7 @@ the caller workflow.
    staged copyback pattern used by the FreeBSD job.  Start with the minimal
    OpenBSD project prerequisites discovered during testing.
 
-8. Document OpenBSD usage
+7. Document OpenBSD usage
 
    Update the main ReadMe with an OpenBSD VM example.  Show
    `vmactions/openbsd-vm@v1`, `target-os=openbsd`, OpenBSD package setup,

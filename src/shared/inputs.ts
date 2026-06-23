@@ -6,7 +6,7 @@
 
 export type TokenKind = "github" | "pat";
 export type SetupExecutionMode = "run" | "emit-script";
-export type SetupTargetOs = "current" | "freebsd";
+export type SetupTargetOs = "current" | "freebsd" | "openbsd";
 
 const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
 
@@ -55,6 +55,10 @@ export function normalizeSetupTargetOs(
 
   if (normalized === "freebsd") {
     return "freebsd";
+  }
+
+  if (normalized === "openbsd") {
+    return "openbsd";
   }
 
   throw new Error(`Unsupported target-os: ${value}`);

@@ -79,4 +79,19 @@ describe("setup plan", () => {
     });
     expect(plan.vcpkg.root).toBe(path.resolve("/work/repo", "deps/vcpkg"));
   });
+
+  test("builds an OpenBSD script-emission setup plan", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "openbsd",
+      workspace: "/work/repo",
+    });
+
+    expect(plan).toMatchObject({
+      executionMode: "emit-script",
+      feedOwner: "octo",
+      targetOs: "openbsd",
+    });
+  });
 });

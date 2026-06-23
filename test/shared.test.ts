@@ -60,6 +60,7 @@ describe("shared action helpers", () => {
     expect(normalizeSetupTargetOs("")).toBe("current");
     expect(normalizeSetupTargetOs("CURRENT")).toBe("current");
     expect(normalizeSetupTargetOs("FreeBSD")).toBe("freebsd");
+    expect(normalizeSetupTargetOs("OpenBSD")).toBe("openbsd");
   });
 
   test("rejects unsupported setup target OS values", () => {

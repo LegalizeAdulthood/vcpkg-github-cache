@@ -45,6 +45,17 @@ describe("setup summary", () => {
     ]);
     expect(items.join("\n")).not.toContain("vcpkg version");
     expect(items.join("\n")).not.toContain("NuGet command");
+
+    expect(
+      setupEmitSummaryItems({
+        binarySourceMode: "readwrite",
+        diagnosis: "vcpkg GitHub Packages cache setup script emitted",
+        feedUrl: "https://nuget.pkg.github.com/octo/index.json",
+        setupEnv: ".vcpkg-github-cache/setup.env",
+        setupScript: ".vcpkg-github-cache/setup.sh",
+        targetOs: "openbsd",
+      }),
+    ).toContain("Target OS: openbsd");
   });
 
   test("renders run-mode summary rows with host-side setup details", () => {

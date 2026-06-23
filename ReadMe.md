@@ -273,7 +273,8 @@ and `"false"` in workflow YAML.
 - `source-name`: default `"GitHubPackages"`.  NuGet source name.
 - `access`: default `"readwrite"`.  vcpkg binary source access mode.
 - `execution-mode`: default `"run"`.  Setup mode: `run` or `emit-script`.
-- `target-os`: default `"current"`.  Target OS for emitted setup scripts.
+- `target-os`: default `"current"`.  Target OS for emitted setup scripts:
+  `current`, `freebsd`, or `openbsd`.
 - `script-directory`: default `".vcpkg-github-cache"`.  Directory for
   generated setup files.
 - `debug`: default `"false"`.  Emit additional diagnostics.
