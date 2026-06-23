@@ -33,6 +33,15 @@ inputs:
   access:
     description: vcpkg binary source access mode.
     default: readwrite
+  execution-mode:
+    description: "Setup execution mode: run or emit-script."
+    default: run
+  target-os:
+    description: Target OS for emitted setup script.
+    default: current
+  script-directory:
+    description: Directory where generated setup files are written.
+    default: .vcpkg-github-cache
   debug:
     description: Emit additional diagnostics.
     default: "false"
@@ -50,6 +59,10 @@ outputs:
     description: Bootstrapped vcpkg tool version.
   diagnosis:
     description: Short setup diagnosis.
+  setup-script:
+    description: Path to generated setup script in emit-script mode.
+  setup-env:
+    description: Path to generated setup environment file in emit-script mode.
 runs:
   using: node24
   main: dist/index.js
