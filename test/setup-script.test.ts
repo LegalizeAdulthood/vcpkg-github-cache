@@ -27,6 +27,8 @@ describe("setup script emission", () => {
     const script = renderSetupScript(plan);
 
     expect(script).toContain("#!/bin/sh\nset -eu\n");
+    expect(script).toContain("command_exists() {\n");
+    expect(script).toContain('  command -v "$1" >/dev/null 2>&1\n');
     expect(script).toContain(
       ': "${VCPKG_GITHUB_CACHE_TOKEN:?VCPKG_GITHUB_CACHE_TOKEN is required}"',
     );
@@ -55,6 +57,10 @@ describe("setup script emission", () => {
     expect(script).toContain('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
     expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).toContain("Ensuring Mono is available");
+    expect(script).toContain("if command_exists mono; then");
+    expect(script).toContain("pkg install -y mono");
+    expect(script).toContain("if ! command_exists mono; then");
     expect(script).toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
     expect(script).toContain("nuget_exe=$(");
     expect(script).toContain("[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$");
@@ -62,6 +68,20 @@ describe("setup script emission", () => {
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
     expect(script).not.toContain("C:/host/repo");
+  });
+
+  test("honors skipped Mono install when NuGet is fetched", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      installMonoInput: "false",
+      repository: "octo/repo",
+      targetOsInput: "freebsd",
+    });
+    const script = renderSetupScript(plan);
+
+    expect(script).toContain("Mono install skipped");
+    expect(script).toContain("if ! command_exists mono; then");
+    expect(script).not.toContain("pkg install -y mono");
   });
 
   test("honors skipped vcpkg bootstrap and NuGet fetch", () => {
@@ -78,6 +98,7 @@ describe("setup script emission", () => {
     expect(script).toContain("NuGet fetch skipped");
     expect(script).not.toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     expect(script).not.toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    expect(script).not.toContain("pkg install -y mono");
   });
 
   test("renders a dot-sourceable binary source environment file", () => {

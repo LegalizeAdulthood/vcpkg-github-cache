@@ -31428,6 +31428,10 @@ function renderSetupScript(plan) {
     script.line("#!/bin/sh");
     script.line("set -eu");
     script.blank();
+    script.line("command_exists() {");
+    script.line('  command -v "$1" >/dev/null 2>&1');
+    script.line("}");
+    script.blank();
     script.line(': "${VCPKG_GITHUB_CACHE_TOKEN:?VCPKG_GITHUB_CACHE_TOKEN is required}"');
     script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
     script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
@@ -31472,6 +31476,38 @@ function renderSetupScript(plan) {
     }
     script.blank();
     if (plan.installNuget) {
+        if (plan.installMono) {
+            script.command("printf", [
+                posixLiteral("%s\\n"),
+                posixLiteral("Ensuring Mono is available"),
+            ]);
+            script.line("if command_exists mono; then");
+            script.command("  printf", [
+                posixLiteral("%s\\n"),
+                posixLiteral("Mono already available"),
+            ]);
+            script.line("else");
+            script.command("  printf", [
+                posixLiteral("%s\\n"),
+                posixLiteral("Installing Mono with pkg"),
+            ]);
+            script.line("  pkg install -y mono");
+            script.line("fi");
+        }
+        else {
+            script.command("printf", [
+                posixLiteral("%s\\n"),
+                posixLiteral("Mono install skipped"),
+            ]);
+        }
+        script.line("if ! command_exists mono; then");
+        script.command("  printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Mono is required to run nuget.exe; install Mono or set install-mono true"),
+        ]);
+        script.line("  exit 1");
+        script.line("fi");
+        script.blank();
         script.command("printf", [
             posixLiteral("%s\\n"),
             posixLiteral("Fetching NuGet with vcpkg"),
