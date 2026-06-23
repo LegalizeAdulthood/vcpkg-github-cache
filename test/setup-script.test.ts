@@ -130,7 +130,10 @@ describe("setup script emission", () => {
     expect(script).toContain("pkg_add -I ${missing_packages}");
     expect(script).toContain('compat_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(script).toContain('ln -sf "${libcurl_file}"');
-    expect(script).toContain('LD_LIBRARY_PATH="${compat_dir}');
+    expect(script).toContain(
+      'openbsd_library_path="${compat_dir}:/usr/local/lib"',
+    );
+    expect(script).toContain('LD_LIBRARY_PATH="${openbsd_library_path}"');
     expect(script).toContain("ensure_openbsd_libcurl_compat");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
     expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
@@ -238,8 +241,14 @@ describe("setup script emission", () => {
     expect(env).toContain(
       'openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',
     );
+    expect(env).toContain('openbsd_library_path="/usr/local/lib"');
+    expect(env).toContain(
+      'openbsd_library_path="${openbsd_libcurl_dir}:${openbsd_library_path}"',
+    );
     expect(env).toContain("export LD_LIBRARY_PATH=");
-    expect(env).toContain("unset openbsd_libcurl_dir openbsd_vcpkg_root");
+    expect(env).toContain(
+      "unset openbsd_libcurl_dir openbsd_library_path openbsd_vcpkg_root",
+    );
   });
 
   test("writes setup files and returns relative output paths", async () => {
