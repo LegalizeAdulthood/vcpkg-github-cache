@@ -141025,6 +141025,68 @@ function packageAbiHash(line) {
         packageSpec,
     };
 }
+function suggestedPackage(tool) {
+    return tool.toLowerCase();
+}
+function missingSystemDependency(line, neededBy) {
+    const trimmed = line.trim();
+    const vcpkgMake = /Could not find Z_VCPKG_MAKE\b.*names:\s+([A-Za-z0-9_.+-]+)/i.exec(trimmed);
+    if (vcpkgMake) {
+        const tool = vcpkgMake[1];
+        return {
+            evidence: trimmed,
+            neededBy: neededBy ?? "project configure",
+            suggestedPackage: suggestedPackage(tool),
+            tool,
+        };
+    }
+    const patchelf = /Could not find\s+(patchelf)\b/i.exec(trimmed);
+    if (patchelf) {
+        const tool = patchelf[1];
+        return {
+            evidence: trimmed,
+            neededBy: neededBy ?? "project configure",
+            suggestedPackage: suggestedPackage(tool),
+            tool,
+        };
+    }
+    const shell = /Couldn't locate preferred shell '([^']+)'/i.exec(trimmed);
+    if (shell) {
+        const tool = shell[1];
+        return {
+            evidence: trimmed,
+            neededBy: "project configure",
+            suggestedPackage: suggestedPackage(tool),
+            tool,
+        };
+    }
+    const cmakePackage = /Could NOT find\s+([A-Za-z0-9_.+-]+)\s+\(missing:\s+([A-Za-z0-9_.+-]+)_EXECUTABLE\)/i.exec(trimmed);
+    if (cmakePackage) {
+        const tool = cmakePackage[1].toLowerCase();
+        return {
+            evidence: trimmed,
+            neededBy: "project configure",
+            suggestedPackage: suggestedPackage(tool),
+            tool,
+        };
+    }
+    return undefined;
+}
+function missingSystemDependencyKey(value) {
+    return `${value.tool}\n${value.neededBy}\n${value.evidence}`;
+}
+function uniqueMissingSystemDependencies(values) {
+    const seen = new Set();
+    const output = [];
+    for (const value of values) {
+        const key = missingSystemDependencyKey(value);
+        if (!seen.has(key)) {
+            seen.add(key);
+            output.push(value);
+        }
+    }
+    return output;
+}
 function nugetConfigPath(line) {
     const trimmed = line.trim();
     if (/NuGet\.Config$/i.test(trimmed) ||
@@ -141105,11 +141167,13 @@ function parseBuildLog(content) {
     const packageAbiHashes = [];
     const packageHandleTimes = [];
     const packageUploadStatuses = new Map();
+    const missingSystemDependencies = [];
     const writeDeniedPackages = [];
     let capturePackageList = false;
     let captureFeeds = false;
     let captureNugetConfigPaths = false;
     let failedUpload;
+    let currentBuildPackage;
     let parsedRestoredCount;
     let submissionsStarted = 0;
     let uploadsAttempted = 0;
@@ -141171,6 +141235,12 @@ function parseBuildLog(content) {
         const built = builtPackage(line);
         if (built) {
             builtPackages.push(built);
+            currentBuildPackage = built;
+        }
+        if (/^-- Running vcpkg install - done\b/i.test(trimmed) ||
+            /^All requested installations completed successfully\b/i.test(trimmed) ||
+            /^Executing workflow step\b/i.test(trimmed)) {
+            currentBuildPackage = undefined;
         }
         const startingSubmission = startingSubmissionPackage(line);
         if (startingSubmission) {
@@ -141208,6 +141278,10 @@ function parseBuildLog(content) {
         if (abiHash) {
             packageAbiHashes.push(abiHash);
         }
+        const missingDependency = missingSystemDependency(line, currentBuildPackage);
+        if (missingDependency) {
+            missingSystemDependencies.push(missingDependency);
+        }
         if (status === "403" && failedUpload) {
             writeDeniedPackages.push(failedUpload);
         }
@@ -141229,6 +141303,7 @@ function parseBuildLog(content) {
         builtPackages: unique(builtPackages),
         failedHttpStatuses: unique(failedHttpStatuses),
         feeds: unique(feeds),
+        missingSystemDependencies: uniqueMissingSystemDependencies(missingSystemDependencies),
         nugetConfigPaths: unique(nugetConfigPaths),
         packageAbiHashes: uniquePackageAbiHashes(packageAbiHashes),
         packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),
@@ -142795,6 +142870,55 @@ async function runRestoreProbe(options) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/shared/system-dependency-report.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+const system_dependency_report_COLUMNS = [
+    {
+        header: "Tool",
+        value: (report) => report.tool,
+    },
+    {
+        header: "Suggested Package",
+        value: (report) => report.suggestedPackage,
+    },
+    {
+        header: "Needed By",
+        value: (report) => report.neededBy,
+    },
+    {
+        header: "Evidence",
+        value: (report) => report.evidence,
+    },
+];
+function system_dependency_report_markdownCell(value) {
+    return value.replace(/\|/g, "\\|");
+}
+function system_dependency_report_reportValue(column, report, format) {
+    return column.value(report, format) || "unknown";
+}
+function systemDependencyReportRows(reports, format = "text") {
+    return [
+        system_dependency_report_COLUMNS.map((column) => column.header),
+        ...reports.map((report) => system_dependency_report_COLUMNS.map((column) => system_dependency_report_reportValue(column, report, format))),
+    ];
+}
+function formatSystemDependencyReportTable(reports) {
+    if (!reports.length) {
+        return "";
+    }
+    const [header, ...rows] = systemDependencyReportRows(reports, "markdown");
+    return [
+        `| ${header.map(system_dependency_report_markdownCell).join(" | ")} |`,
+        `| ${header.map(() => "---").join(" | ")} |`,
+        ...rows.map((row) => `| ${row.map(system_dependency_report_markdownCell).join(" | ")} |`),
+        "",
+    ].join("\n");
+}
+
 ;// CONCATENATED MODULE: ./src/shared/trace.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -142901,6 +143025,7 @@ function createTraceLogger(options) {
 
 
 
+
 function liveProbeRows(liveProbes) {
     return [
         ["Feed basic auth", liveProbes.feedBasicAuth],
@@ -142923,6 +143048,9 @@ function optionalCount(value) {
 function writeDeniedPackages(buildLogFacts) {
     return buildLogFacts?.writeDeniedPackages ?? [];
 }
+function missingSystemDependencies(buildLogFacts) {
+    return buildLogFacts?.missingSystemDependencies ?? [];
+}
 function writeDeniedPackageSummaryTable(packages) {
     const [header, ...rows] = deniedPackageReportRows(packages, "html");
     return [
@@ -142932,6 +143060,13 @@ function writeDeniedPackageSummaryTable(packages) {
 }
 function buildMissSummaryTable(packages) {
     const [header, ...rows] = buildMissReportRows(packages, "html");
+    return [
+        header.map((value) => ({ data: value, header: true })),
+        ...rows.map((row) => [...row]),
+    ];
+}
+function systemDependencySummaryTable(dependencies) {
+    const [header, ...rows] = systemDependencyReportRows(dependencies, "html");
     return [
         header.map((value) => ({ data: value, header: true })),
         ...rows.map((row) => [...row]),
@@ -143055,9 +143190,10 @@ function buildLogRows(buildLogFacts) {
         summaryItem("Build log auth messages", buildLogFacts.authMessages.length.toString()),
         summaryItem("Build log quota messages", buildLogFacts.quotaMessages.length.toString()),
         summaryItem("Build log write-denied packages", buildLogFacts.writeDeniedPackages.length.toString()),
+        summaryItem("Build log missing system dependencies", missingSystemDependencies(buildLogFacts).length.toString()),
     ];
 }
-function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace) {
+function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, systemDependencyReports, trace) {
     if (!buildLogFacts) {
         return;
     }
@@ -143072,6 +143208,7 @@ function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace) {
     info(`Build log auth messages: ${buildLogFacts.authMessages.length}`);
     info(`Build log quota messages: ${buildLogFacts.quotaMessages.length}`);
     info(`Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`);
+    info(`Build log missing system dependencies: ${systemDependencyReports.length}`);
     const buildMissTable = formatBuildMissReportTable(missedReports);
     if (buildMissTable) {
         for (const line of buildMissTable.trimEnd().split("\n")) {
@@ -143081,6 +143218,12 @@ function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace) {
     const deniedTable = formatDeniedPackageReportTable(deniedReports);
     if (deniedTable) {
         for (const line of deniedTable.trimEnd().split("\n")) {
+            info(line);
+        }
+    }
+    const systemDependencyTable = formatSystemDependencyReportTable(systemDependencyReports);
+    if (systemDependencyTable) {
+        for (const line of systemDependencyTable.trimEnd().split("\n")) {
             info(line);
         }
     }
@@ -143104,7 +143247,7 @@ async function readBuildLogFacts(buildLog, workspace, traceLogger) {
     const content = await traceLogger.step("read build log", async () => (0,promises_.readFile)(buildLogPath, "utf8"));
     return await traceLogger.step("parse build log", async () => parseBuildLog(content));
 }
-async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, verbose) {
+async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, systemDependencyReports, verbose) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -143115,6 +143258,11 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
             summary
                 .addHeading("Packages built from source", 3)
                 .addTable(buildMissSummaryTable(missedReports));
+        }
+        if (systemDependencyReports.length) {
+            summary
+                .addHeading("Missing system dependencies", 3)
+                .addTable(systemDependencySummaryTable(systemDependencyReports));
         }
         if (deniedReports.length) {
             summary
@@ -143144,6 +143292,11 @@ async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, livePr
         summary
             .addHeading("Packages built from source", 3)
             .addTable(buildMissSummaryTable(missedReports));
+    }
+    if (systemDependencyReports.length) {
+        summary
+            .addHeading("Missing system dependencies", 3)
+            .addTable(systemDependencySummaryTable(systemDependencyReports));
     }
     if (deniedReports.length) {
         summary
@@ -143235,6 +143388,7 @@ async function run() {
         : `will not fail on ${diagnosis.failureKind || "none"}`);
     const deniedReports = await traceLogger.step("collect denied package details", async () => analyze_deniedPackageReports(buildLogFacts, packageMetadata, vcpkg.root));
     const missedReports = buildMissReports(buildLogFacts, packageMetadata);
+    const systemDependencyReports = missingSystemDependencies(buildLogFacts);
     if (debug) {
         try {
             diagnosticsArtifact = await traceLogger.step("upload diagnostics artifact", async () => uploadDiagnosticsArtifact({
@@ -143287,7 +143441,7 @@ async function run() {
         info(`NuGet username: ${username}`);
         logProbeOutputs(liveProbes, trace);
         logRestoreProbe(restoreProbe, trace);
-        logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace);
+        logBuildLogFacts(buildLogFacts, deniedReports, missedReports, systemDependencyReports, trace);
     }
     logPackageQuotaRisks(packageMetadata);
     if (logDetails) {
@@ -143312,7 +143466,7 @@ async function run() {
             info(`packages.config: ${packageConfig.path} (${packageConfig.packages.length} packages)`);
         }
     }
-    await writeSummary(diagnosis.diagnosis, diagnosis.cacheStatus, diagnosis.failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, logDetails);
+    await writeSummary(diagnosis.diagnosis, diagnosis.cacheStatus, diagnosis.failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigs.files.length, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, systemDependencyReports, logDetails);
     if (shouldFailDiagnosis(diagnosis, failOnPolicy)) {
         setFailed(diagnosis.diagnosis);
     }

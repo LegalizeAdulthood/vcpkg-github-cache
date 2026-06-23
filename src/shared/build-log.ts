@@ -10,6 +10,7 @@ export interface BuildLogFacts {
   readonly builtPackages: readonly string[];
   readonly failedHttpStatuses: readonly string[];
   readonly feeds: readonly string[];
+  readonly missingSystemDependencies?: readonly MissingSystemDependency[];
   readonly nugetConfigPaths: readonly string[];
   readonly packageAbiHashes: readonly PackageAbiHash[];
   readonly packageHandleTimes: readonly PackageHandleTime[];
@@ -52,6 +53,13 @@ export interface PackageUploadStatus {
   readonly packageId: string;
   readonly packageSpec: string;
   readonly status: PackageUploadState;
+}
+
+export interface MissingSystemDependency {
+  readonly evidence: string;
+  readonly neededBy: string;
+  readonly suggestedPackage: string;
+  readonly tool: string;
 }
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
@@ -259,6 +267,96 @@ function packageAbiHash(line: string): PackageAbiHash | undefined {
   };
 }
 
+function suggestedPackage(tool: string): string {
+  return tool.toLowerCase();
+}
+
+function missingSystemDependency(
+  line: string,
+  neededBy: string | undefined,
+): MissingSystemDependency | undefined {
+  const trimmed = line.trim();
+  const vcpkgMake =
+    /Could not find Z_VCPKG_MAKE\b.*names:\s+([A-Za-z0-9_.+-]+)/i.exec(trimmed);
+
+  if (vcpkgMake) {
+    const tool = vcpkgMake[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? "project configure",
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const patchelf = /Could not find\s+(patchelf)\b/i.exec(trimmed);
+
+  if (patchelf) {
+    const tool = patchelf[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? "project configure",
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const shell = /Couldn't locate preferred shell '([^']+)'/i.exec(trimmed);
+
+  if (shell) {
+    const tool = shell[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: "project configure",
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const cmakePackage =
+    /Could NOT find\s+([A-Za-z0-9_.+-]+)\s+\(missing:\s+([A-Za-z0-9_.+-]+)_EXECUTABLE\)/i.exec(
+      trimmed,
+    );
+
+  if (cmakePackage) {
+    const tool = cmakePackage[1].toLowerCase();
+
+    return {
+      evidence: trimmed,
+      neededBy: "project configure",
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  return undefined;
+}
+
+function missingSystemDependencyKey(value: MissingSystemDependency): string {
+  return `${value.tool}\n${value.neededBy}\n${value.evidence}`;
+}
+
+function uniqueMissingSystemDependencies(
+  values: readonly MissingSystemDependency[],
+): readonly MissingSystemDependency[] {
+  const seen = new Set<string>();
+  const output: MissingSystemDependency[] = [];
+
+  for (const value of values) {
+    const key = missingSystemDependencyKey(value);
+
+    if (!seen.has(key)) {
+      seen.add(key);
+      output.push(value);
+    }
+  }
+
+  return output;
+}
+
 function nugetConfigPath(line: string): string | undefined {
   const trimmed = line.trim();
 
@@ -374,11 +472,13 @@ export function parseBuildLog(content: string): BuildLogFacts {
   const packageAbiHashes: PackageAbiHash[] = [];
   const packageHandleTimes: PackageHandleTime[] = [];
   const packageUploadStatuses = new Map<string, PackageUploadStatus>();
+  const missingSystemDependencies: MissingSystemDependency[] = [];
   const writeDeniedPackages: WriteDeniedPackage[] = [];
   let capturePackageList = false;
   let captureFeeds = false;
   let captureNugetConfigPaths = false;
   let failedUpload: WriteDeniedPackage | undefined;
+  let currentBuildPackage: string | undefined;
   let parsedRestoredCount: number | undefined;
   let submissionsStarted = 0;
   let uploadsAttempted = 0;
@@ -459,6 +559,15 @@ export function parseBuildLog(content: string): BuildLogFacts {
 
     if (built) {
       builtPackages.push(built);
+      currentBuildPackage = built;
+    }
+
+    if (
+      /^-- Running vcpkg install - done\b/i.test(trimmed) ||
+      /^All requested installations completed successfully\b/i.test(trimmed) ||
+      /^Executing workflow step\b/i.test(trimmed)
+    ) {
+      currentBuildPackage = undefined;
     }
 
     const startingSubmission = startingSubmissionPackage(line);
@@ -522,6 +631,15 @@ export function parseBuildLog(content: string): BuildLogFacts {
       packageAbiHashes.push(abiHash);
     }
 
+    const missingDependency = missingSystemDependency(
+      line,
+      currentBuildPackage,
+    );
+
+    if (missingDependency) {
+      missingSystemDependencies.push(missingDependency);
+    }
+
     if (status === "403" && failedUpload) {
       writeDeniedPackages.push(failedUpload);
     }
@@ -549,6 +667,9 @@ export function parseBuildLog(content: string): BuildLogFacts {
     builtPackages: unique(builtPackages),
     failedHttpStatuses: unique(failedHttpStatuses),
     feeds: unique(feeds),
+    missingSystemDependencies: uniqueMissingSystemDependencies(
+      missingSystemDependencies,
+    ),
     nugetConfigPaths: unique(nugetConfigPaths),
     packageAbiHashes: uniquePackageAbiHashes(packageAbiHashes),
     packageHandleTimes: uniquePackageHandleTimes(packageHandleTimes),

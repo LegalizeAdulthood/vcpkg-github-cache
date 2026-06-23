@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 
 import { parseBuildLog } from "../src/shared/build-log";
+import { formatSystemDependencyReportTable } from "../src/shared/system-dependency-report";
 
 describe("build log parser", () => {
   test("extracts package, restore, build, and upload counts", () => {
@@ -152,5 +153,50 @@ System.Net.Http.HttpRequestException: Response status code does not indicate suc
           "1.17.0-vcpkg4cc21124af27493ac1787e1dc10c3210a797392776b8c63de971fa570703f0b9",
       },
     ]);
+  });
+
+  test("extracts missing system dependencies", () => {
+    const facts = parseBuildLog(`
+Building boost-cmake:x64-freebsd@1.90.0#1...
+Could not find patchelf. Please install it via your package manager.
+Building ncurses:x64-freebsd@6.5#3...
+Could not find Z_VCPKG_MAKE using the following names: gmake
+-- Running vcpkg install - done
+CMake Error at config/cmake/configure_trn.cmake:123 (message):
+  Couldn't locate preferred shell 'bash'
+Could NOT find BISON (missing: BISON_EXECUTABLE)
+`);
+
+    expect(facts.missingSystemDependencies).toEqual([
+      {
+        evidence:
+          "Could not find patchelf. Please install it via your package manager.",
+        neededBy: "boost-cmake:x64-freebsd@1.90.0#1",
+        suggestedPackage: "patchelf",
+        tool: "patchelf",
+      },
+      {
+        evidence:
+          "Could not find Z_VCPKG_MAKE using the following names: gmake",
+        neededBy: "ncurses:x64-freebsd@6.5#3",
+        suggestedPackage: "gmake",
+        tool: "gmake",
+      },
+      {
+        evidence: "Couldn't locate preferred shell 'bash'",
+        neededBy: "project configure",
+        suggestedPackage: "bash",
+        tool: "bash",
+      },
+      {
+        evidence: "Could NOT find BISON (missing: BISON_EXECUTABLE)",
+        neededBy: "project configure",
+        suggestedPackage: "bison",
+        tool: "bison",
+      },
+    ]);
+    expect(
+      formatSystemDependencyReportTable(facts.missingSystemDependencies ?? []),
+    ).toContain("| Tool | Suggested Package | Needed By | Evidence |");
   });
 });

@@ -23,6 +23,7 @@ import {
 } from "./shared/analyze-policy";
 import {
   BuildLogFacts,
+  MissingSystemDependency,
   parseBuildLog,
   WriteDeniedPackage,
 } from "./shared/build-log";
@@ -65,6 +66,10 @@ import {
   runPackageMetadataProbe,
 } from "./shared/package-metadata";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
+import {
+  formatSystemDependencyReportTable,
+  systemDependencyReportRows,
+} from "./shared/system-dependency-report";
 import { createTraceLogger, TraceLogger } from "./shared/trace";
 import { resolveVcpkgPaths } from "./shared/vcpkg";
 
@@ -101,6 +106,12 @@ function writeDeniedPackages(
   return buildLogFacts?.writeDeniedPackages ?? [];
 }
 
+function missingSystemDependencies(
+  buildLogFacts: BuildLogFacts | undefined,
+): readonly MissingSystemDependency[] {
+  return buildLogFacts?.missingSystemDependencies ?? [];
+}
+
 function writeDeniedPackageSummaryTable(
   packages: readonly DeniedPackageReport[],
 ): SummaryTableRows {
@@ -116,6 +127,17 @@ function buildMissSummaryTable(
   packages: readonly BuildMissReport[],
 ): SummaryTableRows {
   const [header, ...rows] = buildMissReportRows(packages, "html");
+
+  return [
+    header.map((value) => ({ data: value, header: true })),
+    ...rows.map((row) => [...row]),
+  ];
+}
+
+function systemDependencySummaryTable(
+  dependencies: readonly MissingSystemDependency[],
+): SummaryTableRows {
+  const [header, ...rows] = systemDependencyReportRows(dependencies, "html");
 
   return [
     header.map((value) => ({ data: value, header: true })),
@@ -317,6 +339,10 @@ function buildLogRows(
       "Build log write-denied packages",
       buildLogFacts.writeDeniedPackages.length.toString(),
     ),
+    summaryItem(
+      "Build log missing system dependencies",
+      missingSystemDependencies(buildLogFacts).length.toString(),
+    ),
   ];
 }
 
@@ -324,6 +350,7 @@ function logBuildLogFacts(
   buildLogFacts: BuildLogFacts | undefined,
   deniedReports: readonly DeniedPackageReport[],
   missedReports: readonly BuildMissReport[],
+  systemDependencyReports: readonly MissingSystemDependency[],
   trace: boolean,
 ): void {
   if (!buildLogFacts) {
@@ -357,6 +384,9 @@ function logBuildLogFacts(
   core.info(
     `Build log write-denied packages: ${buildLogFacts.writeDeniedPackages.length}`,
   );
+  core.info(
+    `Build log missing system dependencies: ${systemDependencyReports.length}`,
+  );
 
   const buildMissTable = formatBuildMissReportTable(missedReports);
 
@@ -370,6 +400,16 @@ function logBuildLogFacts(
 
   if (deniedTable) {
     for (const line of deniedTable.trimEnd().split("\n")) {
+      core.info(line);
+    }
+  }
+
+  const systemDependencyTable = formatSystemDependencyReportTable(
+    systemDependencyReports,
+  );
+
+  if (systemDependencyTable) {
+    for (const line of systemDependencyTable.trimEnd().split("\n")) {
       core.info(line);
     }
   }
@@ -423,6 +463,7 @@ async function writeSummary(
   uploadedCount: string,
   deniedReports: readonly DeniedPackageReport[],
   missedReports: readonly BuildMissReport[],
+  systemDependencyReports: readonly MissingSystemDependency[],
   verbose: boolean,
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
@@ -437,6 +478,12 @@ async function writeSummary(
       summary
         .addHeading("Packages built from source", 3)
         .addTable(buildMissSummaryTable(missedReports));
+    }
+
+    if (systemDependencyReports.length) {
+      summary
+        .addHeading("Missing system dependencies", 3)
+        .addTable(systemDependencySummaryTable(systemDependencyReports));
     }
 
     if (deniedReports.length) {
@@ -471,6 +518,11 @@ async function writeSummary(
     summary
       .addHeading("Packages built from source", 3)
       .addTable(buildMissSummaryTable(missedReports));
+  }
+  if (systemDependencyReports.length) {
+    summary
+      .addHeading("Missing system dependencies", 3)
+      .addTable(systemDependencySummaryTable(systemDependencyReports));
   }
   if (deniedReports.length) {
     summary
@@ -615,6 +667,7 @@ export async function run(): Promise<void> {
       deniedPackageReports(buildLogFacts, packageMetadata, vcpkg.root),
   );
   const missedReports = buildMissReports(buildLogFacts, packageMetadata);
+  const systemDependencyReports = missingSystemDependencies(buildLogFacts);
 
   if (debug) {
     try {
@@ -682,7 +735,13 @@ export async function run(): Promise<void> {
     core.info(`NuGet username: ${username}`);
     logProbeOutputs(liveProbes, trace);
     logRestoreProbe(restoreProbe, trace);
-    logBuildLogFacts(buildLogFacts, deniedReports, missedReports, trace);
+    logBuildLogFacts(
+      buildLogFacts,
+      deniedReports,
+      missedReports,
+      systemDependencyReports,
+      trace,
+    );
   }
   logPackageQuotaRisks(packageMetadata);
 
@@ -729,6 +788,7 @@ export async function run(): Promise<void> {
     uploadedCount,
     deniedReports,
     missedReports,
+    systemDependencyReports,
     logDetails,
   );
 
