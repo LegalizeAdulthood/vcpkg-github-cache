@@ -56,23 +56,23 @@ describe("setup script emission", () => {
 
     expect(script).toContain('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
-    expect(script).toContain("ensure_freebsd_bootstrap_packages");
+    expect(script).toContain("ensure_bsd_bootstrap_packages");
     expect(script).toContain("pkg install -y ${missing_packages}");
-    expect(script).toContain("ensure_freebsd_nuget_command");
+    expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
-    expect(script).toContain("has_freebsd_nuget_tool");
-    expect(script).toContain("enable_freebsd_nuget_tool");
+    expect(script).toContain("has_bsd_nuget_tool");
+    expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
     expect(script).toContain('\\"version\\": \\"6.8.0\\"');
     expect(script).toContain("/v6.8.0/nuget.exe");
     expect(script).toContain(
       "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c",
     );
-    expect(script).toContain("set_freebsd_vcpkg_tool_identity");
+    expect(script).toContain("set_bsd_vcpkg_tool_identity");
     expect(script).toContain("VCPKG_TOOL_PACKAGE_ID=");
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
-    expect(script).toContain("restore_freebsd_vcpkg_tool_package");
-    expect(script).toContain("publish_freebsd_vcpkg_tool_package");
+    expect(script).toContain("restore_bsd_vcpkg_tool_package");
+    expect(script).toContain("publish_bsd_vcpkg_tool_package");
     expect(script).toContain("vcpkg-tool_freebsd-${tool_arch}");
     expect(script).toContain("1.0.0-vcpkgtool${identity_hash}");
     expect(script).toContain("run_nuget install \\");
@@ -141,9 +141,9 @@ describe("setup script emission", () => {
     expect(script).not.toContain(
       'nuget_output=$("${vcpkg_exe}" fetch nuget 2>&1)',
     );
-    expect(script).not.toContain("\nensure_freebsd_nuget_command\n");
+    expect(script).not.toContain("\nensure_bsd_nuget_command\n");
     expect(script).not.toContain("\nconfigure_github_nuget_source\n");
-    expect(script).not.toContain("\nrestore_freebsd_vcpkg_tool_package\n");
+    expect(script).not.toContain("\nrestore_bsd_vcpkg_tool_package\n");
     expect(script).not.toContain("pkg install -y mono");
   });
 
