@@ -15,6 +15,7 @@ import { buildSetupPlan } from "./shared/setup-plan";
 import {
   setupEmitSummaryItems,
   setupRunSummaryItems,
+  setupStatusHeading,
 } from "./shared/setup-summary";
 import { createTraceLogger } from "./shared/trace";
 import {
@@ -27,15 +28,22 @@ import {
 
 const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
 
-async function writeSetupSummary(items: readonly string[]): Promise<void> {
+async function writeSetupSummary(
+  diagnosis: string,
+  items: readonly string[],
+  verbose: boolean,
+): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
   }
 
-  await core.summary
-    .addHeading("vcpkg GitHub Packages cache setup", 3)
-    .addList([...items])
-    .write();
+  const summary = core.summary.addHeading(setupStatusHeading(diagnosis), 3);
+
+  if (verbose) {
+    summary.addList([...items]);
+  }
+
+  await summary.write();
 }
 
 function binarySourceMode(installNuget: boolean, access: string): string {
@@ -49,12 +57,14 @@ async function writeEmitSummary(
   setupScript: string,
   setupEnv: string,
   binaryMode: string,
+  verbose: boolean,
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
   }
 
   await writeSetupSummary(
+    diagnosis,
     setupEmitSummaryItems({
       binarySourceMode: binaryMode,
       diagnosis,
@@ -63,6 +73,7 @@ async function writeEmitSummary(
       setupScript,
       targetOs,
     }),
+    verbose,
   );
 }
 
@@ -72,8 +83,10 @@ async function writeRunSummary(
   nugetCommand: string,
   vcpkgRoot: string,
   vcpkgVersion: string,
+  verbose: boolean,
 ): Promise<void> {
   await writeSetupSummary(
+    diagnosis,
     setupRunSummaryItems({
       diagnosis,
       feedUrl,
@@ -81,6 +94,7 @@ async function writeRunSummary(
       vcpkgRoot,
       vcpkgVersion,
     }),
+    verbose,
   );
 }
 
@@ -174,6 +188,7 @@ export async function run(): Promise<void> {
       files.setupScriptOutput,
       files.setupEnvOutput,
       binarySourceMode(plan.installNuget, plan.access),
+      plan.debug,
     );
 
     if (plan.debug || plan.trace) {
@@ -286,15 +301,14 @@ export async function run(): Promise<void> {
     core.info(`nuget-command: ${nugetCommand}`);
   }
 
-  if (plan.debug || plan.trace) {
-    await writeRunSummary(
-      diagnosis,
-      plan.feedUrl,
-      nugetCommand,
-      plan.vcpkg.root,
-      vcpkgVersion,
-    );
-  }
+  await writeRunSummary(
+    diagnosis,
+    plan.feedUrl,
+    nugetCommand,
+    plan.vcpkg.root,
+    vcpkgVersion,
+    plan.debug,
+  );
 }
 
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {

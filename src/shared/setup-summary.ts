@@ -25,6 +25,14 @@ function summaryItem(label: string, value: string): string {
   return `${label}: ${value}`;
 }
 
+export function setupStatusHeading(diagnosis: string): string {
+  const status = diagnosis
+    .replace(/^vcpkg GitHub Packages cache setup\s*/i, "")
+    .trim();
+
+  return `Setup status: ${status || "complete"}`;
+}
+
 export function setupEmitSummaryItems(
   input: SetupEmitSummaryInput,
 ): readonly string[] {

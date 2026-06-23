@@ -9,9 +9,22 @@ import { describe, expect, test } from "vitest";
 import {
   setupEmitSummaryItems,
   setupRunSummaryItems,
+  setupStatusHeading,
 } from "../src/shared/setup-summary";
 
 describe("setup summary", () => {
+  test("renders compact setup status headings", () => {
+    expect(
+      setupStatusHeading("vcpkg GitHub Packages cache setup complete"),
+    ).toBe("Setup status: complete");
+    expect(
+      setupStatusHeading("vcpkg GitHub Packages cache setup script emitted"),
+    ).toBe("Setup status: script emitted");
+    expect(
+      setupStatusHeading("vcpkg GitHub Packages cache setup skipped NuGet"),
+    ).toBe("Setup status: skipped NuGet");
+  });
+
   test("renders emit-mode summary rows without target-side claims", () => {
     const items = setupEmitSummaryItems({
       binarySourceMode: "readwrite",
