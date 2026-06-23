@@ -248,7 +248,7 @@ export function buildMissPackageIdentities(
   const toolIdentity = vcpkgToolPackageIdentity(buildLogFacts);
 
   return toolIdentity
-    ? [...builtPackageIdentities, toolIdentity]
+    ? [toolIdentity, ...builtPackageIdentities]
     : builtPackageIdentities;
 }
 

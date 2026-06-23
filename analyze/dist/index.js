@@ -141926,7 +141926,7 @@ function buildMissPackageIdentities(buildLogFacts) {
     });
     const toolIdentity = vcpkgToolPackageIdentity(buildLogFacts);
     return toolIdentity
-        ? [...builtPackageIdentities, toolIdentity]
+        ? [toolIdentity, ...builtPackageIdentities]
         : builtPackageIdentities;
 }
 function buildMissReports(buildLogFacts, packageMetadata) {

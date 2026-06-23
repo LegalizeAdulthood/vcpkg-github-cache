@@ -206,11 +206,11 @@ describe("build miss report", () => {
         }),
       ),
     ).toEqual([
-      { id: "fmt_x64-windows", version: "8.0.0#1" },
       {
         id: "vcpkg-tool_freebsd-x64",
         version: "1.0.0-vcpkgtoolabcdef0123456789",
       },
+      { id: "fmt_x64-windows", version: "8.0.0#1" },
     ]);
   });
 
