@@ -331,6 +331,20 @@ function missingSystemDependency(
     };
   }
 
+  const libcurl =
+    /vcpkg was unable to find a libcurl[^\s,]*.*Please install libcurl\b/i.exec(
+      trimmed,
+    );
+
+  if (libcurl) {
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? defaultNeededBy,
+      suggestedPackage: "curl",
+      tool: "libcurl",
+    };
+  }
+
   const patchelf = /Could not find\s+(patchelf)\b/i.exec(trimmed);
 
   if (patchelf) {

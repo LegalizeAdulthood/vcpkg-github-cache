@@ -59,6 +59,7 @@ describe("setup script emission", () => {
     expect(script).toContain("ensure_bsd_bootstrap_packages");
     expect(script).toContain('missing_packages="${missing_packages} unzip"');
     expect(script).toContain("pkg install -y ${missing_packages}");
+    expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
     expect(script).toContain("has_bsd_nuget_tool");
@@ -124,8 +125,12 @@ describe("setup script emission", () => {
     expect(script).toContain("printf '%s\\n' 'Target OS: openbsd'");
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
     expect(script).toContain("ensure_bsd_bootstrap_packages");
+    expect(script).toContain("ls /usr/local/lib/libcurl.so.* >/dev/null 2>&1");
     expect(script).toContain('missing_packages="${missing_packages} unzip--"');
     expect(script).toContain("pkg_add -I ${missing_packages}");
+    expect(script).toContain('ln -sf "${libcurl_file}"');
+    expect(script).toContain('LD_LIBRARY_PATH="${compat_dir}');
+    expect(script).toContain("ensure_openbsd_libcurl_compat");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
@@ -199,6 +204,22 @@ describe("setup script emission", () => {
     expect(env).toContain("https://nuget.pkg.github.com/octo/index.json");
     expect(env).toContain("readwrite");
     expect(env).not.toContain("VCPKG_GITHUB_CACHE_TOKEN");
+  });
+
+  test("renders OpenBSD libcurl compatibility environment", () => {
+    const plan = buildSetupPlan({
+      accessInput: "readwrite",
+      executionModeInput: "emit-script",
+      feedOwnerInput: "octo",
+      targetOsInput: "openbsd",
+    });
+    const env = renderSetupEnvironment(plan);
+
+    expect(env).toContain("export VCPKG_BINARY_SOURCES=");
+    expect(env).toContain(
+      'openbsd_libcurl_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"',
+    );
+    expect(env).toContain("export LD_LIBRARY_PATH=");
   });
 
   test("writes setup files and returns relative output paths", async () => {

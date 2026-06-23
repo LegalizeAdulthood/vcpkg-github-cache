@@ -215,6 +215,7 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
 Bootstrapping vcpkg
 env: curl: No such file or directory
 /bin/sh: tar: not found
+error: vcpkg was unable to find a libcurl.so.4, libcurl-gnutls.so.4, or libcurl-nss.so.4 to use on this system. Please install libcurl from your system package manager and retry vcpkg.
 -- Running vcpkg install - done
 Building sqlite3:x64-openbsd@3.50.4#1...
 pkg_add: can't find automake
@@ -237,6 +238,13 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
         neededBy: "vcpkg bootstrap",
         suggestedPackage: "tar",
         tool: "tar",
+      },
+      {
+        evidence:
+          "error: vcpkg was unable to find a libcurl.so.4, libcurl-gnutls.so.4, or libcurl-nss.so.4 to use on this system. Please install libcurl from your system package manager and retry vcpkg.",
+        neededBy: "vcpkg bootstrap",
+        suggestedPackage: "curl",
+        tool: "libcurl",
       },
       {
         evidence: "pkg_add: can't find automake",

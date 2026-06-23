@@ -31466,6 +31466,7 @@ function renderSetupScript(plan) {
     const targetSettings = bsdTargetSettings(plan.targetOs);
     const bsdTarget = targetSettings ?? FREEBSD_TARGET;
     const unzipPackageName = bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
+    const openBsdTarget = bsdTarget.targetOs === "openbsd";
     script.line("#!/bin/sh");
     script.line("set -eu");
     script.blank();
@@ -31475,7 +31476,12 @@ function renderSetupScript(plan) {
     script.blank();
     script.line("ensure_bsd_bootstrap_packages() {");
     script.line('  missing_packages=""');
-    script.line("  if ! command_exists curl; then");
+    if (openBsdTarget) {
+        script.line("  if ! command_exists curl || ! ls /usr/local/lib/libcurl.so.* >/dev/null 2>&1; then");
+    }
+    else {
+        script.line("  if ! command_exists curl; then");
+    }
     script.line('    missing_packages="${missing_packages} curl"');
     script.line("  fi");
     script.line("  if ! command_exists zip; then");
@@ -31492,6 +31498,36 @@ function renderSetupScript(plan) {
     ]);
     script.line(`    ${bsdTarget.packageInstallCommand} \${missing_packages}`);
     script.line("  fi");
+    script.line("}");
+    script.blank();
+    script.line("ensure_openbsd_libcurl_compat() {");
+    if (openBsdTarget) {
+        script.line("  libcurl_file=$(ls /usr/local/lib/libcurl.so.* 2>/dev/null | sed -n '1p')");
+        script.line('  if [ -z "${libcurl_file}" ]; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("OpenBSD libcurl library not found; install curl"),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  compat_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"');
+        script.line('  mkdir -p "${compat_dir}"');
+        script.line('  ln -sf "${libcurl_file}" "${compat_dir}/libcurl.so.4"');
+        script.line('  if [ -z "${LD_LIBRARY_PATH:-}" ]; then');
+        script.line('    LD_LIBRARY_PATH="${compat_dir}"');
+        script.line("  else");
+        script.line('    LD_LIBRARY_PATH="${compat_dir}:${LD_LIBRARY_PATH}"');
+        script.line("  fi");
+        script.line("  export LD_LIBRARY_PATH");
+        script.command("  printf", [
+            posixLiteral("%s%s\\n"),
+            posixLiteral("OpenBSD libcurl compatibility path: "),
+            posixRuntimeExpression('"${compat_dir}"'),
+        ]);
+    }
+    else {
+        script.line("  :");
+    }
     script.line("}");
     script.blank();
     script.line("sha512_file() {");
@@ -31851,6 +31887,7 @@ function renderSetupScript(plan) {
     script.blank();
     if (plan.installNuget && targetSettings) {
         script.line("ensure_bsd_bootstrap_packages");
+        script.line("ensure_openbsd_libcurl_compat");
         if (plan.installMono) {
             script.command("printf", [
                 posixLiteral("%s\\n"),
@@ -31893,6 +31930,7 @@ function renderSetupScript(plan) {
     if (plan.bootstrap) {
         if (targetSettings && !plan.installNuget) {
             script.line("ensure_bsd_bootstrap_packages");
+            script.line("ensure_openbsd_libcurl_compat");
         }
         if (targetSettings && plan.installNuget && bsdTarget.cacheToolPackage) {
             script.line('if [ "${vcpkg_tool_restored}" -eq 1 ]; then');
@@ -32068,6 +32106,20 @@ function renderSetupEnvironment(plan) {
     const script = new PosixScript();
     script.line("# vcpkg-github-cache setup environment");
     script.line(`export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`);
+    if (plan.targetOs === "openbsd") {
+        script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
+        script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
+        script.line("fi");
+        script.line('openbsd_libcurl_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"');
+        script.line('if [ -d "${openbsd_libcurl_dir}" ]; then');
+        script.line('  if [ -z "${LD_LIBRARY_PATH:-}" ]; then');
+        script.line('    export LD_LIBRARY_PATH="${openbsd_libcurl_dir}"');
+        script.line("  else");
+        script.line('    export LD_LIBRARY_PATH="${openbsd_libcurl_dir}:${LD_LIBRARY_PATH}"');
+        script.line("  fi");
+        script.line("fi");
+        script.line("unset openbsd_libcurl_dir");
+    }
     return script.render();
 }
 async function emitSetupFiles(plan, workspace) {
