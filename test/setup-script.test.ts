@@ -67,6 +67,19 @@ describe("setup script emission", () => {
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
+    expect(script).toContain("run_nuget() {\n");
+    expect(script).toContain(
+      "run_nuget sources Remove -Name 'GitHubPackages' -NonInteractive",
+    );
+    expect(script).toContain("run_nuget 'sources' 'Add'");
+    expect(script).toContain(
+      "'-Source' 'https://nuget.pkg.github.com/octo/index.json'",
+    );
+    expect(script).toContain("'-UserName' 'octo'");
+    expect(script).toContain("'-Password' \"${VCPKG_GITHUB_CACHE_TOKEN}\"");
+    expect(script).toContain(
+      "run_nuget 'setapikey' \"${VCPKG_GITHUB_CACHE_TOKEN}\"",
+    );
     expect(script).not.toContain("C:/host/repo");
   });
 
@@ -98,6 +111,8 @@ describe("setup script emission", () => {
     expect(script).toContain("NuGet fetch skipped");
     expect(script).not.toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     expect(script).not.toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    expect(script).not.toContain("run_nuget 'sources' 'Add'");
+    expect(script).not.toContain("run_nuget 'setapikey'");
     expect(script).not.toContain("pkg install -y mono");
   });
 

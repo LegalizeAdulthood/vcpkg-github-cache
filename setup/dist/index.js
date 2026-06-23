@@ -31547,6 +31547,48 @@ function renderSetupScript(plan) {
             posixLiteral("NuGet command: "),
             posixRuntimeExpression('"${VCPKG_GITHUB_CACHE_NUGET_COMMAND}"'),
         ]);
+        script.blank();
+        script.line("run_nuget() {");
+        script.line('  mono "${VCPKG_GITHUB_CACHE_NUGET_EXE}" "$@"');
+        script.line("}");
+        script.blank();
+        script.command("printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Configuring GitHub Packages NuGet source"),
+        ]);
+        script.line(`run_nuget sources Remove -Name ${quotePosixShellLiteral(plan.sourceName)} -NonInteractive >/dev/null 2>&1 || true`);
+        script.command("run_nuget", [
+            posixLiteral("sources"),
+            posixLiteral("Add"),
+            posixLiteral("-Source"),
+            posixLiteral(plan.feedUrl),
+            posixLiteral("-StorePasswordInClearText"),
+            posixLiteral("-Name"),
+            posixLiteral(plan.sourceName),
+            posixLiteral("-UserName"),
+            posixLiteral(plan.username),
+            posixLiteral("-Password"),
+            posixRuntimeExpression('"${VCPKG_GITHUB_CACHE_TOKEN}"'),
+            posixLiteral("-ValidAuthenticationTypes"),
+            posixLiteral("basic"),
+            posixLiteral("-NonInteractive"),
+            posixLiteral("-Verbosity"),
+            posixLiteral("detailed"),
+        ]);
+        script.command("run_nuget", [
+            posixLiteral("setapikey"),
+            posixRuntimeExpression('"${VCPKG_GITHUB_CACHE_TOKEN}"'),
+            posixLiteral("-Source"),
+            posixLiteral(plan.feedUrl),
+            posixLiteral("-NonInteractive"),
+            posixLiteral("-Verbosity"),
+            posixLiteral("detailed"),
+        ]);
+        script.command("printf", [
+            posixLiteral("%s%s\\n"),
+            posixLiteral("NuGet source configured: "),
+            posixLiteral(plan.sourceName),
+        ]);
     }
     else {
         script.command("printf", [

@@ -243,25 +243,19 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Emit NuGet source configuration
-
-   Render commands to add or update the GitHub Packages NuGet source and set
-   the API key for the feed.  Use runtime environment variables for secrets.
-   Keep source name, feed owner, username, and feed URL non-secret.
-
-2. Add setup summaries and diagnostics
+1. Add setup summaries and diagnostics
 
    Emit a compact step summary in script-emission mode.  Include the script
    path, environment path, target OS, feed URL, and binary source mode.  Do
    not claim target-side vcpkg or NuGet versions from the host action.
 
-3. Document FreeBSD VM use
+2. Document FreeBSD VM use
 
    Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
    `copyback: true`, `usesh: true`, setup script execution, `setup.env`
    dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
 
-4. Verify with a FreeBSD workflow
+3. Verify with a FreeBSD workflow
 
    Add or update a consuming workflow to run a FreeBSD VM build, copy back
    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
