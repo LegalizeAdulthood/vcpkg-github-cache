@@ -275,8 +275,12 @@ function suggestedPackage(tool: string): string {
 function missingSystemDependency(
   line: string,
   neededBy: string | undefined,
+  bootstrappingVcpkg: boolean,
 ): MissingSystemDependency | undefined {
   const trimmed = line.trim();
+  const defaultNeededBy = bootstrappingVcpkg
+    ? "vcpkg bootstrap"
+    : "project configure";
   const vcpkgMake =
     /Could not find Z_VCPKG_MAKE\b.*names:\s+([A-Za-z0-9_.+-]+)/i.exec(trimmed);
 
@@ -285,7 +289,23 @@ function missingSystemDependency(
 
     return {
       evidence: trimmed,
-      neededBy: neededBy ?? "project configure",
+      neededBy: neededBy ?? defaultNeededBy,
+      suggestedPackage: suggestedPackage(tool),
+      tool,
+    };
+  }
+
+  const genericTool =
+    /Could not find\s+([A-Za-z0-9_.+-]+)[.]\s+Please install it\b/i.exec(
+      trimmed,
+    );
+
+  if (genericTool) {
+    const tool = genericTool[1];
+
+    return {
+      evidence: trimmed,
+      neededBy: neededBy ?? defaultNeededBy,
       suggestedPackage: suggestedPackage(tool),
       tool,
     };
@@ -298,7 +318,7 @@ function missingSystemDependency(
 
     return {
       evidence: trimmed,
-      neededBy: neededBy ?? "project configure",
+      neededBy: neededBy ?? defaultNeededBy,
       suggestedPackage: suggestedPackage(tool),
       tool,
     };
@@ -480,6 +500,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   let captureNugetConfigPaths = false;
   let failedUpload: WriteDeniedPackage | undefined;
   let currentBuildPackage: string | undefined;
+  let bootstrappingVcpkg = false;
   let parsedRestoredCount: number | undefined;
   let submissionsStarted = 0;
   let uploadsAttempted = 0;
@@ -564,15 +585,21 @@ export function parseBuildLog(content: string): BuildLogFacts {
       currentBuildPackage = built;
     }
 
+    if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
+      bootstrappingVcpkg = true;
+    }
+
     if (
       /^-- Running vcpkg install - done\b/i.test(trimmed) ||
       /^All requested installations completed successfully\b/i.test(trimmed)
     ) {
+      bootstrappingVcpkg = false;
       vcpkgInstallSucceeded = true;
       currentBuildPackage = undefined;
     }
 
     if (/^Executing workflow step\b/i.test(trimmed)) {
+      bootstrappingVcpkg = false;
       currentBuildPackage = undefined;
     }
 
@@ -640,6 +667,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
     const missingDependency = missingSystemDependency(
       line,
       currentBuildPackage,
+      bootstrappingVcpkg,
     );
 
     if (missingDependency) {

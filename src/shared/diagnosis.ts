@@ -279,6 +279,13 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
     ]);
   }
 
+  if (input.buildLogFacts?.missingSystemDependencies?.length) {
+    return result("tooling-failure", "tooling-failure", [
+      ...baseEvidence,
+      `missing system dependencies ${input.buildLogFacts.missingSystemDependencies.length}`,
+    ]);
+  }
+
   if (cacheDisabled(input.buildLogFacts)) {
     return result("cache-disabled", "cache-miss", baseEvidence);
   }

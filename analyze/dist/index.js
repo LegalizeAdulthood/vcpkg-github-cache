@@ -141028,14 +141028,27 @@ function packageAbiHash(line) {
 function suggestedPackage(tool) {
     return tool.toLowerCase();
 }
-function missingSystemDependency(line, neededBy) {
+function missingSystemDependency(line, neededBy, bootstrappingVcpkg) {
     const trimmed = line.trim();
+    const defaultNeededBy = bootstrappingVcpkg
+        ? "vcpkg bootstrap"
+        : "project configure";
     const vcpkgMake = /Could not find Z_VCPKG_MAKE\b.*names:\s+([A-Za-z0-9_.+-]+)/i.exec(trimmed);
     if (vcpkgMake) {
         const tool = vcpkgMake[1];
         return {
             evidence: trimmed,
-            neededBy: neededBy ?? "project configure",
+            neededBy: neededBy ?? defaultNeededBy,
+            suggestedPackage: suggestedPackage(tool),
+            tool,
+        };
+    }
+    const genericTool = /Could not find\s+([A-Za-z0-9_.+-]+)[.]\s+Please install it\b/i.exec(trimmed);
+    if (genericTool) {
+        const tool = genericTool[1];
+        return {
+            evidence: trimmed,
+            neededBy: neededBy ?? defaultNeededBy,
             suggestedPackage: suggestedPackage(tool),
             tool,
         };
@@ -141045,7 +141058,7 @@ function missingSystemDependency(line, neededBy) {
         const tool = patchelf[1];
         return {
             evidence: trimmed,
-            neededBy: neededBy ?? "project configure",
+            neededBy: neededBy ?? defaultNeededBy,
             suggestedPackage: suggestedPackage(tool),
             tool,
         };
@@ -141174,6 +141187,7 @@ function parseBuildLog(content) {
     let captureNugetConfigPaths = false;
     let failedUpload;
     let currentBuildPackage;
+    let bootstrappingVcpkg = false;
     let parsedRestoredCount;
     let submissionsStarted = 0;
     let uploadsAttempted = 0;
@@ -141238,12 +141252,17 @@ function parseBuildLog(content) {
             builtPackages.push(built);
             currentBuildPackage = built;
         }
+        if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
+            bootstrappingVcpkg = true;
+        }
         if (/^-- Running vcpkg install - done\b/i.test(trimmed) ||
             /^All requested installations completed successfully\b/i.test(trimmed)) {
+            bootstrappingVcpkg = false;
             vcpkgInstallSucceeded = true;
             currentBuildPackage = undefined;
         }
         if (/^Executing workflow step\b/i.test(trimmed)) {
+            bootstrappingVcpkg = false;
             currentBuildPackage = undefined;
         }
         const startingSubmission = startingSubmissionPackage(line);
@@ -141282,7 +141301,7 @@ function parseBuildLog(content) {
         if (abiHash) {
             packageAbiHashes.push(abiHash);
         }
-        const missingDependency = missingSystemDependency(line, currentBuildPackage);
+        const missingDependency = missingSystemDependency(line, currentBuildPackage, bootstrappingVcpkg);
         if (missingDependency) {
             missingSystemDependencies.push(missingDependency);
         }
@@ -142030,6 +142049,12 @@ function classifyBuildLog(input) {
         return result("auth-failure", "auth", [
             ...baseEvidence,
             `auth messages ${input.buildLogFacts.authMessages.length}`,
+        ]);
+    }
+    if (input.buildLogFacts?.missingSystemDependencies?.length) {
+        return result("tooling-failure", "tooling-failure", [
+            ...baseEvidence,
+            `missing system dependencies ${input.buildLogFacts.missingSystemDependencies.length}`,
         ]);
     }
     if (cacheDisabled(input.buildLogFacts)) {

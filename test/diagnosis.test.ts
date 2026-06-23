@@ -275,6 +275,54 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).toContain("vcpkg install succeeded");
   });
 
+  test("reports missing bootstrap dependencies before host probe failures", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: undefined,
+        builtPackages: [],
+        failedHttpStatuses: [],
+        feeds: [],
+        missingSystemDependencies: [
+          {
+            evidence:
+              "Could not find tar. Please install it (and other dependencies) with:",
+            neededBy: "vcpkg bootstrap",
+            suggestedPackage: "tar",
+            tool: "tar",
+          },
+        ],
+        nugetConfigPaths: [],
+        packageAbiHashes: [],
+        packageHandleTimes: [],
+        packageUploadStatuses: [],
+        quotaMessages: [],
+        requestedCount: undefined,
+        restoredCount: undefined,
+        restoredPackages: [],
+        submissionsStarted: 0,
+        uploadedCount: undefined,
+        uploadsAttempted: 0,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 0,
+      },
+      liveProbes: {
+        ...liveProbes(),
+        nugetSources: probe("skipped", "NuGet command unavailable"),
+        nugetVersion: probe("skipped", "NuGet command unavailable"),
+        vcpkgNuget: probe("failed", "Exec format error"),
+        vcpkgVersion: probe("failed", "Exec format error"),
+      },
+      requestedCount: 0,
+      restoreProbe: restoreProbe("skipped", "NuGet command unavailable"),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("tooling-failure");
+    expect(diagnosis.failureKind).toBe("tooling-failure");
+    expect(diagnosis.diagnosis).toContain("missing system dependencies 1");
+  });
+
   test("keeps partial hit status when only misses fail to upload", () => {
     const diagnosis = classifyCache({
       buildLogFacts: {

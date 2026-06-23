@@ -162,6 +162,8 @@ Could not find patchelf. Please install it via your package manager.
 Building ncurses:x64-freebsd@6.5#3...
 Could not find Z_VCPKG_MAKE using the following names: gmake
 -- Running vcpkg install - done
+Bootstrapping vcpkg
+Could not find tar. Please install it (and other dependencies) with:
 CMake Error at config/cmake/configure_trn.cmake:123 (message):
   Couldn't locate preferred shell 'bash'
 Could NOT find BISON (missing: BISON_EXECUTABLE)
@@ -181,6 +183,13 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
         neededBy: "ncurses:x64-freebsd@6.5#3",
         suggestedPackage: "gmake",
         tool: "gmake",
+      },
+      {
+        evidence:
+          "Could not find tar. Please install it (and other dependencies) with:",
+        neededBy: "vcpkg bootstrap",
+        suggestedPackage: "tar",
+        tool: "tar",
       },
       {
         evidence: "Couldn't locate preferred shell 'bash'",
