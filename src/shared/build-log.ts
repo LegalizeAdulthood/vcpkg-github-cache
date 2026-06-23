@@ -505,7 +505,7 @@ function vcpkgToolRestorePackage(
   line: string,
 ): { packageId: string; version: string } | undefined {
   const match =
-    /^Restoring FreeBSD vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(
+    /^Restoring (?:FreeBSD|OpenBSD) vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(
       line.trim(),
     );
 
@@ -635,13 +635,13 @@ export function parseBuildLog(content: string): BuildLogFacts {
       vcpkgToolStatus = "unknown";
     }
 
-    if (/^Restored cached FreeBSD vcpkg tool\b/i.test(trimmed)) {
+    if (/^Restored cached (?:FreeBSD|OpenBSD) vcpkg tool\b/i.test(trimmed)) {
       vcpkgToolRestoreAttempted = true;
       vcpkgToolStatus = "restored";
     }
 
     if (
-      /^FreeBSD vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(
+      /^(?:FreeBSD|OpenBSD) vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(
         trimmed,
       )
     ) {
@@ -661,19 +661,19 @@ export function parseBuildLog(content: string): BuildLogFacts {
       }
     }
 
-    if (/^Published FreeBSD vcpkg tool package\b/i.test(trimmed)) {
+    if (/^Published (?:FreeBSD|OpenBSD) vcpkg tool package\b/i.test(trimmed)) {
       vcpkgToolPublishStatus = "published";
     }
 
     if (
-      /^FreeBSD vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(
+      /^(?:FreeBSD|OpenBSD) vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(
         trimmed,
       )
     ) {
       vcpkgToolPublishStatus = "failed";
     }
 
-    if (/^FreeBSD vcpkg tool package skipped:/i.test(trimmed)) {
+    if (/^(?:FreeBSD|OpenBSD) vcpkg tool package skipped:/i.test(trimmed)) {
       vcpkgToolPublishStatus = "skipped";
     }
 

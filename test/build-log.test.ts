@@ -240,4 +240,67 @@ vcpkg bootstrap skipped: cached tool restored
       version: "1.0.0-vcpkgtoolabcdef0123456789",
     });
   });
+
+  test("extracts OpenBSD vcpkg tool source rebuilds", () => {
+    const facts = parseBuildLog(`
+Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+OpenBSD vcpkg tool package not restored
+Bootstrapping vcpkg
+Published OpenBSD vcpkg tool package
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_openbsd-x64",
+      publishStatus: "published",
+      status: "built-from-source",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
+  test("extracts OpenBSD vcpkg tool restore hits", () => {
+    const facts = parseBuildLog(`
+Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+Restored cached OpenBSD vcpkg tool
+vcpkg bootstrap skipped: cached tool restored
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_openbsd-x64",
+      publishStatus: "not-attempted",
+      status: "restored",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
+  test("extracts OpenBSD vcpkg tool publish failures", () => {
+    const facts = parseBuildLog(`
+Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+OpenBSD vcpkg tool package did not contain tools/vcpkg
+Bootstrapping vcpkg
+OpenBSD vcpkg tool package publish failed
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_openbsd-x64",
+      publishStatus: "failed",
+      status: "built-from-source",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
+  test("extracts OpenBSD vcpkg tool skipped publishes", () => {
+    const facts = parseBuildLog(`
+Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+OpenBSD vcpkg tool package not restored
+Bootstrapping vcpkg
+OpenBSD vcpkg tool package skipped: vcpkg is missing
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_openbsd-x64",
+      publishStatus: "skipped",
+      status: "built-from-source",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
 });

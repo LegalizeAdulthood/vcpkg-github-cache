@@ -236,6 +236,24 @@ describe("build miss report", () => {
     ]);
   });
 
+  test("lists a source-built OpenBSD vcpkg tool package", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        vcpkgTool: {
+          packageId: "vcpkg-tool_openbsd-x64",
+          publishStatus: "failed",
+          status: "built-from-source",
+          version: "1.0.0-vcpkgtoolabcdef0123456789",
+        },
+      }),
+    );
+
+    expect(buildMissReportRows(reports)).toEqual([
+      ["Package ID", "Version", "Upload"],
+      ["vcpkg-tool_openbsd-x64", "1.0.0-vcpkgtoolabcdef0123456789", "failed"],
+    ]);
+  });
+
   test("formats a Markdown table for logs", () => {
     const reports = buildMissReports(
       buildLogFacts({
