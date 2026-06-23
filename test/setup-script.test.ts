@@ -132,6 +132,9 @@ describe("setup script emission", () => {
     expect(script).toContain('ln -sf "${libcurl_file}"');
     expect(script).toContain('LD_LIBRARY_PATH="${compat_dir}');
     expect(script).toContain("ensure_openbsd_libcurl_compat");
+    expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
+    expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
+    expect(script).toContain("Patched OpenBSD vcpkg Ninja handling");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
@@ -225,7 +228,7 @@ describe("setup script emission", () => {
     const env = renderSetupEnvironment(plan);
 
     expect(env).toContain("export VCPKG_BINARY_SOURCES=");
-    expect(env).toContain("export VCPKG_FORCE_SYSTEM_BINARIES=1");
+    expect(env).not.toContain("VCPKG_FORCE_SYSTEM_BINARIES");
     expect(env).toContain('openbsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(env).toContain(
       'openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',

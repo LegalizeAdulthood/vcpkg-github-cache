@@ -188,6 +188,55 @@ export function renderSetupScript(plan: SetupPlan): string {
   }
   script.line("}");
   script.blank();
+  script.line("patch_openbsd_vcpkg_cmake_ninja() {");
+  if (openBsdTarget) {
+    script.line(
+      '  cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_configure_cmake.cmake"',
+    );
+    script.line('  if [ ! -f "${cmake_file}" ]; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("OpenBSD vcpkg Ninja patch skipped: CMake helper missing"),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line(
+      '  if grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${cmake_file}"; then',
+    );
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("OpenBSD vcpkg Ninja patch already applied"),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line('  tmp_cmake_file="${cmake_file}.vcpkg-github-cache.tmp"');
+    script.line("  if ! awk '");
+    script.line(
+      '    /if\\("\\$\\{generator\\}" STREQUAL "Ninja" AND NOT DEFINED ENV\\{VCPKG_FORCE_SYSTEM_BINARIES\\}\\)/ {',
+    );
+    script.line('      sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")');
+    script.line("      patched = 1");
+    script.line("    }");
+    script.line("    { print }");
+    script.line("    END { if (!patched) exit 1 }");
+    script.line('  \' "${cmake_file}" > "${tmp_cmake_file}"; then');
+    script.line('    rm -f "${tmp_cmake_file}"');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Unable to patch OpenBSD vcpkg Ninja handling"),
+    ]);
+    script.line("    exit 1");
+    script.line("  fi");
+    script.line('  mv "${tmp_cmake_file}" "${cmake_file}"');
+    script.command("  printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Patched OpenBSD vcpkg Ninja handling"),
+    ]);
+  } else {
+    script.line("  :");
+  }
+  script.line("}");
+  script.blank();
   script.line("sha512_file() {");
   script.line("  if command_exists sha512; then");
   script.line('    sha512 -q "$1"');
@@ -599,6 +648,7 @@ export function renderSetupScript(plan: SetupPlan): string {
   if (plan.installNuget && targetSettings) {
     script.line("ensure_bsd_bootstrap_packages");
     script.line("ensure_openbsd_libcurl_compat");
+    script.line("patch_openbsd_vcpkg_cmake_ninja");
     if (plan.installMono) {
       script.command("printf", [
         posixLiteral("%s\\n"),
@@ -645,6 +695,7 @@ export function renderSetupScript(plan: SetupPlan): string {
     if (targetSettings && !plan.installNuget) {
       script.line("ensure_bsd_bootstrap_packages");
       script.line("ensure_openbsd_libcurl_compat");
+      script.line("patch_openbsd_vcpkg_cmake_ninja");
     }
     if (targetSettings && plan.installNuget && bsdTarget.cacheToolPackage) {
       script.line('if [ "${vcpkg_tool_restored}" -eq 1 ]; then');
@@ -833,7 +884,6 @@ export function renderSetupEnvironment(plan: SetupPlan): string {
     `export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`,
   );
   if (plan.targetOs === "openbsd") {
-    script.line("export VCPKG_FORCE_SYSTEM_BINARIES=1");
     script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
     script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
     script.line("fi");
