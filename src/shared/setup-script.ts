@@ -23,11 +23,13 @@ const FREEBSD_NUGET_SHA512 =
 const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
 
 interface BsdTargetSettings {
+  readonly cacheToolPackage: boolean;
   readonly label: string;
   readonly nugetDirectorySuffix: string;
   readonly nugetSha512: string;
   readonly nugetVersion: string;
   readonly packageInstallCommand: string;
+  readonly packageInstallerLabel: string;
   readonly releaseKey: string;
   readonly targetOs: string;
   readonly toolPackagePrefix: string;
@@ -35,14 +37,30 @@ interface BsdTargetSettings {
 }
 
 const FREEBSD_TARGET: BsdTargetSettings = {
+  cacheToolPackage: true,
   label: "FreeBSD",
   nugetDirectorySuffix: "freebsd",
   nugetSha512: FREEBSD_NUGET_SHA512,
   nugetVersion: FREEBSD_NUGET_VERSION,
   packageInstallCommand: "pkg install -y",
+  packageInstallerLabel: "pkg",
   releaseKey: "freebsd-release",
   targetOs: "freebsd",
   toolPackagePrefix: "vcpkg-tool_freebsd",
+  toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+};
+
+const OPENBSD_TARGET: BsdTargetSettings = {
+  cacheToolPackage: false,
+  label: "OpenBSD",
+  nugetDirectorySuffix: "openbsd",
+  nugetSha512: FREEBSD_NUGET_SHA512,
+  nugetVersion: FREEBSD_NUGET_VERSION,
+  packageInstallCommand: "pkg_add -I",
+  packageInstallerLabel: "pkg_add",
+  releaseKey: "openbsd-release",
+  targetOs: "openbsd",
+  toolPackagePrefix: "vcpkg-tool_openbsd",
   toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 
@@ -77,7 +95,15 @@ function resolveScriptDirectory(
 function bsdTargetSettings(
   targetOs: SetupPlan["targetOs"],
 ): BsdTargetSettings | undefined {
-  return targetOs === "freebsd" ? FREEBSD_TARGET : undefined;
+  if (targetOs === "freebsd") {
+    return FREEBSD_TARGET;
+  }
+
+  if (targetOs === "openbsd") {
+    return OPENBSD_TARGET;
+  }
+
+  return undefined;
 }
 
 export function renderSetupScript(plan: SetupPlan): string {
@@ -536,7 +562,7 @@ export function renderSetupScript(plan: SetupPlan): string {
       script.line("else");
       script.command("  printf", [
         posixLiteral("%s\\n"),
-        posixLiteral("Installing Mono with pkg"),
+        posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
       ]);
       script.line(`  ${bsdTarget.packageInstallCommand} mono`);
       script.line("fi");
@@ -559,7 +585,7 @@ export function renderSetupScript(plan: SetupPlan): string {
     script.line("ensure_bsd_nuget_command");
     script.line("configure_github_nuget_source");
     script.line("enable_bsd_nuget_tool");
-    if (plan.bootstrap) {
+    if (plan.bootstrap && bsdTarget.cacheToolPackage) {
       script.line("restore_bsd_vcpkg_tool_package");
     }
     script.blank();
@@ -569,7 +595,7 @@ export function renderSetupScript(plan: SetupPlan): string {
     if (targetSettings && !plan.installNuget) {
       script.line("ensure_bsd_bootstrap_packages");
     }
-    if (targetSettings && plan.installNuget) {
+    if (targetSettings && plan.installNuget && bsdTarget.cacheToolPackage) {
       script.line('if [ "${vcpkg_tool_restored}" -eq 1 ]; then');
       script.command("  printf", [
         posixLiteral("%s\\n"),
@@ -613,7 +639,7 @@ export function renderSetupScript(plan: SetupPlan): string {
       script.line("else");
       script.command("  printf", [
         posixLiteral("%s\\n"),
-        posixLiteral("Installing Mono with pkg"),
+        posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
       ]);
       script.line(`  ${bsdTarget.packageInstallCommand} mono`);
       script.line("fi");

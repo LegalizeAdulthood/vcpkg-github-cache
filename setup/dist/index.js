@@ -31414,14 +31414,29 @@ const FREEBSD_NUGET_VERSION = "6.8.0";
 const FREEBSD_NUGET_SHA512 = "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c";
 const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
 const FREEBSD_TARGET = {
+    cacheToolPackage: true,
     label: "FreeBSD",
     nugetDirectorySuffix: "freebsd",
     nugetSha512: FREEBSD_NUGET_SHA512,
     nugetVersion: FREEBSD_NUGET_VERSION,
     packageInstallCommand: "pkg install -y",
+    packageInstallerLabel: "pkg",
     releaseKey: "freebsd-release",
     targetOs: "freebsd",
     toolPackagePrefix: "vcpkg-tool_freebsd",
+    toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+};
+const OPENBSD_TARGET = {
+    cacheToolPackage: false,
+    label: "OpenBSD",
+    nugetDirectorySuffix: "openbsd",
+    nugetSha512: FREEBSD_NUGET_SHA512,
+    nugetVersion: FREEBSD_NUGET_VERSION,
+    packageInstallCommand: "pkg_add -I",
+    packageInstallerLabel: "pkg_add",
+    releaseKey: "openbsd-release",
+    targetOs: "openbsd",
+    toolPackagePrefix: "vcpkg-tool_openbsd",
     toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 function outputPath(directory, file) {
@@ -31438,7 +31453,13 @@ function resolveScriptDirectory(directory, workspace) {
     return external_node_path_namespaceObject.resolve(workspace?.trim() || process.cwd(), directory);
 }
 function bsdTargetSettings(targetOs) {
-    return targetOs === "freebsd" ? FREEBSD_TARGET : undefined;
+    if (targetOs === "freebsd") {
+        return FREEBSD_TARGET;
+    }
+    if (targetOs === "openbsd") {
+        return OPENBSD_TARGET;
+    }
+    return undefined;
 }
 function renderSetupScript(plan) {
     const script = new PosixScript();
@@ -31842,7 +31863,7 @@ function renderSetupScript(plan) {
             script.line("else");
             script.command("  printf", [
                 posixLiteral("%s\\n"),
-                posixLiteral("Installing Mono with pkg"),
+                posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
             ]);
             script.line(`  ${bsdTarget.packageInstallCommand} mono`);
             script.line("fi");
@@ -31863,7 +31884,7 @@ function renderSetupScript(plan) {
         script.line("ensure_bsd_nuget_command");
         script.line("configure_github_nuget_source");
         script.line("enable_bsd_nuget_tool");
-        if (plan.bootstrap) {
+        if (plan.bootstrap && bsdTarget.cacheToolPackage) {
             script.line("restore_bsd_vcpkg_tool_package");
         }
         script.blank();
@@ -31872,7 +31893,7 @@ function renderSetupScript(plan) {
         if (targetSettings && !plan.installNuget) {
             script.line("ensure_bsd_bootstrap_packages");
         }
-        if (targetSettings && plan.installNuget) {
+        if (targetSettings && plan.installNuget && bsdTarget.cacheToolPackage) {
             script.line('if [ "${vcpkg_tool_restored}" -eq 1 ]; then');
             script.command("  printf", [
                 posixLiteral("%s\\n"),
@@ -31916,7 +31937,7 @@ function renderSetupScript(plan) {
             script.line("else");
             script.command("  printf", [
                 posixLiteral("%s\\n"),
-                posixLiteral("Installing Mono with pkg"),
+                posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
             ]);
             script.line(`  ${bsdTarget.packageInstallCommand} mono`);
             script.line("fi");

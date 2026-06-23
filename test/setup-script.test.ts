@@ -111,6 +111,34 @@ describe("setup script emission", () => {
     expect(script).not.toContain("C:/host/repo");
   });
 
+  test("renders OpenBSD target-side vcpkg bootstrap and NuGet fetch", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "openbsd",
+      vcpkgRootInput: "deps/vcpkg",
+    });
+    const script = renderSetupScript(plan);
+
+    expect(script).toContain("printf '%s\\n' 'Target OS: openbsd'");
+    expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
+    expect(script).toContain("ensure_bsd_bootstrap_packages");
+    expect(script).toContain("pkg_add -I ${missing_packages}");
+    expect(script).toContain("pkg_add -I mono");
+    expect(script).toContain("ensure_bsd_nuget_command");
+    expect(script).toContain("configure_github_nuget_source");
+    expect(script).toContain("enable_bsd_nuget_tool");
+    expect(script).toContain("Added OpenBSD NuGet tool metadata to vcpkg");
+    expect(script).toContain('nuget-6.8.0-openbsd"');
+    expect(script).toContain('\\"os\\": \\"openbsd\\"');
+    expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).toContain(
+      'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
+    );
+    expect(script).not.toContain("\nrestore_bsd_vcpkg_tool_package\n");
+    expect(script).not.toContain("\npublish_bsd_vcpkg_tool_package\n");
+  });
+
   test("honors skipped Mono install when NuGet is fetched", () => {
     const plan = buildSetupPlan({
       executionModeInput: "emit-script",
