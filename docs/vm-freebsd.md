@@ -243,11 +243,11 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Verify with a FreeBSD workflow
+1. Verify FreeBSD workflow run
 
-   Add or update a consuming workflow to run a FreeBSD VM build, copy back
-   `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
-   vcpkg restores from and uploads to GitHub Packages from inside FreeBSD.
+   Push the action commit and the consuming workflow change, run the FreeBSD
+   VM job, inspect the copied `build.log`, and verify that vcpkg restores
+   from and uploads to GitHub Packages from inside FreeBSD.
 
 ## Acceptance Criteria
 
