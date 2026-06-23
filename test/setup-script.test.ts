@@ -13,8 +13,8 @@ import { describe, expect, test } from "vitest";
 import { buildSetupPlan } from "../src/shared/setup-plan";
 import {
   emitSetupFiles,
-  renderMinimalSetupEnvironment,
-  renderMinimalSetupScript,
+  renderSetupEnvironment,
+  renderSetupScript,
 } from "../src/shared/setup-script";
 
 describe("setup script emission", () => {
@@ -24,13 +24,15 @@ describe("setup script emission", () => {
       repository: "octo/repo",
       targetOsInput: "freebsd",
     });
-    const script = renderMinimalSetupScript(plan);
+    const script = renderSetupScript(plan);
 
     expect(script).toContain("#!/bin/sh\nset -eu\n");
     expect(script).toContain(
       ': "${VCPKG_GITHUB_CACHE_TOKEN:?VCPKG_GITHUB_CACHE_TOKEN is required}"',
     );
-    expect(script).toContain(': "${VCPKG_ROOT:=vcpkg}"');
+    expect(script).toContain('if [ -z "${VCPKG_ROOT:-}" ]; then');
+    expect(script).toContain("  VCPKG_ROOT='vcpkg'");
+    expect(script).toContain("export VCPKG_ROOT");
     expect(script).toContain(
       "printf '%s\\n' 'vcpkg GitHub Packages cache setup script'",
     );
@@ -40,6 +42,44 @@ describe("setup script emission", () => {
     );
   });
 
+  test("renders target-side vcpkg bootstrap and NuGet fetch", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "freebsd",
+      vcpkgRootInput: "deps/vcpkg",
+      workspace: "C:/host/repo",
+    });
+    const script = renderSetupScript(plan);
+
+    expect(script).toContain('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
+    expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
+    expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+    expect(script).toContain("nuget_exe=$(");
+    expect(script).toContain("[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$");
+    expect(script).toContain(
+      'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
+    );
+    expect(script).not.toContain("C:/host/repo");
+  });
+
+  test("honors skipped vcpkg bootstrap and NuGet fetch", () => {
+    const plan = buildSetupPlan({
+      bootstrapInput: "false",
+      executionModeInput: "emit-script",
+      installNugetInput: "false",
+      repository: "octo/repo",
+      targetOsInput: "freebsd",
+    });
+    const script = renderSetupScript(plan);
+
+    expect(script).toContain("vcpkg bootstrap skipped");
+    expect(script).toContain("NuGet fetch skipped");
+    expect(script).not.toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).not.toContain('nuget_output=$("${vcpkg_exe}" fetch nuget)');
+  });
+
   test("renders a dot-sourceable binary source environment file", () => {
     const plan = buildSetupPlan({
       accessInput: "readwrite",
@@ -47,7 +87,7 @@ describe("setup script emission", () => {
       feedOwnerInput: "octo",
       targetOsInput: "freebsd",
     });
-    const env = renderMinimalSetupEnvironment(plan);
+    const env = renderSetupEnvironment(plan);
 
     expect(env).toBe(
       "# vcpkg-github-cache setup environment\n" +

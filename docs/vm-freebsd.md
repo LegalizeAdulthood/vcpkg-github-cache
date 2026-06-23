@@ -243,38 +243,31 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Emit vcpkg bootstrap and NuGet fetch
-
-   Render POSIX commands that bootstrap vcpkg when requested and call
-   `vcpkg fetch nuget` when NuGet installation is requested.  The script
-   should derive the target-side NuGet command from the target-side vcpkg
-   output, not from the Ubuntu host.
-
-2. Emit FreeBSD Mono setup
+1. Emit FreeBSD Mono setup
 
    For `target-os=freebsd`, render cache-owned Mono setup when
    `install-mono=true` and Mono is missing.  Use FreeBSD package management
    only for cache prerequisites.  Do not install project tools here.
 
-3. Emit NuGet source configuration
+2. Emit NuGet source configuration
 
    Render commands to add or update the GitHub Packages NuGet source and set
    the API key for the feed.  Use runtime environment variables for secrets.
    Keep source name, feed owner, username, and feed URL non-secret.
 
-4. Add setup summaries and diagnostics
+3. Add setup summaries and diagnostics
 
    Emit a compact step summary in script-emission mode.  Include the script
    path, environment path, target OS, feed URL, and binary source mode.  Do
    not claim target-side vcpkg or NuGet versions from the host action.
 
-5. Document FreeBSD VM use
+4. Document FreeBSD VM use
 
    Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
    `copyback: true`, `usesh: true`, setup script execution, `setup.env`
    dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
 
-6. Verify with a FreeBSD workflow
+5. Verify with a FreeBSD workflow
 
    Add or update a consuming workflow to run a FreeBSD VM build, copy back
    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
