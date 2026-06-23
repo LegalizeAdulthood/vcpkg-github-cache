@@ -9,6 +9,7 @@ import * as core from "@actions/core";
 import { runCommand } from "./shared/command";
 import { ensureMonoAvailable } from "./shared/mono";
 import { configureNugetSource } from "./shared/nuget";
+import { emitSetupFiles } from "./shared/setup-script";
 import { setupOutput } from "./shared/setup-output";
 import { buildSetupPlan } from "./shared/setup-plan";
 import { createTraceLogger } from "./shared/trace";
@@ -114,7 +115,41 @@ export async function run(): Promise<void> {
   }
 
   if (plan.executionMode === "emit-script") {
-    throw new Error("execution-mode=emit-script is not implemented yet");
+    if (plan.targetOs !== "freebsd") {
+      throw new Error(
+        "target-os=freebsd is required with execution-mode=emit-script",
+      );
+    }
+
+    const files = await emitSetupFiles(plan, process.env.GITHUB_WORKSPACE);
+    const diagnosis = "vcpkg GitHub Packages cache setup script emitted";
+
+    core.setOutput("feed-url", plan.feedUrl);
+    core.setOutput("binary-sources", plan.binarySources);
+    core.setOutput("nuget-command", "");
+    core.setOutput("vcpkg-version", "");
+    core.setOutput("diagnosis", diagnosis);
+    core.setOutput("setup-script", files.setupScriptOutput);
+    core.setOutput("setup-env", files.setupEnvOutput);
+
+    core.info(diagnosis);
+
+    if (plan.debug || plan.trace) {
+      core.info(
+        `Token path: ${plan.tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`,
+      );
+      core.info(`Feed owner: ${plan.feedOwner}`);
+      core.info(`NuGet username: ${plan.username}`);
+      core.info(`Setup script: ${files.setupScriptOutput}`);
+      core.info(`Setup environment: ${files.setupEnvOutput}`);
+    }
+
+    if (plan.trace) {
+      traceLogger.path("setup script path", files.setupScriptPath);
+      traceLogger.path("setup env path", files.setupEnvPath);
+    }
+
+    return;
   }
 
   if (plan.bootstrap) {

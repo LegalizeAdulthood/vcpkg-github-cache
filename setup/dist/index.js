@@ -31350,6 +31350,131 @@ async function configureNugetSource(nuget, settings, options = {}) {
     }
 }
 
+;// CONCATENATED MODULE: ./src/shared/posix-script.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+function quotePosixShellLiteral(value) {
+    return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+function posixLiteral(value) {
+    return {
+        text: value,
+        type: "literal",
+    };
+}
+function posixRuntimeExpression(value) {
+    return {
+        text: value,
+        type: "runtime",
+    };
+}
+function renderPosixShellWord(word) {
+    if (word.type === "runtime") {
+        return word.text;
+    }
+    return quotePosixShellLiteral(word.text);
+}
+function renderPosixShellWords(words) {
+    return words.map(renderPosixShellWord).join(" ");
+}
+function renderPosixCommand(command, args) {
+    return [command, renderPosixShellWords(args)].filter(Boolean).join(" ");
+}
+class PosixScript {
+    lines = [];
+    blank() {
+        this.lines.push("");
+    }
+    command(command, args = []) {
+        this.line(renderPosixCommand(command, args));
+    }
+    line(value) {
+        this.lines.push(value);
+    }
+    render() {
+        return `${this.lines.join("\n")}\n`;
+    }
+}
+
+;// CONCATENATED MODULE: ./src/shared/setup-script.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+
+
+
+const SETUP_SCRIPT_NAME = "setup.sh";
+const SETUP_ENV_NAME = "setup.env";
+function outputPath(directory, file) {
+    const normalized = directory.replaceAll("\\", "/").replace(/\/+$/, "");
+    if (normalized === "" || normalized === ".") {
+        return file;
+    }
+    return `${normalized}/${file}`;
+}
+function resolveScriptDirectory(directory, workspace) {
+    if (external_node_path_namespaceObject.isAbsolute(directory)) {
+        return directory;
+    }
+    return external_node_path_namespaceObject.resolve(workspace?.trim() || process.cwd(), directory);
+}
+function renderMinimalSetupScript(plan) {
+    const script = new PosixScript();
+    script.line("#!/bin/sh");
+    script.line("set -eu");
+    script.blank();
+    script.line(': "${VCPKG_GITHUB_CACHE_TOKEN:?VCPKG_GITHUB_CACHE_TOKEN is required}"');
+    script.line(': "${VCPKG_ROOT:=vcpkg}"');
+    script.blank();
+    script.command("printf", [
+        posixLiteral("%s\\n"),
+        posixLiteral("vcpkg GitHub Packages cache setup script"),
+    ]);
+    script.command("printf", [
+        posixLiteral("%s\\n"),
+        posixLiteral(`Target OS: ${plan.targetOs}`),
+    ]);
+    script.command("printf", [
+        posixLiteral("%s\\n"),
+        posixLiteral(`Feed: ${plan.feedUrl}`),
+    ]);
+    script.command("printf", [
+        posixLiteral("%s\\n"),
+        posixLiteral(`Source: ${plan.sourceName}`),
+    ]);
+    script.command("printf", [
+        posixLiteral("%s%s\\n"),
+        posixLiteral("vcpkg root: "),
+        posixRuntimeExpression("${VCPKG_ROOT}"),
+    ]);
+    return script.render();
+}
+function renderMinimalSetupEnvironment() {
+    const script = new PosixScript();
+    script.line("# vcpkg-github-cache setup environment");
+    script.line("# VCPKG_BINARY_SOURCES is emitted by a later setup slice.");
+    return script.render();
+}
+async function emitSetupFiles(plan, workspace) {
+    const directory = resolveScriptDirectory(plan.scriptDirectory, workspace);
+    const setupScriptPath = external_node_path_namespaceObject.join(directory, SETUP_SCRIPT_NAME);
+    const setupEnvPath = external_node_path_namespaceObject.join(directory, SETUP_ENV_NAME);
+    await (0,promises_namespaceObject.mkdir)(directory, { recursive: true });
+    await (0,promises_namespaceObject.writeFile)(setupScriptPath, renderMinimalSetupScript(plan), "utf8");
+    await (0,promises_namespaceObject.writeFile)(setupEnvPath, renderMinimalSetupEnvironment(), "utf8");
+    return {
+        setupEnvOutput: outputPath(plan.scriptDirectory, SETUP_ENV_NAME),
+        setupEnvPath,
+        setupScriptOutput: outputPath(plan.scriptDirectory, SETUP_SCRIPT_NAME),
+        setupScriptPath,
+    };
+}
+
 ;// CONCATENATED MODULE: ./src/shared/cache.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31714,6 +31839,7 @@ function createTraceLogger(options) {
 
 
 
+
 function summaryItem(label, value) {
     return `${label}: ${value}`;
 }
@@ -31791,7 +31917,31 @@ async function run() {
         throw new Error("target-os is only supported with execution-mode=emit-script");
     }
     if (plan.executionMode === "emit-script") {
-        throw new Error("execution-mode=emit-script is not implemented yet");
+        if (plan.targetOs !== "freebsd") {
+            throw new Error("target-os=freebsd is required with execution-mode=emit-script");
+        }
+        const files = await emitSetupFiles(plan, process.env.GITHUB_WORKSPACE);
+        const diagnosis = "vcpkg GitHub Packages cache setup script emitted";
+        setOutput("feed-url", plan.feedUrl);
+        setOutput("binary-sources", plan.binarySources);
+        setOutput("nuget-command", "");
+        setOutput("vcpkg-version", "");
+        setOutput("diagnosis", diagnosis);
+        setOutput("setup-script", files.setupScriptOutput);
+        setOutput("setup-env", files.setupEnvOutput);
+        info(diagnosis);
+        if (plan.debug || plan.trace) {
+            info(`Token path: ${plan.tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
+            info(`Feed owner: ${plan.feedOwner}`);
+            info(`NuGet username: ${plan.username}`);
+            info(`Setup script: ${files.setupScriptOutput}`);
+            info(`Setup environment: ${files.setupEnvOutput}`);
+        }
+        if (plan.trace) {
+            traceLogger.path("setup script path", files.setupScriptPath);
+            traceLogger.path("setup env path", files.setupEnvPath);
+        }
+        return;
     }
     if (plan.bootstrap) {
         traceLogger.decision("bootstrap vcpkg", "enabled by input");
