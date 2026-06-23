@@ -31888,6 +31888,35 @@ function buildSetupPlan(inputs) {
     };
 }
 
+;// CONCATENATED MODULE: ./src/shared/setup-summary.ts
+/*
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Copyright 2026 Richard Thomson
+ */
+function summaryItem(label, value) {
+    return `${label}: ${value}`;
+}
+function setupEmitSummaryItems(input) {
+    return [
+        summaryItem("Diagnosis", input.diagnosis),
+        summaryItem("Target OS", input.targetOs),
+        summaryItem("Setup script", input.setupScript),
+        summaryItem("Setup environment", input.setupEnv),
+        summaryItem("Feed", input.feedUrl),
+        summaryItem("Binary source mode", input.binarySourceMode),
+    ];
+}
+function setupRunSummaryItems(input) {
+    return [
+        summaryItem("Diagnosis", input.diagnosis),
+        summaryItem("Feed", input.feedUrl),
+        summaryItem("vcpkg root", input.vcpkgRoot),
+        summaryItem("vcpkg version", input.vcpkgVersion),
+        summaryItem("NuGet command", input.nugetCommand),
+    ];
+}
+
 ;// CONCATENATED MODULE: ./src/shared/trace.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -31984,24 +32013,41 @@ function createTraceLogger(options) {
 
 
 
-function summaryItem(label, value) {
-    return `${label}: ${value}`;
-}
+
 const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
-async function writeSummary(diagnosis, feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
+async function writeSetupSummary(items) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     await summary
         .addHeading("vcpkg GitHub Packages cache setup", 3)
-        .addList([
-        summaryItem("Diagnosis", diagnosis),
-        summaryItem("Feed", feedUrl),
-        summaryItem("vcpkg root", vcpkgRoot),
-        summaryItem("vcpkg version", vcpkgVersion),
-        summaryItem("NuGet command", nugetCommand),
-    ])
+        .addList([...items])
         .write();
+}
+function binarySourceMode(installNuget, access) {
+    return installNuget ? access : "clear";
+}
+async function writeEmitSummary(diagnosis, feedUrl, targetOs, setupScript, setupEnv, binaryMode) {
+    if (!process.env.GITHUB_STEP_SUMMARY) {
+        return;
+    }
+    await writeSetupSummary(setupEmitSummaryItems({
+        binarySourceMode: binaryMode,
+        diagnosis,
+        feedUrl,
+        setupEnv,
+        setupScript,
+        targetOs,
+    }));
+}
+async function writeRunSummary(diagnosis, feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion) {
+    await writeSetupSummary(setupRunSummaryItems({
+        diagnosis,
+        feedUrl,
+        nugetCommand,
+        vcpkgRoot,
+        vcpkgVersion,
+    }));
 }
 async function run() {
     const token = getInput("token", { required: true });
@@ -32074,6 +32120,7 @@ async function run() {
         setOutput("setup-script", files.setupScriptOutput);
         setOutput("setup-env", files.setupEnvOutput);
         info(diagnosis);
+        await writeEmitSummary(diagnosis, plan.feedUrl, plan.targetOs, files.setupScriptOutput, files.setupEnvOutput, binarySourceMode(plan.installNuget, plan.access));
         if (plan.debug || plan.trace) {
             info(`Token path: ${plan.tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
             info(`Feed owner: ${plan.feedOwner}`);
@@ -32149,7 +32196,7 @@ async function run() {
         info(`nuget-command: ${nugetCommand}`);
     }
     if (plan.debug || plan.trace) {
-        await writeSummary(diagnosis, plan.feedUrl, nugetCommand, plan.vcpkg.root, vcpkgVersion);
+        await writeRunSummary(diagnosis, plan.feedUrl, nugetCommand, plan.vcpkg.root, vcpkgVersion);
     }
 }
 if (process.env.VCPKG_GITHUB_CACHE_IMPORT_SMOKE !== "1") {

@@ -12,6 +12,10 @@ import { configureNugetSource } from "./shared/nuget";
 import { emitSetupFiles } from "./shared/setup-script";
 import { setupOutput } from "./shared/setup-output";
 import { buildSetupPlan } from "./shared/setup-plan";
+import {
+  setupEmitSummaryItems,
+  setupRunSummaryItems,
+} from "./shared/setup-summary";
 import { createTraceLogger } from "./shared/trace";
 import {
   buildNugetCommand,
@@ -21,33 +25,63 @@ import {
   verifyVcpkgExecutable,
 } from "./shared/vcpkg";
 
-function summaryItem(label: string, value: string): string {
-  return `${label}: ${value}`;
-}
-
 const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
 
-async function writeSummary(
-  diagnosis: string,
-  feedUrl: string,
-  nugetCommand: string,
-  vcpkgRoot: string,
-  vcpkgVersion: string,
-): Promise<void> {
+async function writeSetupSummary(items: readonly string[]): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
   }
 
   await core.summary
     .addHeading("vcpkg GitHub Packages cache setup", 3)
-    .addList([
-      summaryItem("Diagnosis", diagnosis),
-      summaryItem("Feed", feedUrl),
-      summaryItem("vcpkg root", vcpkgRoot),
-      summaryItem("vcpkg version", vcpkgVersion),
-      summaryItem("NuGet command", nugetCommand),
-    ])
+    .addList([...items])
     .write();
+}
+
+function binarySourceMode(installNuget: boolean, access: string): string {
+  return installNuget ? access : "clear";
+}
+
+async function writeEmitSummary(
+  diagnosis: string,
+  feedUrl: string,
+  targetOs: string,
+  setupScript: string,
+  setupEnv: string,
+  binaryMode: string,
+): Promise<void> {
+  if (!process.env.GITHUB_STEP_SUMMARY) {
+    return;
+  }
+
+  await writeSetupSummary(
+    setupEmitSummaryItems({
+      binarySourceMode: binaryMode,
+      diagnosis,
+      feedUrl,
+      setupEnv,
+      setupScript,
+      targetOs,
+    }),
+  );
+}
+
+async function writeRunSummary(
+  diagnosis: string,
+  feedUrl: string,
+  nugetCommand: string,
+  vcpkgRoot: string,
+  vcpkgVersion: string,
+): Promise<void> {
+  await writeSetupSummary(
+    setupRunSummaryItems({
+      diagnosis,
+      feedUrl,
+      nugetCommand,
+      vcpkgRoot,
+      vcpkgVersion,
+    }),
+  );
 }
 
 export async function run(): Promise<void> {
@@ -133,6 +167,14 @@ export async function run(): Promise<void> {
     core.setOutput("setup-env", files.setupEnvOutput);
 
     core.info(diagnosis);
+    await writeEmitSummary(
+      diagnosis,
+      plan.feedUrl,
+      plan.targetOs,
+      files.setupScriptOutput,
+      files.setupEnvOutput,
+      binarySourceMode(plan.installNuget, plan.access),
+    );
 
     if (plan.debug || plan.trace) {
       core.info(
@@ -245,7 +287,7 @@ export async function run(): Promise<void> {
   }
 
   if (plan.debug || plan.trace) {
-    await writeSummary(
+    await writeRunSummary(
       diagnosis,
       plan.feedUrl,
       nugetCommand,
