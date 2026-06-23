@@ -243,57 +243,51 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Add POSIX script rendering helpers
-
-   Add deterministic line-oriented rendering and shell single-quoting helpers.
-   Test literal quoting, empty strings, embedded single quotes, and variable
-   references that must expand at runtime.
-
-2. Emit minimal setup files
+1. Emit minimal setup files
 
    In `execution-mode=emit-script`, create `script-directory`, write
    `setup.sh` and `setup.env`, set `setup-script` and `setup-env` outputs,
    and skip host-side setup.  The first emitted script may only validate its
    environment and print non-secret diagnostics.
 
-3. Emit binary source environment
+2. Emit binary source environment
 
    Write `VCPKG_BINARY_SOURCES` to `setup.env` using the same value that run
    mode would export.  Add tests proving the token is absent and the feed URL
    and access mode are correct.
 
-4. Emit vcpkg bootstrap and NuGet fetch
+3. Emit vcpkg bootstrap and NuGet fetch
 
    Render POSIX commands that bootstrap vcpkg when requested and call
    `vcpkg fetch nuget` when NuGet installation is requested.  The script
    should derive the target-side NuGet command from the target-side vcpkg
    output, not from the Ubuntu host.
 
-5. Emit FreeBSD Mono setup
+4. Emit FreeBSD Mono setup
 
    For `target-os=freebsd`, render cache-owned Mono setup when
    `install-mono=true` and Mono is missing.  Use FreeBSD package management
    only for cache prerequisites.  Do not install project tools here.
 
-6. Emit NuGet source configuration
+5. Emit NuGet source configuration
 
    Render commands to add or update the GitHub Packages NuGet source and set
    the API key for the feed.  Use runtime environment variables for secrets.
    Keep source name, feed owner, username, and feed URL non-secret.
 
-7. Add setup summaries and diagnostics
+6. Add setup summaries and diagnostics
 
    Emit a compact step summary in script-emission mode.  Include the script
    path, environment path, target OS, feed URL, and binary source mode.  Do
    not claim target-side vcpkg or NuGet versions from the host action.
 
-8. Document FreeBSD VM use
+7. Document FreeBSD VM use
 
    Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
    `copyback: true`, `usesh: true`, setup script execution, `setup.env`
    dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
 
-9. Verify with a FreeBSD workflow
+8. Verify with a FreeBSD workflow
 
    Add or update a consuming workflow to run a FreeBSD VM build, copy back
    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that
