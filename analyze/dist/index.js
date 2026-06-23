@@ -141168,6 +141168,15 @@ function rememberPackageUploadStatus(statuses, packageSpec, status) {
         status,
     });
 }
+function vcpkgToolRestorePackage(line) {
+    const match = /^Restoring FreeBSD vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(line.trim());
+    return match
+        ? {
+            packageId: match[1],
+            version: match[2],
+        }
+        : undefined;
+}
 function parseBuildLog(content) {
     const packageListPackages = [];
     const restoredPackages = [];
@@ -141192,6 +141201,11 @@ function parseBuildLog(content) {
     let submissionsStarted = 0;
     let uploadsAttempted = 0;
     let uploadedCount = 0;
+    let vcpkgToolPackageId;
+    let vcpkgToolPublishStatus = "not-attempted";
+    let vcpkgToolRestoreAttempted = false;
+    let vcpkgToolStatus;
+    let vcpkgToolVersion;
     let zeroCacheSubmissions = 0;
     let vcpkgInstallSucceeded = false;
     for (const rawLine of content.split(/\r?\n/)) {
@@ -141252,8 +141266,39 @@ function parseBuildLog(content) {
             builtPackages.push(built);
             currentBuildPackage = built;
         }
+        const vcpkgToolPackage = vcpkgToolRestorePackage(line);
+        if (vcpkgToolPackage) {
+            vcpkgToolPackageId = vcpkgToolPackage.packageId;
+            vcpkgToolVersion = vcpkgToolPackage.version;
+            vcpkgToolRestoreAttempted = true;
+            vcpkgToolStatus = "unknown";
+        }
+        if (/^Restored cached FreeBSD vcpkg tool\b/i.test(trimmed)) {
+            vcpkgToolRestoreAttempted = true;
+            vcpkgToolStatus = "restored";
+        }
+        if (/^FreeBSD vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(trimmed)) {
+            vcpkgToolRestoreAttempted = true;
+            vcpkgToolStatus = "not-restored";
+        }
+        if (/^vcpkg bootstrap skipped: cached tool restored\b/i.test(trimmed)) {
+            vcpkgToolRestoreAttempted = true;
+            vcpkgToolStatus = "restored";
+        }
         if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
             bootstrappingVcpkg = true;
+            if (vcpkgToolRestoreAttempted && vcpkgToolStatus !== "restored") {
+                vcpkgToolStatus = "built-from-source";
+            }
+        }
+        if (/^Published FreeBSD vcpkg tool package\b/i.test(trimmed)) {
+            vcpkgToolPublishStatus = "published";
+        }
+        if (/^FreeBSD vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(trimmed)) {
+            vcpkgToolPublishStatus = "failed";
+        }
+        if (/^FreeBSD vcpkg tool package skipped:/i.test(trimmed)) {
+            vcpkgToolPublishStatus = "skipped";
         }
         if (/^-- Running vcpkg install - done\b/i.test(trimmed) ||
             /^All requested installations completed successfully\b/i.test(trimmed)) {
@@ -141339,6 +141384,14 @@ function parseBuildLog(content) {
         uploadedCount: uploadedCount || undefined,
         uploadsAttempted,
         vcpkgInstallSucceeded: vcpkgInstallSucceeded || undefined,
+        vcpkgTool: vcpkgToolRestoreAttempted
+            ? {
+                packageId: vcpkgToolPackageId,
+                publishStatus: vcpkgToolPublishStatus,
+                status: vcpkgToolStatus ?? "unknown",
+                version: vcpkgToolVersion,
+            }
+            : undefined,
         writeDeniedPackages: uniqueWriteDeniedPackages(writeDeniedPackages),
         zeroCacheSubmissions,
     };
@@ -141842,14 +141895,39 @@ function packageIdentity(packageSpec) {
     const version = packageSpecVersion(packageSpec);
     return id && version ? { id, version } : undefined;
 }
+function vcpkgToolPackageIdentity(buildLogFacts) {
+    const tool = buildLogFacts.vcpkgTool;
+    if (tool?.status !== "built-from-source" ||
+        !tool.packageId ||
+        !tool.version) {
+        return undefined;
+    }
+    return {
+        id: tool.packageId,
+        version: tool.version,
+    };
+}
+function vcpkgToolUploadStatus(publishStatus) {
+    if (publishStatus === "published") {
+        return "succeeded";
+    }
+    if (publishStatus === "failed") {
+        return "failed";
+    }
+    return "unknown";
+}
 function buildMissPackageIdentities(buildLogFacts) {
     if (!buildLogFacts) {
         return [];
     }
-    return buildLogFacts.builtPackages.flatMap((packageSpec) => {
+    const builtPackageIdentities = buildLogFacts.builtPackages.flatMap((packageSpec) => {
         const identity = packageIdentity(packageSpec);
         return identity ? [identity] : [];
     });
+    const toolIdentity = vcpkgToolPackageIdentity(buildLogFacts);
+    return toolIdentity
+        ? [...builtPackageIdentities, toolIdentity]
+        : builtPackageIdentities;
 }
 function buildMissReports(buildLogFacts, packageMetadata) {
     if (!buildLogFacts) {
@@ -141860,7 +141938,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
     const uploads = uploadStatusByPackageId(buildLogFacts);
     const abiHashes = packageAbiHashByPackageId(buildLogFacts);
     const deniedPackages = deniedPackageIds(buildLogFacts);
-    return buildLogFacts.builtPackages.map((packageSpec) => {
+    const reports = buildLogFacts.builtPackages.map((packageSpec) => {
         const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
         const result = metadata.get(packageId);
         return {
@@ -141872,6 +141950,24 @@ function buildMissReports(buildLogFacts, packageMetadata) {
             version: packageSpecVersion(packageSpec) ?? "unknown",
         };
     });
+    const tool = buildLogFacts.vcpkgTool;
+    if (tool?.status !== "built-from-source" ||
+        !tool.packageId ||
+        !tool.version) {
+        return reports;
+    }
+    const result = metadata.get(tool.packageId);
+    return [
+        ...reports,
+        {
+            buildTime: undefined,
+            packageId: tool.packageId,
+            packageSettingsUrl: result?.settingsUrl,
+            packageSpec: tool.packageId,
+            uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
+            version: tool.version,
+        },
+    ];
 }
 function buildMissReportRows(reports, format = "text") {
     const columns = build_miss_report_reportColumns(reports);

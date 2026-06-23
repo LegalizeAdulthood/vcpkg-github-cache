@@ -197,9 +197,43 @@ describe("build miss report", () => {
       buildMissPackageIdentities(
         buildLogFacts({
           builtPackages: ["fmt:x64-windows@8.0.0#1", "not-a-spec"],
+          vcpkgTool: {
+            packageId: "vcpkg-tool_freebsd-x64",
+            publishStatus: "published",
+            status: "built-from-source",
+            version: "1.0.0-vcpkgtoolabcdef0123456789",
+          },
         }),
       ),
-    ).toEqual([{ id: "fmt_x64-windows", version: "8.0.0#1" }]);
+    ).toEqual([
+      { id: "fmt_x64-windows", version: "8.0.0#1" },
+      {
+        id: "vcpkg-tool_freebsd-x64",
+        version: "1.0.0-vcpkgtoolabcdef0123456789",
+      },
+    ]);
+  });
+
+  test("lists a source-built FreeBSD vcpkg tool package", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        vcpkgTool: {
+          packageId: "vcpkg-tool_freebsd-x64",
+          publishStatus: "published",
+          status: "built-from-source",
+          version: "1.0.0-vcpkgtoolabcdef0123456789",
+        },
+      }),
+    );
+
+    expect(buildMissReportRows(reports)).toEqual([
+      ["Package ID", "Version", "Upload"],
+      [
+        "vcpkg-tool_freebsd-x64",
+        "1.0.0-vcpkgtoolabcdef0123456789",
+        "succeeded",
+      ],
+    ]);
   });
 
   test("formats a Markdown table for logs", () => {

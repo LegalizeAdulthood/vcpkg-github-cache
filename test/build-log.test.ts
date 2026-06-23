@@ -209,4 +209,35 @@ Could NOT find BISON (missing: BISON_EXECUTABLE)
     ).toContain("| Tool | Suggested Package | Needed By | Evidence |");
     expect(facts.vcpkgInstallSucceeded).toBe(true);
   });
+
+  test("extracts FreeBSD vcpkg tool source rebuilds", () => {
+    const facts = parseBuildLog(`
+Restoring FreeBSD vcpkg tool package: vcpkg-tool_freebsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+FreeBSD vcpkg tool package not restored
+Bootstrapping vcpkg
+Published FreeBSD vcpkg tool package
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_freebsd-x64",
+      publishStatus: "published",
+      status: "built-from-source",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
+  test("extracts FreeBSD vcpkg tool restore hits", () => {
+    const facts = parseBuildLog(`
+Restoring FreeBSD vcpkg tool package: vcpkg-tool_freebsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+Restored cached FreeBSD vcpkg tool
+vcpkg bootstrap skipped: cached tool restored
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_freebsd-x64",
+      publishStatus: "not-attempted",
+      status: "restored",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
 });

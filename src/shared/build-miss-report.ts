@@ -200,6 +200,37 @@ function packageIdentity(packageSpec: string): PackageIdentity | undefined {
   return id && version ? { id, version } : undefined;
 }
 
+function vcpkgToolPackageIdentity(
+  buildLogFacts: BuildLogFacts,
+): PackageIdentity | undefined {
+  const tool = buildLogFacts.vcpkgTool;
+
+  if (
+    tool?.status !== "built-from-source" ||
+    !tool.packageId ||
+    !tool.version
+  ) {
+    return undefined;
+  }
+
+  return {
+    id: tool.packageId,
+    version: tool.version,
+  };
+}
+
+function vcpkgToolUploadStatus(publishStatus: string): PackageUploadState {
+  if (publishStatus === "published") {
+    return "succeeded";
+  }
+
+  if (publishStatus === "failed") {
+    return "failed";
+  }
+
+  return "unknown";
+}
+
 export function buildMissPackageIdentities(
   buildLogFacts: BuildLogFacts | undefined,
 ): readonly PackageIdentity[] {
@@ -207,11 +238,18 @@ export function buildMissPackageIdentities(
     return [];
   }
 
-  return buildLogFacts.builtPackages.flatMap((packageSpec) => {
-    const identity = packageIdentity(packageSpec);
+  const builtPackageIdentities = buildLogFacts.builtPackages.flatMap(
+    (packageSpec) => {
+      const identity = packageIdentity(packageSpec);
 
-    return identity ? [identity] : [];
-  });
+      return identity ? [identity] : [];
+    },
+  );
+  const toolIdentity = vcpkgToolPackageIdentity(buildLogFacts);
+
+  return toolIdentity
+    ? [...builtPackageIdentities, toolIdentity]
+    : builtPackageIdentities;
 }
 
 export function buildMissReports(
@@ -228,7 +266,7 @@ export function buildMissReports(
   const abiHashes = packageAbiHashByPackageId(buildLogFacts);
   const deniedPackages = deniedPackageIds(buildLogFacts);
 
-  return buildLogFacts.builtPackages.map((packageSpec) => {
+  const reports = buildLogFacts.builtPackages.map((packageSpec) => {
     const packageId = packageSpecToNugetPackageId(packageSpec) ?? packageSpec;
     const result = metadata.get(packageId);
 
@@ -247,6 +285,29 @@ export function buildMissReports(
       version: packageSpecVersion(packageSpec) ?? "unknown",
     };
   });
+  const tool = buildLogFacts.vcpkgTool;
+
+  if (
+    tool?.status !== "built-from-source" ||
+    !tool.packageId ||
+    !tool.version
+  ) {
+    return reports;
+  }
+
+  const result = metadata.get(tool.packageId);
+
+  return [
+    ...reports,
+    {
+      buildTime: undefined,
+      packageId: tool.packageId,
+      packageSettingsUrl: result?.settingsUrl,
+      packageSpec: tool.packageId,
+      uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
+      version: tool.version,
+    },
+  ];
 }
 
 export function buildMissReportRows(

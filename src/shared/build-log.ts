@@ -23,6 +23,7 @@ export interface BuildLogFacts {
   readonly uploadedCount?: number;
   readonly uploadsAttempted: number;
   readonly vcpkgInstallSucceeded?: boolean;
+  readonly vcpkgTool?: VcpkgToolPackage;
   readonly writeDeniedPackages: readonly WriteDeniedPackage[];
   readonly zeroCacheSubmissions: number;
 }
@@ -61,6 +62,25 @@ export interface MissingSystemDependency {
   readonly neededBy: string;
   readonly suggestedPackage: string;
   readonly tool: string;
+}
+
+export type VcpkgToolCacheStatus =
+  | "built-from-source"
+  | "not-restored"
+  | "restored"
+  | "unknown";
+
+export type VcpkgToolPublishStatus =
+  | "failed"
+  | "not-attempted"
+  | "published"
+  | "skipped";
+
+export interface VcpkgToolPackage {
+  readonly packageId?: string;
+  readonly publishStatus: VcpkgToolPublishStatus;
+  readonly status: VcpkgToolCacheStatus;
+  readonly version?: string;
 }
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(0x1b)}\\[[0-9;]*m`, "g");
@@ -481,6 +501,22 @@ function rememberPackageUploadStatus(
   });
 }
 
+function vcpkgToolRestorePackage(
+  line: string,
+): { packageId: string; version: string } | undefined {
+  const match =
+    /^Restoring FreeBSD vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(
+      line.trim(),
+    );
+
+  return match
+    ? {
+        packageId: match[1],
+        version: match[2],
+      }
+    : undefined;
+}
+
 export function parseBuildLog(content: string): BuildLogFacts {
   const packageListPackages: string[] = [];
   const restoredPackages: string[] = [];
@@ -505,6 +541,11 @@ export function parseBuildLog(content: string): BuildLogFacts {
   let submissionsStarted = 0;
   let uploadsAttempted = 0;
   let uploadedCount = 0;
+  let vcpkgToolPackageId: string | undefined;
+  let vcpkgToolPublishStatus: VcpkgToolPublishStatus = "not-attempted";
+  let vcpkgToolRestoreAttempted = false;
+  let vcpkgToolStatus: VcpkgToolCacheStatus | undefined;
+  let vcpkgToolVersion: string | undefined;
   let zeroCacheSubmissions = 0;
   let vcpkgInstallSucceeded = false;
 
@@ -585,8 +626,55 @@ export function parseBuildLog(content: string): BuildLogFacts {
       currentBuildPackage = built;
     }
 
+    const vcpkgToolPackage = vcpkgToolRestorePackage(line);
+
+    if (vcpkgToolPackage) {
+      vcpkgToolPackageId = vcpkgToolPackage.packageId;
+      vcpkgToolVersion = vcpkgToolPackage.version;
+      vcpkgToolRestoreAttempted = true;
+      vcpkgToolStatus = "unknown";
+    }
+
+    if (/^Restored cached FreeBSD vcpkg tool\b/i.test(trimmed)) {
+      vcpkgToolRestoreAttempted = true;
+      vcpkgToolStatus = "restored";
+    }
+
+    if (
+      /^FreeBSD vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(
+        trimmed,
+      )
+    ) {
+      vcpkgToolRestoreAttempted = true;
+      vcpkgToolStatus = "not-restored";
+    }
+
+    if (/^vcpkg bootstrap skipped: cached tool restored\b/i.test(trimmed)) {
+      vcpkgToolRestoreAttempted = true;
+      vcpkgToolStatus = "restored";
+    }
+
     if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
       bootstrappingVcpkg = true;
+      if (vcpkgToolRestoreAttempted && vcpkgToolStatus !== "restored") {
+        vcpkgToolStatus = "built-from-source";
+      }
+    }
+
+    if (/^Published FreeBSD vcpkg tool package\b/i.test(trimmed)) {
+      vcpkgToolPublishStatus = "published";
+    }
+
+    if (
+      /^FreeBSD vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(
+        trimmed,
+      )
+    ) {
+      vcpkgToolPublishStatus = "failed";
+    }
+
+    if (/^FreeBSD vcpkg tool package skipped:/i.test(trimmed)) {
+      vcpkgToolPublishStatus = "skipped";
     }
 
     if (
@@ -716,6 +804,14 @@ export function parseBuildLog(content: string): BuildLogFacts {
     uploadedCount: uploadedCount || undefined,
     uploadsAttempted,
     vcpkgInstallSucceeded: vcpkgInstallSucceeded || undefined,
+    vcpkgTool: vcpkgToolRestoreAttempted
+      ? {
+          packageId: vcpkgToolPackageId,
+          publishStatus: vcpkgToolPublishStatus,
+          status: vcpkgToolStatus ?? "unknown",
+          version: vcpkgToolVersion,
+        }
+      : undefined,
     writeDeniedPackages: uniqueWriteDeniedPackages(writeDeniedPackages),
     zeroCacheSubmissions,
   };
