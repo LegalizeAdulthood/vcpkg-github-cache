@@ -243,13 +243,7 @@ Debug and trace output must continue to redact secrets.
 
 ## Implementation Slices
 
-1. Document FreeBSD VM use
-
-   Update `ReadMe.md` with a FreeBSD VM example.  Show `sync: rsync`,
-   `copyback: true`, `usesh: true`, setup script execution, `setup.env`
-   dot-sourcing, `cmake --workflow --preset`, and host-side analyze.
-
-2. Verify with a FreeBSD workflow
+1. Verify with a FreeBSD workflow
 
    Add or update a consuming workflow to run a FreeBSD VM build, copy back
    `build.log`, and run the normal analyzer on the Ubuntu host.  Verify that

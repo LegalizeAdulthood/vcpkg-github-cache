@@ -129,6 +129,76 @@ For `pwsh`:
     }
 ```
 
+### FreeBSD VM Build
+
+GitHub JavaScript actions run on the Ubuntu host runner, not inside a
+FreeBSD VM.  For VM builds, run setup in `emit-script` mode on the host,
+then run the emitted POSIX setup script inside the VM.  Copy the build log
+back to the host and run the normal analyzer there:
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+
+steps:
+  - uses: actions/checkout@v6
+    with:
+      submodules: true
+
+  - name: Generate vcpkg cache setup script
+    id: vc_setup
+    uses: LegalizeAdulthood/vcpkg-github-cache@v1
+    with:
+      token: ${{ github.token }}
+      execution-mode: emit-script
+      target-os: freebsd
+      bootstrap: "true"
+      install-nuget: "true"
+      install-mono: "true"
+
+  - name: Build on FreeBSD
+    uses: vmactions/freebsd-vm@v1
+    env:
+      VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
+      VCPKG_ROOT: vcpkg
+    with:
+      release: "14.3"
+      usesh: true
+      sync: rsync
+      copyback: true
+      envs: VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+      prepare: |
+        pkg update
+        pkg install -y cmake ninja git pkgconf
+      run: |
+        set -eu
+
+        sh "${{ steps.vc_setup.outputs.setup-script }}"
+        . "${{ steps.vc_setup.outputs.setup-env }}"
+
+        {
+          cmake --workflow --preset ci 2>&1
+          echo $? > build.status
+        } | tee build.log
+
+        exit "$(cat build.status)"
+
+  - name: Analyze vcpkg package cache
+    if: always()
+    uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+    with:
+      token: ${{ github.token }}
+      build-log: build.log
+      artifact-name: freebsd-cache-${{ github.run_attempt }}
+      fail-on: "never"
+```
+
+The emitted setup script configures the target-side NuGet source, uses
+`vcpkg fetch nuget` inside the VM, and can bootstrap vcpkg there.  The
+emitted `setup.env` file exports `VCPKG_BINARY_SOURCES`; dot-source it
+before running the project workflow.
+
 ### Troubleshooting
 
 Enable `debug` while tuning package permissions.  This keeps the analyzer
@@ -184,6 +254,10 @@ and `"false"` in workflow YAML.
   on Unix.
 - `source-name`: default `"GitHubPackages"`.  NuGet source name.
 - `access`: default `"readwrite"`.  vcpkg binary source access mode.
+- `execution-mode`: default `"run"`.  Setup mode: `run` or `emit-script`.
+- `target-os`: default `"current"`.  Target OS for emitted setup scripts.
+- `script-directory`: default `".vcpkg-github-cache"`.  Directory for
+  generated setup files.
 - `debug`: default `"false"`.  Emit additional diagnostics.
 - `trace`: default `"false"`.  Trace action decisions.
 
@@ -194,6 +268,8 @@ and `"false"` in workflow YAML.
 - `nuget-command`: NuGet command selected by setup.
 - `vcpkg-version`: bootstrapped vcpkg tool version.
 - `diagnosis`: short setup diagnosis.
+- `setup-script`: generated setup script path in `emit-script` mode.
+- `setup-env`: generated setup environment path in `emit-script` mode.
 
 ### `analyze` Inputs
 
