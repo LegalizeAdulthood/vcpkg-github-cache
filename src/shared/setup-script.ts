@@ -251,12 +251,16 @@ export function renderSetupScript(plan: SetupPlan): string {
     ]);
     script.line("nuget_exe=$(");
     script.line("  printf '%s\\n' \"${nuget_output}\" | awk '");
+    script.line("    {");
+    script.line("      candidate = $0");
+    script.line('      gsub(/^"|"$/, "", candidate)');
     script.line(
-      "    /[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$/ && $0 !~ /^Downloading/ && $0 !~ / -> / {",
+      "      if (candidate ~ /\\/[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$/ &&",
     );
-    script.line('      gsub(/^"|"$/, "")');
-    script.line("      print");
-    script.line("      exit");
+    script.line("          $0 !~ /^Downloading/ && $0 !~ / -> /) {");
+    script.line("        print candidate");
+    script.line("        exit");
+    script.line("      }");
     script.line("    }");
     script.line("  '");
     script.line(")");

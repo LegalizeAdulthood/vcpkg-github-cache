@@ -71,7 +71,9 @@ describe("setup script emission", () => {
     );
     expect(script).toContain("vcpkg fetch nuget failed");
     expect(script).toContain("nuget_exe=$(");
-    expect(script).toContain("[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$");
+    expect(script).toContain(
+      "candidate ~ /\\/[Nn][Uu][Gg][Ee][Tt]\\.[Ee][Xx][Ee]$/",
+    );
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
