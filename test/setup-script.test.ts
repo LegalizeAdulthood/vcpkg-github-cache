@@ -128,6 +128,7 @@ describe("setup script emission", () => {
     expect(script).toContain("ls /usr/local/lib/libcurl.so.* >/dev/null 2>&1");
     expect(script).toContain('missing_packages="${missing_packages} unzip--"');
     expect(script).toContain("pkg_add -I ${missing_packages}");
+    expect(script).toContain('compat_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(script).toContain('ln -sf "${libcurl_file}"');
     expect(script).toContain('LD_LIBRARY_PATH="${compat_dir}');
     expect(script).toContain("ensure_openbsd_libcurl_compat");
@@ -224,10 +225,12 @@ describe("setup script emission", () => {
     const env = renderSetupEnvironment(plan);
 
     expect(env).toContain("export VCPKG_BINARY_SOURCES=");
+    expect(env).toContain('openbsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(env).toContain(
-      'openbsd_libcurl_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"',
+      'openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',
     );
     expect(env).toContain("export LD_LIBRARY_PATH=");
+    expect(env).toContain("unset openbsd_libcurl_dir openbsd_vcpkg_root");
   });
 
   test("writes setup files and returns relative output paths", async () => {

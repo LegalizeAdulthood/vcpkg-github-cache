@@ -31510,7 +31510,11 @@ function renderSetupScript(plan) {
         ]);
         script.line("    return");
         script.line("  fi");
-        script.line('  compat_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"');
+        script.line('  case "${VCPKG_ROOT}" in');
+        script.line('    /*) compat_root="${VCPKG_ROOT}" ;;');
+        script.line('    *) compat_root="$(pwd -P)/${VCPKG_ROOT}" ;;');
+        script.line("  esac");
+        script.line('  compat_dir="${compat_root}/buildtrees/vcpkg-github-cache/lib"');
         script.line('  mkdir -p "${compat_dir}"');
         script.line('  ln -sf "${libcurl_file}" "${compat_dir}/libcurl.so.4"');
         script.line('  if [ -z "${LD_LIBRARY_PATH:-}" ]; then');
@@ -31524,6 +31528,7 @@ function renderSetupScript(plan) {
             posixLiteral("OpenBSD libcurl compatibility path: "),
             posixRuntimeExpression('"${compat_dir}"'),
         ]);
+        script.line("  unset compat_root");
     }
     else {
         script.line("  :");
@@ -32110,7 +32115,11 @@ function renderSetupEnvironment(plan) {
         script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
         script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
         script.line("fi");
-        script.line('openbsd_libcurl_dir="${VCPKG_ROOT}/buildtrees/vcpkg-github-cache/lib"');
+        script.line('case "${VCPKG_ROOT}" in');
+        script.line('  /*) openbsd_vcpkg_root="${VCPKG_ROOT}" ;;');
+        script.line('  *) openbsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}" ;;');
+        script.line("esac");
+        script.line('openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"');
         script.line('if [ -d "${openbsd_libcurl_dir}" ]; then');
         script.line('  if [ -z "${LD_LIBRARY_PATH:-}" ]; then');
         script.line('    export LD_LIBRARY_PATH="${openbsd_libcurl_dir}"');
@@ -32118,7 +32127,7 @@ function renderSetupEnvironment(plan) {
         script.line('    export LD_LIBRARY_PATH="${openbsd_libcurl_dir}:${LD_LIBRARY_PATH}"');
         script.line("  fi");
         script.line("fi");
-        script.line("unset openbsd_libcurl_dir");
+        script.line("unset openbsd_libcurl_dir openbsd_vcpkg_root");
     }
     return script.render();
 }
