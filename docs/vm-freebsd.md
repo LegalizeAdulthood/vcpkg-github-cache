@@ -37,21 +37,7 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Cache the FreeBSD vcpkg tool as a NuGet package
-
-   Add FreeBSD setup-script support for restoring a custom vcpkg tool package
-   before source bootstrap.  If the package restores, install the `vcpkg`
-   binary into `VCPKG_ROOT` and skip building vcpkg from source.
-
-   If the package is absent, bootstrap vcpkg from source as today, then pack
-   and push the resulting tool package to GitHub Packages for later runs.
-
-   The package identity should include the inputs that can affect the binary:
-   vcpkg tool commit/version, target OS, target architecture, FreeBSD release,
-   compiler identity, and action package schema version.  Use a hash of that
-   identity in the NuGet package version instead of a placeholder version.
-
-2. Streamline FreeBSD copyback
+1. Streamline FreeBSD copyback
 
    Change the documented FreeBSD workflow shape to copy back only the files
    needed by the host-side analyzer and status check:
@@ -64,7 +50,7 @@ the caller workflow.
    the workflow can place `build.log`, `build.status`, and selected package
    artifacts before copyback.
 
-3. Document FreeBSD usage
+2. Document FreeBSD usage
 
    Update the main documentation with a FreeBSD VM example that shows
    `execution-mode=emit-script`, `target-os=freebsd`, running the emitted
@@ -75,11 +61,6 @@ the caller workflow.
 
 - Existing setup action usage works unchanged.
 - Existing analyze action usage works unchanged.
-- FreeBSD setup can restore a cached vcpkg tool before source bootstrap.
-- FreeBSD setup falls back to source bootstrap when the tool package misses.
-- A source-built FreeBSD vcpkg tool is packaged and pushed for future runs.
-- The tool package name and version are deterministic from binary-relevant
-  inputs.
 - The FreeBSD workflow no longer copies the full build tree by default.
 - Host-side analysis still reads the copied `build.log`.
 - Host-side status propagation still reads the copied `build.status`.
