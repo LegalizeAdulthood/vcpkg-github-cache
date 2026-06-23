@@ -4,27 +4,29 @@ SPDX-License-Identifier: GPL-3.0-only
 Copyright 2026 Richard Thomson
 -->
 
-# FreeBSD VM Follow-up Plan
+# BSD VM Follow-up Plan
 
 ## Goal
 
-Reduce FreeBSD VM cache overhead after the first working integration.
+Extend the VM build path from FreeBSD to OpenBSD while preserving the
+working FreeBSD integration.
 
-The emitted setup script, VM execution, copied build log, host-side analyzer,
-warm-hit reporting, and missing system dependency reporting have been
-verified.  The remaining work is about speed and copyback size.
+FreeBSD emitted setup, VM execution, host-side analysis, warm-hit reporting,
+missing system dependency reporting, selective copyback, and cached vcpkg
+tool packages have been verified.  The next work is adding OpenBSD support
+with the same host-action/guest-script split.
 
 ## Boundaries
 
 The cache action owns:
 
-- restoring or publishing a cached FreeBSD vcpkg tool package;
+- restoring or publishing cached BSD vcpkg tool packages;
 - configuring vcpkg binary caching inside the VM;
 - documenting the minimal files needed by the host analyzer.
 
 The caller workflow owns:
 
-- selecting the VM provider and FreeBSD release;
+- selecting the VM provider and BSD release;
 - installing project build prerequisites;
 - running the project build workflow;
 - deciding which project artifacts should be copied back.
@@ -37,26 +39,81 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Document FreeBSD usage
+1. Add OpenBSD target selection
 
-   Update the main documentation with a FreeBSD VM example that shows
-   `execution-mode=emit-script`, `target-os=freebsd`, running the emitted
-   setup script inside the VM, dot-sourcing the setup environment, staging
-   `build.log` and `build.status`, and running the analyzer on the host.
+   Extend setup inputs so `target-os=openbsd` is accepted only with
+   `execution-mode=emit-script`.  Update target normalization, setup plan
+   tests, setup validation, setup summaries, and action input docs.  Keep
+   `target-os=freebsd` behavior unchanged.
+
+2. Factor BSD setup script helpers
+
+   Split FreeBSD-specific setup script logic into shared BSD helpers plus
+   per-target settings.  Keep package manager commands, target labels,
+   tool package IDs, release identifiers, and diagnostic messages target
+   specific.  Do this before adding OpenBSD logic so the OpenBSD slice stays
+   small.
+
+3. Emit OpenBSD setup script support
+
+   Generate an OpenBSD POSIX setup script for `target-os=openbsd`.  Use
+   OpenBSD package installation commands in the bootstrap and Mono paths,
+   keep the `VCPKG_GITHUB_CACHE_NUGET_COMMAND` contract, configure the
+   GitHub Packages NuGet source, and write `setup.env` exactly as the
+   FreeBSD path does.
+
+4. Cache the OpenBSD vcpkg tool package
+
+   Add OpenBSD vcpkg tool restore and publish support with package IDs such
+   as `vcpkg-tool_openbsd-${tool_arch}`.  Include the vcpkg commit, target
+   OS, target architecture, OpenBSD release, compiler identity, and schema
+   version in the tool identity hash.
+
+5. Parse OpenBSD tool package logs
+
+   Teach the build log parser and analyzer reports to recognize OpenBSD
+   vcpkg tool restore hits, source rebuilds, publish successes, publish
+   failures, and skipped publishes.  Report source-built OpenBSD tool
+   packages in the same "Packages built from source" table as FreeBSD.
+
+6. Add OpenBSD missing dependency diagnostics
+
+   Extend missing system dependency detection for OpenBSD bootstrap, vcpkg
+   ports, and project configure failures.  Keep each recognized log pattern
+   covered by a focused parser test and report missing packages in the job
+   summary.
+
+7. Add trn OpenBSD integration workflow
+
+   Add an OpenBSD VM job to `trn` using `vmactions/openbsd-vm@v1`,
+   `target-os=openbsd`, the emitted setup script, dot-sourced setup
+   environment, captured `build.log`, captured `build.status`, and the same
+   staged copyback pattern used by the FreeBSD job.  Start with the minimal
+   OpenBSD project prerequisites discovered during testing.
+
+8. Document OpenBSD usage
+
+   Update the main ReadMe with an OpenBSD VM example.  Show
+   `vmactions/openbsd-vm@v1`, `target-os=openbsd`, OpenBSD package setup,
+   the emitted setup script, setup environment dot-sourcing, build log and
+   status staging, host-side analyze, and the copyback staging explanation.
 
 ## Acceptance Criteria
 
 - Existing setup action usage works unchanged.
 - Existing analyze action usage works unchanged.
-- The FreeBSD workflow no longer copies the full build tree by default.
-- Host-side analysis still reads the copied `build.log`.
-- Host-side status propagation still reads the copied `build.status`.
+- The FreeBSD workflow remains green.
+- The OpenBSD workflow reaches the project build.
+- FreeBSD and OpenBSD workflows avoid copying the full build tree by
+  default.
+- Host-side analysis still reads copied `build.log` files.
+- Host-side status propagation still reads copied `build.status` files.
 - CPack artifact copyback remains an explicit caller workflow choice.
 
 ## Non-goals
 
-- Native FreeBSD GitHub-hosted runner support.
-- Running JavaScript actions inside the FreeBSD VM.
+- Native BSD GitHub-hosted runner support.
+- Running JavaScript actions inside BSD VMs.
 - Owning VM release selection, CPU, memory, or sync strategy.
 - Installing project build prerequisites from the cache action.
 - Replacing project workflow commands with cache-action wrappers.
