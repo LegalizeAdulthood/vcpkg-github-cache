@@ -37,20 +37,7 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Streamline FreeBSD copyback
-
-   Change the documented FreeBSD workflow shape to copy back only the files
-   needed by the host-side analyzer and status check:
-
-   - `build.log`;
-   - `build.status`.
-
-   Avoid copying the full VM workspace or build tree by default.  If a caller
-   needs CPack outputs, document a small caller-owned staging directory where
-   the workflow can place `build.log`, `build.status`, and selected package
-   artifacts before copyback.
-
-2. Document FreeBSD usage
+1. Document FreeBSD usage
 
    Update the main documentation with a FreeBSD VM example that shows
    `execution-mode=emit-script`, `target-os=freebsd`, running the emitted

@@ -172,15 +172,25 @@ steps:
         pkg update
         pkg install -y cmake ninja git pkgconf
       run: |
-        set -eu
-
-        sh "${{ steps.vc_setup.outputs.setup-script }}"
-        . "${{ steps.vc_setup.outputs.setup-env }}"
+        set +e
+        set -u
+        # This staging directory name is arbitrary, not an action convention.
+        mkdir -p .freebsd-copyback
 
         {
-          cmake --workflow --preset ci 2>&1
-          echo $? > build.status
-        } | tee build.log
+          sh "${{ steps.vc_setup.outputs.setup-script }}" &&
+          . "${{ steps.vc_setup.outputs.setup-env }}" &&
+          cmake --workflow --preset ci
+          status=$?
+          echo "${status}" > build.status
+        } 2>&1 | tee build.log
+
+        cp build.log build.status .freebsd-copyback/
+        # Copy project build products needed by host steps here.
+        find . -mindepth 1 -maxdepth 1 ! -name .git \
+          ! -name .freebsd-copyback -exec rm -rf {} +
+        mv .freebsd-copyback/* .
+        rmdir .freebsd-copyback
 
         exit "$(cat build.status)"
 
@@ -198,6 +208,14 @@ The emitted setup script configures the target-side NuGet source, uses
 `vcpkg fetch nuget` inside the VM, and can bootstrap vcpkg there.  The
 emitted `setup.env` file exports `VCPKG_BINARY_SOURCES`; dot-source it
 before running the project workflow.
+
+The `.freebsd-copyback` directory in the example is only a local staging
+directory.  The FreeBSD VM action's `rsync` and `scp` copyback modes are
+boolean: copy the VM workspace back, or copy nothing.  The example stages
+only the files needed by host-side steps, removes the rest of the VM
+workspace, then moves the staged files back to the workspace root before
+copyback runs.  If later host steps need project build products, stage them
+there too.
 
 ### Troubleshooting
 
