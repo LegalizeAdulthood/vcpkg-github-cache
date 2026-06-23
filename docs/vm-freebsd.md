@@ -39,15 +39,7 @@ the caller workflow.
 
 ## Implementation Slices
 
-1. Add trn OpenBSD integration workflow
-
-   Add an OpenBSD VM job to `trn` using `vmactions/openbsd-vm@v1`,
-   `target-os=openbsd`, the emitted setup script, dot-sourced setup
-   environment, captured `build.log`, captured `build.status`, and the same
-   staged copyback pattern used by the FreeBSD job.  Start with the minimal
-   OpenBSD project prerequisites discovered during testing.
-
-2. Document OpenBSD usage
+1. Document OpenBSD usage
 
    Update the main ReadMe with an OpenBSD VM example.  Show
    `vmactions/openbsd-vm@v1`, `target-os=openbsd`, OpenBSD package setup,
