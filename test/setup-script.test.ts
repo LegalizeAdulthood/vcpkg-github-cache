@@ -61,6 +61,11 @@ describe("setup script emission", () => {
     expect(script).toContain("has_freebsd_nuget_tool");
     expect(script).toContain("enable_freebsd_nuget_tool");
     expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
+    expect(script).toContain('\\"version\\": \\"6.8.0\\"');
+    expect(script).toContain("/v6.8.0/nuget.exe");
+    expect(script).toContain(
+      "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c",
+    );
     expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     expect(script).toContain("Ensuring Mono is available");
     expect(script).toContain("if command_exists mono; then");

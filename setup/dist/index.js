@@ -31485,6 +31485,13 @@ function renderSetupScript(plan) {
     script.line("          freebsd_block = block");
     script.line('          sub(/"os"[[:space:]]*:[[:space:]]*"linux"/,');
     script.line('              "\\"os\\": \\"freebsd\\"", freebsd_block)');
+    script.line('          sub(/"version"[[:space:]]*:[[:space:]]*"[^"]+"/,');
+    script.line('              "\\"version\\": \\"6.8.0\\"", freebsd_block)');
+    script.line("          sub(/\\/v[0-9.]+\\/nuget[.]exe/,");
+    script.line('              "/v6.8.0/nuget.exe", freebsd_block)');
+    script.line('          sub(/"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/,');
+    script.line('              "\\"sha512\\": \\"337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c\\"",');
+    script.line("              freebsd_block)");
     script.line('          printf "%s", freebsd_block');
     script.line("          patched = 1");
     script.line("          next");
