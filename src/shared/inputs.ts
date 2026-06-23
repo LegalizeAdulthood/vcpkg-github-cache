@@ -5,6 +5,8 @@
  */
 
 export type TokenKind = "github" | "pat";
+export type SetupExecutionMode = "run" | "emit-script";
+export type SetupTargetOs = "current" | "freebsd";
 
 const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
 
@@ -24,6 +26,38 @@ export function normalizeTokenKind(value: string | undefined): TokenKind {
   }
 
   throw new Error(`Unsupported token-kind: ${value}`);
+}
+
+export function normalizeSetupExecutionMode(
+  value: string | undefined,
+): SetupExecutionMode {
+  const normalized = (value ?? "run").trim().toLowerCase();
+
+  if (normalized === "" || normalized === "run") {
+    return "run";
+  }
+
+  if (normalized === "emit-script") {
+    return "emit-script";
+  }
+
+  throw new Error(`Unsupported execution-mode: ${value}`);
+}
+
+export function normalizeSetupTargetOs(
+  value: string | undefined,
+): SetupTargetOs {
+  const normalized = (value ?? "current").trim().toLowerCase();
+
+  if (normalized === "" || normalized === "current") {
+    return "current";
+  }
+
+  if (normalized === "freebsd") {
+    return "freebsd";
+  }
+
+  throw new Error(`Unsupported target-os: ${value}`);
 }
 
 export function ownerFromRepository(

@@ -12,6 +12,8 @@ import {
   buildFeedUrl,
 } from "../src/shared/cache";
 import {
+  normalizeSetupExecutionMode,
+  normalizeSetupTargetOs,
   normalizeTokenKind,
   parseBoolean,
   resolveFeedOwner,
@@ -40,6 +42,28 @@ describe("shared action helpers", () => {
 
   test("rejects unsupported token kinds", () => {
     expect(() => normalizeTokenKind("oauth")).toThrow(/Unsupported/);
+  });
+
+  test("normalizes supported setup execution modes", () => {
+    expect(normalizeSetupExecutionMode(undefined)).toBe("run");
+    expect(normalizeSetupExecutionMode("")).toBe("run");
+    expect(normalizeSetupExecutionMode("RUN")).toBe("run");
+    expect(normalizeSetupExecutionMode("emit-script")).toBe("emit-script");
+  });
+
+  test("rejects unsupported setup execution modes", () => {
+    expect(() => normalizeSetupExecutionMode("script")).toThrow(/Unsupported/);
+  });
+
+  test("normalizes supported setup target OS values", () => {
+    expect(normalizeSetupTargetOs(undefined)).toBe("current");
+    expect(normalizeSetupTargetOs("")).toBe("current");
+    expect(normalizeSetupTargetOs("CURRENT")).toBe("current");
+    expect(normalizeSetupTargetOs("FreeBSD")).toBe("freebsd");
+  });
+
+  test("rejects unsupported setup target OS values", () => {
+    expect(() => normalizeSetupTargetOs("linux")).toThrow(/Unsupported/);
   });
 
   test("resolves feed owner from input or repository", () => {

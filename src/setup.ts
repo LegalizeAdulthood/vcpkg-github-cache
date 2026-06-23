@@ -9,6 +9,8 @@ import * as core from "@actions/core";
 import { buildFeedUrl } from "./shared/cache";
 import { runCommand } from "./shared/command";
 import {
+  normalizeSetupExecutionMode,
+  normalizeSetupTargetOs,
   normalizeTokenKind,
   parseBoolean,
   resolveFeedOwner,
@@ -83,6 +85,16 @@ export async function run(): Promise<void> {
   const sourceName = optionalInput("source-name", "GitHubPackages");
   const trace = parseBoolean(optionalInput("trace", "false"));
   const access = optionalInput("access", "readwrite");
+  const executionMode = normalizeSetupExecutionMode(
+    optionalInput("execution-mode", "run"),
+  );
+  const targetOs = normalizeSetupTargetOs(
+    optionalInput("target-os", "current"),
+  );
+  const scriptDirectory = optionalInput(
+    "script-directory",
+    ".vcpkg-github-cache",
+  );
   const vcpkg = resolveVcpkgPaths(
     optionalInput("vcpkg-root", "vcpkg"),
     process.env.GITHUB_WORKSPACE,
@@ -110,12 +122,25 @@ export async function run(): Promise<void> {
     traceLogger.input("install-nuget", installNuget ? "true" : "false");
     traceLogger.input("source-name", sourceName);
     traceLogger.input("access", access);
+    traceLogger.input("execution-mode", executionMode);
+    traceLogger.input("target-os", targetOs);
+    traceLogger.input("script-directory", scriptDirectory);
     traceLogger.value("platform", `${process.platform}/${process.arch}`);
     traceLogger.value("feed URL", feedUrl);
     traceLogger.path("GITHUB_WORKSPACE", process.env.GITHUB_WORKSPACE ?? "");
     traceLogger.path("vcpkg root", vcpkg.root);
     traceLogger.path("vcpkg executable", vcpkg.executable);
     traceLogger.path("vcpkg bootstrap script", vcpkg.bootstrapScript);
+  }
+
+  if (executionMode === "run" && targetOs !== "current") {
+    throw new Error(
+      "target-os is only supported with execution-mode=emit-script",
+    );
+  }
+
+  if (executionMode === "emit-script") {
+    throw new Error("execution-mode=emit-script is not implemented yet");
   }
 
   if (bootstrap) {
