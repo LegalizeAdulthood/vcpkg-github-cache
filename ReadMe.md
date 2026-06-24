@@ -217,6 +217,91 @@ workspace, then moves the staged files back to the workspace root before
 copyback runs.  If later host steps need project build products, stage them
 there too.
 
+### OpenBSD VM Build
+
+OpenBSD uses the same `emit-script` pattern as FreeBSD, but the VM action,
+release, and package list are OpenBSD-specific.  When using `sync: rsync`
+and `copyback: true`, install `rsync` in the guest so the copyback tool and
+guest libraries match after package installation:
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+
+steps:
+  - uses: actions/checkout@v6
+    with:
+      submodules: true
+
+  - name: Generate vcpkg cache setup script
+    id: vc_setup
+    uses: LegalizeAdulthood/vcpkg-github-cache@v1
+    with:
+      token: ${{ github.token }}
+      execution-mode: emit-script
+      target-os: openbsd
+      bootstrap: "true"
+      install-nuget: "true"
+      install-mono: "true"
+
+  - name: Build on OpenBSD
+    uses: vmactions/openbsd-vm@v1
+    env:
+      VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
+      VCPKG_ROOT: vcpkg
+    with:
+      release: "7.9"
+      usesh: true
+      sync: rsync
+      copyback: true
+      envs: VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+      prepare: |
+        pkg_add -I cmake ninja git gmake bash bison patchelf rsync
+      run: |
+        set +e
+        set -u
+        # This staging directory name is arbitrary, not an action convention.
+        mkdir -p .openbsd-copyback
+
+        {
+          sh "${{ steps.vc_setup.outputs.setup-script }}" &&
+          . "${{ steps.vc_setup.outputs.setup-env }}" &&
+          cmake --workflow --preset ci
+          status=$?
+          echo "${status}" > build.status
+        } 2>&1 | tee build.log
+
+        cp build.log build.status .openbsd-copyback/
+        # Copy project build products needed by host steps here.
+        find . -mindepth 1 -maxdepth 1 ! -name .git \
+          ! -name .openbsd-copyback -exec rm -rf {} +
+        mv .openbsd-copyback/* .
+        rmdir .openbsd-copyback
+
+  - name: Analyze vcpkg package cache
+    if: always()
+    uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+    with:
+      token: ${{ github.token }}
+      build-log: build.log
+      artifact-name: openbsd-cache-${{ github.run_attempt }}
+      fail-on: "never"
+
+  - name: Check OpenBSD build status
+    if: always()
+    run: |
+      if [ ! -f build.status ]; then
+        echo "build.status was not copied back from the OpenBSD VM"
+        exit 1
+      fi
+      exit "$(cat build.status)"
+```
+
+The emitted OpenBSD setup script also handles OpenBSD-specific vcpkg tool
+setup, NuGet metadata, Ninja handling, and runtime library path setup.
+Project prerequisites remain the caller workflow's responsibility.
+
 ### Troubleshooting
 
 Enable `debug` while tuning package permissions.  This keeps the analyzer
