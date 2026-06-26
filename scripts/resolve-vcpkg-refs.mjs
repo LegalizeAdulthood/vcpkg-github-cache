@@ -191,8 +191,15 @@ function matrixFromRefs(refs, kind) {
     include: refs.map((ref) => ({
       vcpkg_ref: ref,
       vcpkg_ref_kind: kind,
+      vcpkg_ref_slug: refSlug(ref),
     })),
   };
+}
+
+function refSlug(ref) {
+  const slug = ref.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
+
+  return slug || "ref";
 }
 
 function appendGithubOutput(path, name, value) {
@@ -296,6 +303,7 @@ async function resolveRefs(options) {
     include: refs.map((ref) => ({
       vcpkg_ref: ref,
       vcpkg_ref_kind: releaseTags.includes(ref) ? "release-tag" : "explicit",
+      vcpkg_ref_slug: refSlug(ref),
     })),
   };
 }
@@ -340,6 +348,7 @@ export {
   matrixFromRefs,
   parseArgs,
   parseRefList,
+  refSlug,
   releaseTagKey,
   resolveRefs,
   selectLatestReleaseTags,
