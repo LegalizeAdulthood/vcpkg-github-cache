@@ -527,9 +527,9 @@ function uniquePackageAbiHashes(
 
 const PACKAGE_UPLOAD_STATE_RANK: Readonly<Record<PackageUploadState, number>> =
   {
-    "already present": 1,
+    "already present": 2,
     failed: 1,
-    succeeded: 2,
+    succeeded: 3,
     unknown: 0,
   };
 
@@ -596,6 +596,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
   let captureNugetConfigPaths = false;
   let failedUpload: WriteDeniedPackage | undefined;
   let currentBuildPackage: string | undefined;
+  let currentUploadPackage: string | undefined;
   let bootstrappingVcpkg = false;
   let parsedRestoredCount: number | undefined;
   let submissionsStarted = 0;
@@ -773,6 +774,7 @@ export function parseBuildLog(content: string): BuildLogFacts {
 
     if (uploadedPackage) {
       uploadsAttempted += 1;
+      currentUploadPackage = uploadedPackage;
       rememberPackageUploadStatus(
         packageUploadStatuses,
         uploadedPackage,
@@ -792,6 +794,15 @@ export function parseBuildLog(content: string): BuildLogFacts {
         packageUploadStatuses,
         submission.packageSpec,
         submission.cacheCount === 0 ? "failed" : "succeeded",
+      );
+      currentUploadPackage = undefined;
+    }
+
+    if (currentUploadPackage && /\bhas already been pushed\b/i.test(trimmed)) {
+      rememberPackageUploadStatus(
+        packageUploadStatuses,
+        currentUploadPackage,
+        "already present",
       );
     }
 

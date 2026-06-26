@@ -94,6 +94,26 @@ Completed submission of boost:x64-linux to 0 binary cache(s)
     expect(facts.writeDeniedPackages).toEqual([]);
   });
 
+  test("extracts already-present package upload conflicts", () => {
+    const facts = parseBuildLog(`
+Uploading binaries for fmt:x64-windows-vcpkg-github-cache@12.1.0 to NuGet from https://nuget.pkg.github.com/octo/index.json
+WARNING: Error: Version 12.1.0-vcpkgabcdef of "fmt_x64-windows-vcpkg-github-cache" has already been pushed.
+Response status code does not indicate success: 409 (Conflict).
+Completed submission of fmt:x64-windows-vcpkg-github-cache@12.1.0 to 0 binary cache(s) in 3.5 s
+`);
+
+    expect(facts.failedHttpStatuses).toEqual([]);
+    expect(facts.authMessages).toEqual([]);
+    expect(facts.zeroCacheSubmissions).toBe(1);
+    expect(facts.packageUploadStatuses).toEqual([
+      {
+        packageId: "fmt_x64-windows-vcpkg-github-cache",
+        packageSpec: "fmt:x64-windows-vcpkg-github-cache@12.1.0",
+        status: "already present",
+      },
+    ]);
+  });
+
   test("ignores ctest numbers that look like http status codes", () => {
     const facts = parseBuildLog(`
 Restored 33 package(s) from NuGet in 8.7 s.

@@ -155,8 +155,9 @@ function alreadyPresentUploads(
 ): number {
   return (buildLogFacts?.packageUploadStatuses ?? []).filter(
     (value) =>
-      value.status === "failed" &&
-      packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata),
+      value.status === "already present" ||
+      (value.status === "failed" &&
+        packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata)),
   ).length;
 }
 
@@ -337,7 +338,7 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
       ]);
     }
 
-    if (uploadedCount > 0) {
+    if (uploadedCount > 0 || alreadyPresent > 0) {
       return result("cold-seed", "cache-miss", [
         ...baseEvidence,
         `upload ${uploadedCount}`,

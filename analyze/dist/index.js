@@ -141277,9 +141277,9 @@ function uniquePackageAbiHashes(values) {
     return output;
 }
 const PACKAGE_UPLOAD_STATE_RANK = {
-    "already present": 1,
+    "already present": 2,
     failed: 1,
-    succeeded: 2,
+    succeeded: 3,
     unknown: 0,
 };
 function rememberPackageUploadStatus(statuses, packageSpec, status) {
@@ -141327,6 +141327,7 @@ function parseBuildLog(content) {
     let captureNugetConfigPaths = false;
     let failedUpload;
     let currentBuildPackage;
+    let currentUploadPackage;
     let bootstrappingVcpkg = false;
     let parsedRestoredCount;
     let submissionsStarted = 0;
@@ -141448,6 +141449,7 @@ function parseBuildLog(content) {
         const uploadedPackage = uploadingPackage(line);
         if (uploadedPackage) {
             uploadsAttempted += 1;
+            currentUploadPackage = uploadedPackage;
             rememberPackageUploadStatus(packageUploadStatuses, uploadedPackage, "unknown");
         }
         const submission = completedSubmission(line);
@@ -141459,6 +141461,10 @@ function parseBuildLog(content) {
                 uploadedCount += 1;
             }
             rememberPackageUploadStatus(packageUploadStatuses, submission.packageSpec, submission.cacheCount === 0 ? "failed" : "succeeded");
+            currentUploadPackage = undefined;
+        }
+        if (currentUploadPackage && /\bhas already been pushed\b/i.test(trimmed)) {
+            rememberPackageUploadStatus(packageUploadStatuses, currentUploadPackage, "already present");
         }
         const status = failedHttpStatus(line);
         if (status) {
@@ -142235,8 +142241,9 @@ function packageAlreadyPresent(packageId, buildLogFacts, packageMetadata) {
     return packageVersionExists(diagnosis_packageMetadataResults(packageMetadata).get(packageId), packageAbiHashes(buildLogFacts).get(packageId));
 }
 function alreadyPresentUploads(buildLogFacts, packageMetadata) {
-    return (buildLogFacts?.packageUploadStatuses ?? []).filter((value) => value.status === "failed" &&
-        packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata)).length;
+    return (buildLogFacts?.packageUploadStatuses ?? []).filter((value) => value.status === "already present" ||
+        (value.status === "failed" &&
+            packageAlreadyPresent(value.packageId, buildLogFacts, packageMetadata))).length;
 }
 function failedUploads(buildLogFacts, packageMetadata) {
     return (buildLogFacts?.packageUploadStatuses ?? []).filter((value) => value.status === "failed" &&
@@ -142355,7 +142362,7 @@ function classifyBuildLog(input) {
                 ...uploadFailureEvidence(input.buildLogFacts, input.packageMetadata, uploadedCount),
             ]);
         }
-        if (uploadedCount > 0) {
+        if (uploadedCount > 0 || alreadyPresent > 0) {
             return result("cold-seed", "cache-miss", [
                 ...baseEvidence,
                 `upload ${uploadedCount}`,
