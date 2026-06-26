@@ -1,0 +1,7 @@
+{
+  "name": "vcpkg-github-cache-fixture",
+  "version-string": "0.0.1",
+  "dependencies": [
+    "fmt"
+  ]
+}
