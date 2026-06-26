@@ -222,7 +222,11 @@ jobs:
           BUILD_DIR: ${{ runner.temp }}/vcpkg-github-cache-fixture
           BUILD_LOG: build.log
           BUILD_STATUS: build.status
+          VCPKG_HOST_TRIPLET: x64-linux-vcpkg-github-cache
+          VCPKG_OVERLAY_TRIPLETS: >-
+            ${{ github.workspace }}/test/fixtures/cmake-vcpkg/triplets
           VCPKG_ROOT: vcpkg
+          VCPKG_TARGET_TRIPLET: x64-linux-vcpkg-github-cache
         run: sh test/fixtures/cmake-vcpkg/build-fixture.sh
 
       - name: Ensure fixture log exists
@@ -306,7 +310,11 @@ jobs:
           BUILD_DIR: ${{ runner.temp }}\vcpkg-github-cache-fixture
           BUILD_LOG: build.log
           BUILD_STATUS: build.status
+          VCPKG_HOST_TRIPLET: x64-windows-vcpkg-github-cache
+          VCPKG_OVERLAY_TRIPLETS: >-
+            ${{ github.workspace }}\test\fixtures\cmake-vcpkg\triplets
           VCPKG_ROOT: vcpkg
+          VCPKG_TARGET_TRIPLET: x64-windows-vcpkg-github-cache
         run: call test\fixtures\cmake-vcpkg\build-fixture.bat
 
       - name: Ensure fixture log exists

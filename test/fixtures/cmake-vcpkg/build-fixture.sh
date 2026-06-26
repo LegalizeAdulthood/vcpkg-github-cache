@@ -65,6 +65,8 @@ build_log=${BUILD_LOG:-$build_dir/build.log}
 build_status=${BUILD_STATUS:-$build_dir/build.status}
 build_config=${BUILD_CONFIG:-Release}
 triplet=${VCPKG_TARGET_TRIPLET:-}
+host_triplet=${VCPKG_HOST_TRIPLET:-}
+overlay_triplets=${VCPKG_OVERLAY_TRIPLETS:-}
 generator=${CMAKE_GENERATOR:-}
 toolchain=${VCPKG_TOOLCHAIN_FILE:-$vcpkg_root/scripts/buildsystems/vcpkg.cmake}
 
@@ -96,6 +98,14 @@ set -- -S "$script_dir" -B "$build_dir" "-DCMAKE_TOOLCHAIN_FILE=$toolchain"
 
 if [ -n "$triplet" ]; then
     set -- "$@" "-DVCPKG_TARGET_TRIPLET=$triplet"
+fi
+
+if [ -n "$host_triplet" ]; then
+    set -- "$@" "-DVCPKG_HOST_TRIPLET=$host_triplet"
+fi
+
+if [ -n "$overlay_triplets" ]; then
+    set -- "$@" "-DVCPKG_OVERLAY_TRIPLETS=$overlay_triplets"
 fi
 
 if [ -n "$generator" ]; then
