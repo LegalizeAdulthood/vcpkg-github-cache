@@ -54,6 +54,11 @@ if [ -z "$vcpkg_root" ]; then
     exit 1
 fi
 
+case $vcpkg_root in
+    /*) ;;
+    *) vcpkg_root=$(CDPATH= cd "$vcpkg_root" && pwd) || exit 1 ;;
+esac
+
 runner_temp=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
 build_dir=${BUILD_DIR:-$runner_temp/vcpkg-github-cache-fixture-build}
 build_log=${BUILD_LOG:-$build_dir/build.log}
@@ -62,6 +67,17 @@ build_config=${BUILD_CONFIG:-Release}
 triplet=${VCPKG_TARGET_TRIPLET:-}
 generator=${CMAKE_GENERATOR:-}
 toolchain=${VCPKG_TOOLCHAIN_FILE:-$vcpkg_root/scripts/buildsystems/vcpkg.cmake}
+
+case $toolchain in
+    /*) ;;
+    */*)
+        toolchain_dir=${toolchain%/*}
+        toolchain_base=${toolchain##*/}
+        toolchain_dir=$(CDPATH= cd "$toolchain_dir" && pwd) || exit 1
+        toolchain=$toolchain_dir/$toolchain_base
+        ;;
+    *) toolchain=$(pwd)/$toolchain ;;
+esac
 
 build_log_dir=${build_log%/*}
 if [ "$build_log_dir" = "$build_log" ]; then
