@@ -6,9 +6,9 @@ Copyright 2026 Richard Thomson
 
 # GitHub Package Scripts
 
-These Windows batch helpers inspect and maintain GitHub Packages NuGet
-caches used by the action and its integration tests.  They require an
-explicit package owner with `/user USER` or `/org ORG`.
+These helpers inspect and maintain GitHub Packages NuGet caches used by
+the action and its integration tests.  Package maintenance scripts require
+an explicit package owner with `/user USER` or `/org ORG`.
 
 The scripts expect the GitHub CLI (`gh`) to be installed and authenticated.
 Some reports also require `curl` and `printf` to be available on `PATH`.
@@ -28,6 +28,8 @@ Some reports also require `curl` and `printf` to be available on `PATH`.
 - `gh-package-prune-all.bat`: applies `gh-package-prune.bat` to every NuGet
   package for the selected owner.  It keeps only the newest version of each
   package and is also a dry run unless `/delete` is supplied.
+- `resolve-vcpkg-refs.mjs`: resolves explicit or recent vcpkg release refs
+  and emits a GitHub Actions matrix JSON object.
 
 ## Owner Scope
 
