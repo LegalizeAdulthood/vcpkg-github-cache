@@ -31607,6 +31607,54 @@ function renderSetupScript(plan) {
     script.line("  fi");
     script.line("}");
     script.blank();
+    script.line("ensure_netbsd_mono_certificates() {");
+    if (bsdTarget.targetOs === "netbsd") {
+        script.line("  if [ ! -f /etc/openssl/certs/ca-certificates.crt ] &&");
+        script.line("      [ ! -f /etc/ssl/certs/ca-certificates.crt ] &&");
+        script.line("      [ ! -f /usr/pkg/share/mozilla-rootcerts/cacert.pem ]; then");
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Installing NetBSD root certificates"),
+        ]);
+        script.line("    /usr/sbin/pkg_add -u mozilla-rootcerts-openssl");
+        script.line("  fi");
+        script.line("  if [ -x /usr/pkg/sbin/mozilla-rootcerts ]; then");
+        script.line("    /usr/pkg/sbin/mozilla-rootcerts install || true");
+        script.line("  elif command_exists mozilla-rootcerts; then");
+        script.line("    mozilla-rootcerts install || true");
+        script.line("  fi");
+        script.line("  if ! command_exists cert-sync; then");
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("NetBSD Mono certificate sync failed: cert-sync missing"),
+        ]);
+        script.line("    exit 1");
+        script.line("  fi");
+        script.line("  for cert_file in \\");
+        script.line("      /etc/openssl/certs/ca-certificates.crt \\");
+        script.line("      /etc/ssl/certs/ca-certificates.crt \\");
+        script.line("      /usr/pkg/share/mozilla-rootcerts/cacert.pem; do");
+        script.line('    if [ -f "${cert_file}" ]; then');
+        script.command("      printf", [
+            posixLiteral("%s%s\\n"),
+            posixLiteral("Syncing NetBSD Mono certificates: "),
+            posixRuntimeExpression('"${cert_file}"'),
+        ]);
+        script.line('      cert-sync "${cert_file}"');
+        script.line("      return");
+        script.line("    fi");
+        script.line("  done");
+        script.command("  printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("NetBSD Mono certificate sync failed: CA bundle missing"),
+        ]);
+        script.line("  exit 1");
+    }
+    else {
+        script.line("  :");
+    }
+    script.line("}");
+    script.blank();
     script.line("ensure_openbsd_libcurl_compat() {");
     if (openBsdTarget) {
         script.line("  libcurl_file=$(ls /usr/local/lib/libcurl.so.* 2>/dev/null | sed -n '1p')");
@@ -32193,6 +32241,9 @@ function renderSetupScript(plan) {
         ]);
         script.line("  exit 1");
         script.line("fi");
+        if (bsdTarget.targetOs === "netbsd") {
+            script.line("ensure_netbsd_mono_certificates");
+        }
         script.line("ensure_bsd_nuget_command");
         script.line("configure_github_nuget_source");
         script.line("enable_bsd_nuget_tool");

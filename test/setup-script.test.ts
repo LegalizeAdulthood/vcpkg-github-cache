@@ -198,6 +198,11 @@ describe("setup script emission", () => {
     expect(script).toContain(
       "Patched NetBSD vcpkg-tool metrics isfinite handling",
     );
+    expect(script).toContain("ensure_netbsd_mono_certificates");
+    expect(script).toContain("mozilla-rootcerts-openssl");
+    expect(script).toContain("/usr/pkg/sbin/mozilla-rootcerts install");
+    expect(script).toContain("Syncing NetBSD Mono certificates: ");
+    expect(script).toContain("cert-sync");
     expect(script).toContain("/usr/sbin/pkg_add -u mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
