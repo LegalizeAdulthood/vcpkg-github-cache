@@ -2,7 +2,7 @@
 //
 // Copyright 2026 Richard Thomson
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <string>
 

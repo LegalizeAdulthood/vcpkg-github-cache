@@ -228,7 +228,18 @@ describe("setup script emission", () => {
     expect(script).toContain("Restoring NetBSD vcpkg tool package: ");
     expect(script).toContain("Published NetBSD vcpkg tool package");
     expect(script).toContain("vcpkg bootstrap skipped: cached tool restored");
-    expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).toContain(
+      [
+        'if [ "${vcpkg_tool_restored}" -eq 1 ]; then',
+        "  printf '%s\\n' 'vcpkg bootstrap skipped: cached tool restored'",
+        "else",
+        "  printf '%s\\n' 'Bootstrapping vcpkg'",
+        "  patch_netbsd_vcpkg_tool_bootstrap",
+        '  "${VCPKG_ROOT}/bootstrap-vcpkg.sh"',
+        "  publish_bsd_vcpkg_tool_package",
+        "fi",
+      ].join("\n"),
+    );
     expect(script).toContain(
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );

@@ -1123,9 +1123,6 @@ export function renderSetupScript(plan: SetupPlan): string {
   }
 
   if (plan.bootstrap) {
-    if (targetSettings) {
-      script.line("patch_netbsd_vcpkg_tool_bootstrap");
-    }
     if (targetSettings && !plan.installNuget) {
       script.line("ensure_bsd_bootstrap_packages");
       script.line("ensure_bsd_libcurl_compat");
@@ -1142,6 +1139,7 @@ export function renderSetupScript(plan: SetupPlan): string {
         posixLiteral("%s\\n"),
         posixLiteral("Bootstrapping vcpkg"),
       ]);
+      script.line("  patch_netbsd_vcpkg_tool_bootstrap");
       script.line('  "${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
       script.line("  publish_bsd_vcpkg_tool_package");
       script.line("fi");
@@ -1150,6 +1148,9 @@ export function renderSetupScript(plan: SetupPlan): string {
         posixLiteral("%s\\n"),
         posixLiteral("Bootstrapping vcpkg"),
       ]);
+      if (targetSettings) {
+        script.line("patch_netbsd_vcpkg_tool_bootstrap");
+      }
       script.line('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
     }
   } else {
