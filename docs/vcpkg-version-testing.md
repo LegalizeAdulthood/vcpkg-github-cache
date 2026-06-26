@@ -111,32 +111,26 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add the full release matrix
-
-   Add a `workflow_dispatch` mode that runs all five platforms against the
-   latest twelve vcpkg release tags, plus any explicit refs supplied by the
-   caller.
-
-2. Add scheduled rotating coverage
+1. Add scheduled rotating coverage
 
    Add a scheduled workflow path that runs the latest vcpkg tag plus a
    rotating subset of older tags.  Keep full twelve-tag coverage manual
    unless runtime and quota are acceptable.
 
-3. Add canary repository instructions
+2. Add canary repository instructions
 
    Document the separate canary repository shape: tiny fixture, minimal
    workflows, package permissions, branch policy, and how to pin the action
    by SHA or release tag.
 
-4. Add canary workflow template
+3. Add canary workflow template
 
    Add a workflow template or documented snippet for the canary repository.
    It should use the published action, not `uses: ./`, and should cover the
    same external behavior trn previously proved.
 
-5. Document release qualification
+4. Document release qualification
 
-    Document how to launch the full matrix and canary run, which artifacts
-    to inspect, and what results are required before publishing a new action
-    release.
+   Document how to launch the full matrix and canary run, which artifacts to
+   inspect, and what results are required before publishing a new action
+   release.
