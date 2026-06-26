@@ -42,6 +42,9 @@ The canary workflow should look like a normal consumer workflow:
   `if: always()`;
 - upload build logs and analyzer artifacts.
 
+Use `docs/canary-workflow.yml` as the starting point for
+`.github/workflows/canary.yml` in the canary repository.
+
 Pin by full commit SHA when validating a candidate release.  Pin by the
 version tag, such as `v1.3.0`, when validating the exact release users will
 consume.  Pin by the floating major tag, such as `v1`, only after the release
