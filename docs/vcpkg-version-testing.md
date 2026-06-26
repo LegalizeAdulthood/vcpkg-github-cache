@@ -111,62 +111,57 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add cold-seed and warm-hit passes
-
-   Add a two-pass mode for the same ref.  The first pass allows writes; the
-   second pass verifies the fixture restores from cache.
-
-2. Add FreeBSD VM integration
+1. Add FreeBSD VM integration
 
    Add the FreeBSD emitted-script path.  Copy back only the build log,
    status file, and diagnostic artifacts needed by the host analyzer.
 
-3. Add OpenBSD VM integration
+2. Add OpenBSD VM integration
 
    Add the OpenBSD emitted-script path with the same fixture contract and
    copyback shape as FreeBSD.
 
-4. Add NetBSD VM integration
+3. Add NetBSD VM integration
 
    Add the NetBSD emitted-script path with the same fixture contract and
    copyback shape as the other BSD targets.
 
-5. Assert BSD vcpkg-tool cache behavior
+4. Assert BSD vcpkg-tool cache behavior
 
    Add checks that a cold BSD run reports the vcpkg-tool package as built
    and a warm BSD run skips rebuilding the tool from source.
 
-6. Add missing-dependency probes
+5. Add missing-dependency probes
 
    Add opt-in negative tests that omit one known prerequisite at a time for
    each VM target.  Verify the summary identifies the missing tool and a
    useful "needed by" context.
 
-7. Add the full release matrix
+6. Add the full release matrix
 
    Add a `workflow_dispatch` mode that runs all five platforms against the
    latest twelve vcpkg release tags, plus any explicit refs supplied by the
    caller.
 
-8. Add scheduled rotating coverage
+7. Add scheduled rotating coverage
 
    Add a scheduled workflow path that runs the latest vcpkg tag plus a
    rotating subset of older tags.  Keep full twelve-tag coverage manual
    unless runtime and quota are acceptable.
 
-9. Add canary repository instructions
+8. Add canary repository instructions
 
-    Document the separate canary repository shape: tiny fixture, minimal
-    workflows, package permissions, branch policy, and how to pin the action
-    by SHA or release tag.
+   Document the separate canary repository shape: tiny fixture, minimal
+   workflows, package permissions, branch policy, and how to pin the action
+   by SHA or release tag.
 
-10. Add canary workflow template
+9. Add canary workflow template
 
-    Add a workflow template or documented snippet for the canary repository.
-    It should use the published action, not `uses: ./`, and should cover the
-    same external behavior trn previously proved.
+   Add a workflow template or documented snippet for the canary repository.
+   It should use the published action, not `uses: ./`, and should cover the
+   same external behavior trn previously proved.
 
-11. Document release qualification
+10. Document release qualification
 
     Document how to launch the full matrix and canary run, which artifacts
     to inspect, and what results are required before publishing a new action

@@ -257,14 +257,51 @@ jobs:
           FAILURE_KIND: ${{ steps.analyze.outputs['failure-kind'] }}
         run: node scripts/assert-integration-result.mjs
 
+      - name: Build fixture warm pass
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_DIR: ${{ runner.temp }}/vcpkg-github-cache-fixture-warm
+          BUILD_LOG: build-warm.log
+          BUILD_STATUS: build-warm.status
+          VCPKG_HOST_TRIPLET: x64-linux-vcpkg-github-cache
+          VCPKG_OVERLAY_TRIPLETS: >-
+            ${{ github.workspace }}/test/fixtures/cmake-vcpkg/triplets
+          VCPKG_ROOT: vcpkg
+          VCPKG_TARGET_TRIPLET: x64-linux-vcpkg-github-cache
+        run: sh test/fixtures/cmake-vcpkg/build-fixture.sh
+
+      - name: Analyze warm fixture cache
+        id: analyze_warm
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        uses: ./analyze
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build-warm.log
+          fail-on: never
+
+      - name: Assert warm fixture cache status
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_STATUS_FILE: build-warm.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze_warm.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze_warm.outputs.diagnosis }}
+          EXPECTED_CACHE_STATUS: warm-hit
+          EXPECTED_FAILURE_KIND: ""
+          FAILURE_KIND: ${{ steps.analyze_warm.outputs['failure-kind'] }}
+        run: node scripts/assert-integration-result.mjs
+
       - name: Upload fixture logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ubuntu-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
             build.log
             build.status
+            build-warm.log
+            build-warm.status
           if-no-files-found: warn
           retention-days: ${{ needs.plan.outputs.retention }}
 
@@ -345,13 +382,52 @@ jobs:
           FAILURE_KIND: ${{ steps.analyze.outputs['failure-kind'] }}
         run: node scripts\assert-integration-result.mjs
 
+      - name: Build fixture warm pass
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        shell: cmd
+        env:
+          BUILD_DIR: ${{ runner.temp }}\vcpkg-github-cache-fixture-warm
+          BUILD_LOG: build-warm.log
+          BUILD_STATUS: build-warm.status
+          VCPKG_HOST_TRIPLET: x64-windows-vcpkg-github-cache
+          VCPKG_OVERLAY_TRIPLETS: >-
+            ${{ github.workspace }}\test\fixtures\cmake-vcpkg\triplets
+          VCPKG_ROOT: vcpkg
+          VCPKG_TARGET_TRIPLET: x64-windows-vcpkg-github-cache
+        run: call test\fixtures\cmake-vcpkg\build-fixture.bat
+
+      - name: Analyze warm fixture cache
+        id: analyze_warm
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        uses: ./analyze
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build-warm.log
+          fail-on: never
+
+      - name: Assert warm fixture cache status
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        shell: cmd
+        env:
+          BUILD_STATUS_FILE: build-warm.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze_warm.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze_warm.outputs.diagnosis }}
+          EXPECTED_CACHE_STATUS: warm-hit
+          EXPECTED_FAILURE_KIND: ""
+          FAILURE_KIND: ${{ steps.analyze_warm.outputs['failure-kind'] }}
+        run: node scripts\assert-integration-result.mjs
+
       - name: Upload fixture logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
             build.log
             build.status
+            build-warm.log
+            build-warm.status
           if-no-files-found: warn
           retention-days: ${{ needs.plan.outputs.retention }}

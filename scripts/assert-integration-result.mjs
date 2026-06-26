@@ -19,6 +19,10 @@ function trimValue(value) {
   return (value ?? "").trim();
 }
 
+function hasEnv(env, name) {
+  return Object.prototype.hasOwnProperty.call(env, name);
+}
+
 export function readBuildStatus(path) {
   return trimValue(readFileSync(path, "utf8"));
 }
@@ -35,6 +39,12 @@ export function optionsFromEnv(env = process.env) {
     cacheMode: trimValue(env.CACHE_MODE).toLowerCase(),
     cacheStatus: trimValue(env.CACHE_STATUS),
     diagnosis: trimValue(env.DIAGNOSIS),
+    expectedCacheStatus: hasEnv(env, "EXPECTED_CACHE_STATUS")
+      ? trimValue(env.EXPECTED_CACHE_STATUS)
+      : undefined,
+    expectedFailureKind: hasEnv(env, "EXPECTED_FAILURE_KIND")
+      ? trimValue(env.EXPECTED_FAILURE_KIND)
+      : undefined,
     failureKind: trimValue(env.FAILURE_KIND),
   };
 }
@@ -42,6 +52,14 @@ export function optionsFromEnv(env = process.env) {
 export function assertIntegrationResult(options) {
   const cacheMode = trimValue(options.cacheMode).toLowerCase();
   const cacheStatus = trimValue(options.cacheStatus);
+  const expectedCacheStatus =
+    options.expectedCacheStatus === undefined
+      ? undefined
+      : trimValue(options.expectedCacheStatus);
+  const expectedFailureKind =
+    options.expectedFailureKind === undefined
+      ? undefined
+      : trimValue(options.expectedFailureKind);
   const failureKind = trimValue(options.failureKind);
   const allowed = ALLOWED_CACHE_STATUSES.get(cacheMode);
 
@@ -57,11 +75,33 @@ export function assertIntegrationResult(options) {
     throw new Error("Analyzer did not emit cache-status");
   }
 
+  if (expectedCacheStatus && cacheStatus !== expectedCacheStatus) {
+    throw new Error(
+      [
+        `Expected cache status ${expectedCacheStatus}, got ${cacheStatus}`,
+        `Diagnosis: ${trimValue(options.diagnosis)}`,
+      ].join("\n"),
+    );
+  }
+
   if (!allowed.has(cacheStatus)) {
     throw new Error(
       [
         `Unexpected cache status for ${cacheMode}: ${cacheStatus}`,
         `Allowed: ${[...allowed].join(", ")}`,
+        `Diagnosis: ${trimValue(options.diagnosis)}`,
+      ].join("\n"),
+    );
+  }
+
+  if (
+    expectedFailureKind !== undefined &&
+    failureKind !== expectedFailureKind
+  ) {
+    throw new Error(
+      [
+        `Expected failure kind ${expectedFailureKind}, got ${failureKind}`,
+        `Cache status: ${cacheStatus}`,
         `Diagnosis: ${trimValue(options.diagnosis)}`,
       ].join("\n"),
     );
