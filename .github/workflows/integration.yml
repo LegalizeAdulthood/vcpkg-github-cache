@@ -5,6 +5,9 @@
 name: Integration
 
 on:
+  push:
+    branches:
+      - develop
   workflow_dispatch:
     inputs:
       explicit-refs:
@@ -70,9 +73,12 @@ jobs:
       - name: Record integration inputs
         id: inputs
         env:
-          ARTIFACT_RETENTION_DAYS: ${{ inputs['artifact-retention-days'] }}
-          CACHE_MODE: ${{ inputs['cache-mode'] }}
-          PLATFORMS: ${{ inputs.platforms }}
+          ARTIFACT_RETENTION_DAYS: >-
+            ${{ inputs['artifact-retention-days'] || '7' }}
+          CACHE_MODE: ${{ inputs['cache-mode'] || 'readwrite' }}
+          PLATFORMS: >-
+            ${{ github.event_name == 'push' && 'ubuntu,windows' ||
+                inputs.platforms || 'ubuntu' }}
         shell: bash
         run: |
           ubuntu=false
@@ -138,8 +144,10 @@ jobs:
       - name: Resolve vcpkg refs
         id: refs
         env:
-          EXPLICIT_REFS: ${{ inputs['explicit-refs'] }}
-          LATEST_TAGS: ${{ inputs['latest-tags'] }}
+          EXPLICIT_REFS: ${{ inputs['explicit-refs'] || '' }}
+          LATEST_TAGS: >-
+            ${{ github.event_name == 'push' && '2' ||
+                inputs['latest-tags'] || '1' }}
         shell: bash
         run: |
           args=(--github-output "$GITHUB_OUTPUT")
