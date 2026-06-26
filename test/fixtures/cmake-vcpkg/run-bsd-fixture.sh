@@ -12,6 +12,7 @@ setup_env=${VCPKG_GITHUB_CACHE_SETUP_ENV:?setup env is required}
 setup_script=${VCPKG_GITHUB_CACHE_SETUP_SCRIPT:?setup script is required}
 
 mkdir -p "${copyback}"
+: > setup.log
 : > build.log
 : > tool-warm.log
 printf '%s\n' 1 > tool-warm.status
@@ -61,7 +62,7 @@ build_fixture() {
         sh test/fixtures/cmake-vcpkg/build-fixture.sh
 }
 
-if run_logged "Setup vcpkg cache" sh "${setup_script}"; then
+if run_logged_to setup.log "Setup vcpkg cache" sh "${setup_script}"; then
     . "${setup_env}"
     overlay_triplets=$(pwd -P)/test/fixtures/cmake-vcpkg/triplets
     build_fixture /tmp/vcpkg-github-cache-fixture build.log build.status
@@ -90,7 +91,7 @@ else
     printf '%s\n' 1 > build-warm.status
 fi
 
-cp build.log build.status build-warm.log build-warm.status \
+cp setup.log build.log build.status build-warm.log build-warm.status \
     tool-warm.log tool-warm.status "${copyback}/"
 find . -mindepth 1 -maxdepth 1 ! -name .git \
     ! -name "${copyback}" -exec rm -rf {} +
