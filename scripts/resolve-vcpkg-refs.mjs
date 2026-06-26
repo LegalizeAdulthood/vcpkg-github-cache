@@ -21,6 +21,8 @@ function usage() {
     "options:",
     "  --refs LIST          comma-separated explicit refs; skips discovery",
     "  --latest N           latest release tag count; default 12",
+    "  --rotate-older N     emit latest plus N rotating older tags",
+    "  --rotation-seed N    seed for --rotate-older; default current day",
     "  --extra-ref REF      append an explicit ref to discovered tags",
     "  --extra-refs LIST    append comma-separated refs to discovered tags",
     "  --owner OWNER        GitHub owner to query; default microsoft",
@@ -88,6 +90,8 @@ function parseArgs(args, env = process.env) {
     maxPages: DEFAULT_MAX_PAGES,
     explicitRefs: undefined,
     extraRefs: [],
+    rotateOlder: undefined,
+    rotationSeed: Math.floor(Date.now() / 86400000),
     githubOutput: env.GITHUB_OUTPUT,
     token: env.GITHUB_TOKEN,
     help: false,
@@ -106,6 +110,20 @@ function parseArgs(args, env = process.env) {
         break;
       case "--latest":
         options.latest = parsePositiveInteger(
+          requireValue(args, index, arg),
+          arg,
+        );
+        index += 1;
+        break;
+      case "--rotate-older":
+        options.rotateOlder = parsePositiveInteger(
+          requireValue(args, index, arg),
+          arg,
+        );
+        index += 1;
+        break;
+      case "--rotation-seed":
+        options.rotationSeed = parsePositiveInteger(
           requireValue(args, index, arg),
           arg,
         );
@@ -184,6 +202,28 @@ function selectLatestReleaseTags(tags, count) {
     })
     .slice(0, count)
     .map((entry) => entry.tag);
+}
+
+function selectRotatingReleaseTags(tags, olderCount, seed) {
+  const latest = tags[0];
+  if (latest === undefined) {
+    return [];
+  }
+
+  const older = tags.slice(1);
+  if (older.length === 0 || olderCount === 0) {
+    return [latest];
+  }
+
+  const selected = [latest];
+  const count = Math.min(older.length, olderCount);
+  const start = seed % older.length;
+
+  for (let index = 0; index < count; index += 1) {
+    selected.push(older[(start + index) % older.length]);
+  }
+
+  return selected;
 }
 
 function matrixFromRefs(refs, kind) {
@@ -298,11 +338,21 @@ async function resolveRefs(options) {
   }
 
   const releaseTags = await discoverReleaseTags(options);
-  const refs = uniqueRefs([...releaseTags, ...options.extraRefs]);
+  const selectedReleaseTags =
+    options.rotateOlder === undefined
+      ? releaseTags
+      : selectRotatingReleaseTags(
+          releaseTags,
+          options.rotateOlder,
+          options.rotationSeed,
+        );
+  const refs = uniqueRefs([...selectedReleaseTags, ...options.extraRefs]);
   return {
     include: refs.map((ref) => ({
       vcpkg_ref: ref,
-      vcpkg_ref_kind: releaseTags.includes(ref) ? "release-tag" : "explicit",
+      vcpkg_ref_kind: selectedReleaseTags.includes(ref)
+        ? "release-tag"
+        : "explicit",
       vcpkg_ref_slug: refSlug(ref),
     })),
   };
@@ -352,5 +402,6 @@ export {
   releaseTagKey,
   resolveRefs,
   selectLatestReleaseTags,
+  selectRotatingReleaseTags,
   uniqueRefs,
 };

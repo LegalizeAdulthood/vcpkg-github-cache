@@ -14,6 +14,7 @@ import {
   releaseTagKey,
   resolveRefs,
   selectLatestReleaseTags,
+  selectRotatingReleaseTags,
   uniqueRefs,
 } from "../scripts/resolve-vcpkg-refs.mjs";
 
@@ -41,6 +42,7 @@ describe("vcpkg ref resolver", () => {
     expect(() => parseArgs(["--latest", "many"], {})).toThrow(
       /non-negative integer/,
     );
+    expect(() => parseArgs(["--rotate-older"], {})).toThrow(/requires a value/);
     expect(() => parseArgs(["--latest", "0"], {})).toThrow(/requires/);
     expect(() => parseArgs(["--unknown"], {})).toThrow(/unknown option/);
   });
@@ -73,6 +75,24 @@ describe("vcpkg ref resolver", () => {
         '{"vcpkg_ref":"master","vcpkg_ref_kind":"explicit",' +
         '"vcpkg_ref_slug":"master"}]}',
     );
+  });
+
+  test("selects latest plus rotating older release tags", () => {
+    const tags = ["2026.06.01", "2026.05.01", "2026.04.01", "2026.03.01"];
+
+    expect(selectRotatingReleaseTags(tags, 1, 0)).toEqual([
+      "2026.06.01",
+      "2026.05.01",
+    ]);
+    expect(selectRotatingReleaseTags(tags, 1, 1)).toEqual([
+      "2026.06.01",
+      "2026.04.01",
+    ]);
+    expect(selectRotatingReleaseTags(tags, 2, 2)).toEqual([
+      "2026.06.01",
+      "2026.03.01",
+      "2026.05.01",
+    ]);
   });
 
   test("discovers release refs from mocked GitHub tag pages", async () => {
@@ -118,6 +138,51 @@ describe("vcpkg ref resolver", () => {
     expect(requestedUrls).toEqual([
       "https://api.github.com/repos/microsoft/vcpkg/tags?per_page=100&page=1",
     ]);
+  });
+
+  test("resolves a rotating release matrix from mocked data", async () => {
+    const options = {
+      ...parseArgs(
+        [
+          "--latest",
+          "4",
+          "--rotate-older",
+          "1",
+          "--rotation-seed",
+          "2",
+          "--extra-ref",
+          "master",
+        ],
+        {},
+      ),
+      requestJson: async () => [
+        { name: "master" },
+        { name: "2026.06.01" },
+        { name: "2026.05.01" },
+        { name: "2026.04.01" },
+        { name: "2026.03.01" },
+      ],
+    };
+
+    await expect(resolveRefs(options)).resolves.toEqual({
+      include: [
+        {
+          vcpkg_ref: "2026.06.01",
+          vcpkg_ref_kind: "release-tag",
+          vcpkg_ref_slug: "2026.06.01",
+        },
+        {
+          vcpkg_ref: "2026.03.01",
+          vcpkg_ref_kind: "release-tag",
+          vcpkg_ref_slug: "2026.03.01",
+        },
+        {
+          vcpkg_ref: "master",
+          vcpkg_ref_kind: "explicit",
+          vcpkg_ref_slug: "master",
+        },
+      ],
+    });
   });
 
   test("reports too few release refs from mocked data", async () => {

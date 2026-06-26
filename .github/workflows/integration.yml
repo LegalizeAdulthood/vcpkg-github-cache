@@ -8,6 +8,8 @@ on:
   push:
     branches:
       - develop
+  schedule:
+    - cron: "23 9 * * 1"
   workflow_dispatch:
     inputs:
       matrix-mode:
@@ -99,7 +101,9 @@ jobs:
             ${{ inputs['artifact-retention-days'] || '7' }}
           CACHE_MODE: ${{ inputs['cache-mode'] || 'readwrite' }}
           EVENT_NAME: ${{ github.event_name }}
-          MATRIX_MODE: ${{ inputs['matrix-mode'] || 'selected' }}
+          MATRIX_MODE: >-
+            ${{ github.event_name == 'schedule' && 'scheduled' ||
+                inputs['matrix-mode'] || 'selected' }}
           MISSING_DEPENDENCY_PROBE: >-
             ${{ inputs['missing-dependency-probe'] || 'none' }}
           RAW_PLATFORMS: ${{ inputs.platforms || '' }}
@@ -116,7 +120,7 @@ jobs:
           platforms=""
 
           case "$matrix_mode" in
-            selected|full-release)
+            selected|full-release|scheduled)
               ;;
             *)
               echo "Unsupported matrix mode: ${matrix_mode}" >&2
@@ -126,7 +130,8 @@ jobs:
 
           if [ "$EVENT_NAME" = "push" ]; then
             selected_platforms_value=ubuntu,windows,freebsd,openbsd,netbsd
-          elif [ "$matrix_mode" = full-release ]; then
+          elif [ "$matrix_mode" = full-release ] ||
+              [ "$matrix_mode" = scheduled ]; then
             selected_platforms_value=all
           else
             selected_platforms_value=${RAW_PLATFORMS:-ubuntu}
@@ -236,6 +241,8 @@ jobs:
             if [ -n "$EXPLICIT_REFS" ]; then
               args+=(--extra-refs "$EXPLICIT_REFS")
             fi
+          elif [ "$MATRIX_MODE" = scheduled ]; then
+            args+=(--latest 12 --rotate-older 1)
           elif [ -n "$EXPLICIT_REFS" ]; then
             args+=(--refs "$EXPLICIT_REFS")
           else
