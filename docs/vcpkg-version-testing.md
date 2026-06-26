@@ -111,25 +111,19 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add scheduled rotating coverage
-
-   Add a scheduled workflow path that runs the latest vcpkg tag plus a
-   rotating subset of older tags.  Keep full twelve-tag coverage manual
-   unless runtime and quota are acceptable.
-
-2. Add canary repository instructions
+1. Add canary repository instructions
 
    Document the separate canary repository shape: tiny fixture, minimal
    workflows, package permissions, branch policy, and how to pin the action
    by SHA or release tag.
 
-3. Add canary workflow template
+2. Add canary workflow template
 
    Add a workflow template or documented snippet for the canary repository.
    It should use the published action, not `uses: ./`, and should cover the
    same external behavior trn previously proved.
 
-4. Document release qualification
+3. Document release qualification
 
    Document how to launch the full matrix and canary run, which artifacts to
    inspect, and what results are required before publishing a new action
