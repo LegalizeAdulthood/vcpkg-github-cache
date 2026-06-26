@@ -196,6 +196,11 @@ jobs:
       - name: Checkout action
         uses: actions/checkout@v6
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
       - name: Checkout vcpkg
         uses: actions/checkout@v6
         with:
@@ -229,6 +234,7 @@ jobs:
           fi
 
       - name: Analyze fixture cache
+        id: analyze
         if: always()
         uses: ./analyze
         with:
@@ -236,6 +242,16 @@ jobs:
           vcpkg-root: vcpkg
           build-log: build.log
           fail-on: never
+
+      - name: Assert fixture cache status
+        if: always()
+        env:
+          BUILD_STATUS_FILE: build.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze.outputs.diagnosis }}
+          FAILURE_KIND: ${{ steps.analyze.outputs['failure-kind'] }}
+        run: node scripts/assert-integration-result.mjs
 
       - name: Upload fixture logs
         if: always()
@@ -262,6 +278,11 @@ jobs:
     steps:
       - name: Checkout action
         uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
       - name: Checkout vcpkg
         uses: actions/checkout@v6
@@ -296,6 +317,7 @@ jobs:
           if not exist build.status > build.status echo 1
 
       - name: Analyze fixture cache
+        id: analyze
         if: always()
         uses: ./analyze
         with:
@@ -303,6 +325,17 @@ jobs:
           vcpkg-root: vcpkg
           build-log: build.log
           fail-on: never
+
+      - name: Assert fixture cache status
+        if: always()
+        shell: cmd
+        env:
+          BUILD_STATUS_FILE: build.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze.outputs.diagnosis }}
+          FAILURE_KIND: ${{ steps.analyze.outputs['failure-kind'] }}
+        run: node scripts\assert-integration-result.mjs
 
       - name: Upload fixture logs
         if: always()
