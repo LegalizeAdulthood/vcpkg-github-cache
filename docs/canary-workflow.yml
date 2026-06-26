@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Copyright 2026 Richard Thomson
+
+name: vcpkg GitHub Cache Canary
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      vcpkg-ref:
+        description: vcpkg ref to test.
+        required: false
+        default: master
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  VCPKG_REF: ${{ inputs['vcpkg-ref'] || 'master' }}
+
+jobs:
+  ubuntu:
+    name: Ubuntu canary
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout canary project
+        uses: actions/checkout@v6
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v6
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ env.VCPKG_REF }}
+          path: vcpkg
+          persist-credentials: false
+
+      - name: Write canary triplet
+        run: |
+          mkdir -p vcpkg-triplets
+          cat > vcpkg-triplets/x64-linux-vcpkg-github-cache-canary.cmake <<'EOF'
+          set(VCPKG_TARGET_ARCHITECTURE x64)
+          set(VCPKG_CRT_LINKAGE dynamic)
+          set(VCPKG_LIBRARY_LINKAGE static)
+          set(VCPKG_CMAKE_SYSTEM_NAME Linux)
+          EOF
+
+      # Replace @v1 with a full SHA for candidate validation, or with the
+      # exact release tag, such as @v1.3.0, for release validation.
+      - name: Setup vcpkg cache
+        uses: LegalizeAdulthood/vcpkg-github-cache@v1
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+
+      - name: Build canary
+        env:
+          VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/vcpkg-triplets
+          VCPKG_ROOT: vcpkg
+          VCPKG_TARGET_TRIPLET: x64-linux-vcpkg-github-cache-canary
+        run: |
+          set +e
+          {
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+              -DVCPKG_TARGET_TRIPLET="${VCPKG_TARGET_TRIPLET}"
+            status=$?
+
+            if [ "${status}" -eq 0 ]; then
+              cmake --build build
+              status=$?
+            fi
+
+            if [ "${status}" -eq 0 ]; then
+              ctest --test-dir build --output-on-failure
+              status=$?
+            fi
+
+            echo "${status}" > build.status
+          } 2>&1 | tee build.log
+
+          exit "$(cat build.status)"
+
+      - name: Ensure build log exists
+        if: always()
+        run: |
+          touch build.log
+          if [ ! -f build.status ]; then
+            echo 1 > build.status
+          fi
+
+      # Keep this ref in sync with the setup step above.
+      - name: Analyze vcpkg cache
+        if: always()
+        uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build.log
+          artifact-name: canary-cache-${{ github.job }}-${{ github.run_attempt }}
+          debug: "true"
+          fail-on: "never"
+
+      - name: Upload canary logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: canary-logs-${{ github.job }}-${{ github.run_attempt }}
+          path: |
+            build.log
+            build.status
+          if-no-files-found: warn
+
+      - name: Check canary build
+        if: always()
+        run: |
+          exit "$(cat build.status)"

@@ -114,13 +114,7 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add canary workflow template
-
-   Add a workflow template or documented snippet for the canary repository.
-   It should use the published action, not `uses: ./`, and should cover the
-   same external behavior expected by a real consumer repository.
-
-2. Document release qualification
+1. Document release qualification
 
    Document how to launch the full matrix and canary run, which artifacts to
    inspect, and what results are required before publishing a new action
