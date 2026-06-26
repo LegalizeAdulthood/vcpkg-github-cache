@@ -10,20 +10,29 @@ Copyright 2026 Richard Thomson
 
 Test the action against a rolling year of `VCPKG_ROOT` tags so behavior is
 not accidentally tied to one vcpkg checkout.  vcpkg generally adds about
-one tag per month, so the default matrix should cover roughly the latest
-twelve release tags plus an optional moving ref.
+one tag per month, so release qualification should cover roughly the latest
+twelve release tags plus optional moving or explicit refs.
 
 The version axis applies to all action behavior, not just BSD VM support.
 Different vcpkg revisions can change bootstrap scripts, vcpkg-tool source,
 NuGet tool metadata, binary package naming, log output, required system
 tools, and analyzer-visible cache behavior.
 
+The testing shape has two layers:
+
+- in-repo integration tests that run the current working tree with
+  `uses: ./`;
+- an external canary repository that uses the published action the same way
+  a consumer does.
+
 ## Principles
 
 - Discover tags dynamically instead of hardcoding a stale list.
 - Allow an explicit ref list for debugging and release qualification.
-- Keep default push CI cheap.
+- Keep `master` push CI cheap.
+- Run a bounded in-repo integration matrix on `develop`.
 - Put the full platform/ref matrix behind `workflow_dispatch`.
+- Use a separate canary repository for external consumer behavior.
 - Run a smaller scheduled matrix if the cost is acceptable.
 - Make source patches pattern-driven and no-op when upstream is fixed.
 - Make dependency reporting log-driven instead of version-driven.
@@ -32,7 +41,7 @@ tools, and analyzer-visible cache behavior.
 
 ## Coverage Shape
 
-The matrix should be able to cover these platform families:
+The in-repo matrix should cover these platform families:
 
 - Ubuntu host action path.
 - Windows host action path.
@@ -40,14 +49,14 @@ The matrix should be able to cover these platform families:
 - OpenBSD VM emitted-script path.
 - NetBSD VM emitted-script path.
 
-The matrix should be able to cover these vcpkg refs:
+The ref selector should cover these vcpkg refs:
 
 - latest twelve release tags discovered from `microsoft/vcpkg`;
 - one explicit current project ref, when supplied;
 - optional `master` or `HEAD` for early warning;
 - one or more explicit refs when reproducing a failure.
 
-The matrix should be able to cover these behavior paths:
+The fixture should exercise these behavior paths:
 
 - setup action configures NuGet and `VCPKG_BINARY_SOURCES`;
 - bootstrap from source works when no cached tool exists;
@@ -58,6 +67,15 @@ The matrix should be able to cover these behavior paths:
 - missing system dependency reports name the missing command and the
   closest useful "needed by" context.
 
+The canary repository should exercise external behavior that `uses: ./`
+cannot fully prove:
+
+- action resolution by SHA or tag;
+- caller repository `GITHUB_TOKEN` permissions;
+- caller-owned GitHub Packages feed access;
+- summaries, annotations, and artifacts as seen by a real consumer;
+- release tags such as `v1.3.0` and the floating `v1` tag.
+
 ## Cost Control
 
 The full cross product is expensive:
@@ -66,12 +84,14 @@ The full cross product is expensive:
 5 platforms * 12 tags = 60 jobs before scenario variation
 ```
 
-Default CI should not run that full matrix.  Use these tiers:
+Use these tiers:
 
-- push CI: Node tests, formatting, typecheck, bundle smoke tests;
-- manual matrix: all platforms and selected vcpkg refs;
+- `master` push CI: Node tests, formatting, typecheck, bundle smoke tests;
+- `develop` push CI: bounded integration against selected vcpkg refs;
+- manual matrix: all platforms and selected or explicit vcpkg refs;
 - scheduled matrix: latest tag plus a rotating older tag set;
-- release qualification: full platform/ref matrix before tagging.
+- release qualification: full platform/ref matrix before tagging;
+- canary repo: minimal consumer check against a published SHA or tag.
 
 ## Cache Hygiene
 
@@ -80,7 +100,7 @@ The matrix will create real GitHub Packages entries when `access` is
 
 - use a tiny fixture dependency set;
 - prefer package restore probes before full package builds;
-- use a dedicated test repository or feed owner when possible;
+- use a dedicated canary repository or feed owner when possible;
 - keep package names and artifact names clearly tied to the test workflow;
 - document cleanup expectations for old test packages.
 
@@ -91,55 +111,116 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add a vcpkg tag resolver
+1. Add a minimal fixture project
 
-   Add a small script or action helper that can list vcpkg release tags and
-   select the latest twelve by release date or version ordering.  Support an
-   explicit comma-separated ref override for reproducing failures.
+   Add `test/fixtures/cmake-vcpkg` with a tiny CMake project and
+   `vcpkg.json`.  Use one cheap dependency that exercises binary caching
+   without turning the fixture into a real application.
 
-2. Add a minimal fixture project
+2. Add fixture build scripts
 
-   Add a small test project that uses vcpkg in a realistic but cheap way.
-   The fixture should build fast, produce predictable package activity, and
-   capture a build log suitable for analyzer verification.
+   Add host-side scripts that configure and build the fixture, capture a
+   build log, and write a status file.  Keep the script inputs suitable for
+   both host jobs and VM-emitted scripts.
 
-3. Add host matrix workflow
+3. Add a vcpkg ref resolver script
 
-   Add a manual workflow that runs Ubuntu and Windows against selected
-   vcpkg refs.  It should checkout vcpkg at each ref, run setup, build the
-   fixture, run analyze, and upload logs and summaries.
+   Add a script that accepts an explicit comma-separated ref list or
+   discovers the latest release tags from `microsoft/vcpkg`.  The resolver
+   should emit JSON that a workflow can pass directly into a matrix.
 
-4. Add BSD VM matrix workflow
+4. Test the vcpkg ref resolver
 
-   Extend the manual workflow to FreeBSD, OpenBSD, and NetBSD using the
-   emitted-script path.  Copy back only the build log, status file, and
-   diagnostic artifacts needed by the host analyzer.
+   Add unit tests for explicit refs, latest-N selection, malformed input,
+   and stable JSON output.  Mock remote tag data so normal CI has no network
+   dependency.
 
-5. Add cache state scenarios
+5. Add an integration workflow skeleton
 
-   Add controls to run cold-seed and warm-hit passes for the same ref.  The
-   first pass should allow writes; the second pass should verify that the
-   cache is actually used.
+   Add a workflow for action integration with `workflow_dispatch` inputs for
+   explicit refs, latest tag count, platform selection, cache mode, and
+   artifact retention.  Start with no expensive matrix jobs.
 
-6. Add analyzer assertions
+6. Add Ubuntu host integration
 
-   Parse job summaries or diagnostic artifacts from the matrix run and fail
-   the job when the reported status does not match the intended scenario.
-   Keep assertions tolerant of expected vcpkg log wording differences.
+   Run the fixture on Ubuntu with `uses: ./`, a selected vcpkg ref, setup,
+   build, analyze, and log upload.  Keep this as the first executable matrix
+   cell.
 
-7. Add missing-dependency probes
+7. Add Windows host integration
 
-   Add opt-in negative tests that remove one known prerequisite at a time
-   for each VM target.  Verify that the summary identifies the missing tool
-   and useful "needed by" context.
+   Add the same host-path fixture coverage on Windows.  Keep behavior
+   parallel with Ubuntu unless platform differences are required.
 
-8. Add scheduled coverage
+8. Add bounded `develop` coverage
 
-   Add a scheduled workflow that runs a smaller rotating matrix, such as
-   latest tag plus two older tags.  Keep full twelve-tag coverage manual
-   unless runtime and quota are acceptable.
+   Trigger the integration workflow on pushes to `develop` with a small
+   default matrix, such as latest tag plus one older tag on Ubuntu and
+   Windows.
 
-9. Document release qualification
+9. Add analyzer result assertions
 
-   Document how to launch the full matrix, which artifacts to inspect, and
-   what results are required before publishing a new action release.
+   Parse analyzer output or diagnostics artifacts and fail the integration
+   job when the reported cache status does not match the expected scenario.
+   Keep matching tolerant of vcpkg wording changes.
+
+10. Add cold-seed and warm-hit passes
+
+    Add a two-pass mode for the same ref.  The first pass allows writes; the
+    second pass verifies the fixture restores from cache.
+
+11. Add FreeBSD VM integration
+
+    Add the FreeBSD emitted-script path.  Copy back only the build log,
+    status file, and diagnostic artifacts needed by the host analyzer.
+
+12. Add OpenBSD VM integration
+
+    Add the OpenBSD emitted-script path with the same fixture contract and
+    copyback shape as FreeBSD.
+
+13. Add NetBSD VM integration
+
+    Add the NetBSD emitted-script path with the same fixture contract and
+    copyback shape as the other BSD targets.
+
+14. Assert BSD vcpkg-tool cache behavior
+
+    Add checks that a cold BSD run reports the vcpkg-tool package as built
+    and a warm BSD run skips rebuilding the tool from source.
+
+15. Add missing-dependency probes
+
+    Add opt-in negative tests that omit one known prerequisite at a time for
+    each VM target.  Verify the summary identifies the missing tool and a
+    useful "needed by" context.
+
+16. Add the full release matrix
+
+    Add a `workflow_dispatch` mode that runs all five platforms against the
+    latest twelve vcpkg release tags, plus any explicit refs supplied by the
+    caller.
+
+17. Add scheduled rotating coverage
+
+    Add a scheduled workflow path that runs the latest vcpkg tag plus a
+    rotating subset of older tags.  Keep full twelve-tag coverage manual
+    unless runtime and quota are acceptable.
+
+18. Add canary repository instructions
+
+    Document the separate canary repository shape: tiny fixture, minimal
+    workflows, package permissions, branch policy, and how to pin the action
+    by SHA or release tag.
+
+19. Add canary workflow template
+
+    Add a workflow template or documented snippet for the canary repository.
+    It should use the published action, not `uses: ./`, and should cover the
+    same external behavior trn previously proved.
+
+20. Document release qualification
+
+    Document how to launch the full matrix and canary run, which artifacts
+    to inspect, and what results are required before publishing a new action
+    release.
