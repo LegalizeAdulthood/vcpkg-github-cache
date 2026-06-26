@@ -70,6 +70,35 @@ describe("integration result assertions", () => {
     ).toThrow(/Unexpected cache status/);
   });
 
+  test("asserts exact cache status and failure kind when requested", () => {
+    expect(
+      assertIntegrationResult(
+        result({
+          expectedCacheStatus: "warm-hit",
+          expectedFailureKind: "",
+        }),
+      ),
+    ).toBe("Cache status warm-hit accepted for readwrite");
+
+    expect(() =>
+      assertIntegrationResult(
+        result({
+          cacheStatus: "cold-seed",
+          expectedCacheStatus: "warm-hit",
+        }),
+      ),
+    ).toThrow(/Expected cache status warm-hit/);
+
+    expect(() =>
+      assertIntegrationResult(
+        result({
+          expectedFailureKind: "",
+          failureKind: "cache-miss",
+        }),
+      ),
+    ).toThrow(/Expected failure kind/);
+  });
+
   test("skips cache assertions after build failure", () => {
     expect(
       assertIntegrationResult(
