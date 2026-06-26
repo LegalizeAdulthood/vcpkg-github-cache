@@ -199,6 +199,7 @@ describe("setup script emission", () => {
       "Patched NetBSD vcpkg-tool metrics isfinite handling",
     );
     expect(script).toContain("std::signbit");
+    expect(script).toContain("REQUIRE(std::signbit");
     expect(script).toContain("Patched NetBSD vcpkg-tool test signbit handling");
     expect(script).toContain("ensure_netbsd_mono_certificates");
     expect(script).toContain("mozilla-rootcerts-openssl");

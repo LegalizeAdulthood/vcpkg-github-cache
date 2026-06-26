@@ -471,7 +471,7 @@ export function renderSetupScript(plan: SetupPlan): string {
       '        print "            tmp_test_json_cpp=\\"${test_json_cpp}.vcpkg-github-cache.tmp\\""',
     );
     script.line(
-      '        print "            if sed \\"s/!signbit(/!std::signbit(/\\" \\"$test_json_cpp\\" > \\"$tmp_test_json_cpp\\" && ! cmp -s \\"$test_json_cpp\\" \\"$tmp_test_json_cpp\\"; then"',
+      '        print "            if sed -e \\"s/!signbit(/!std::signbit(/\\" -e \\"s/REQUIRE(signbit(/REQUIRE(std::signbit(/\\" \\"$test_json_cpp\\" > \\"$tmp_test_json_cpp\\" && ! cmp -s \\"$test_json_cpp\\" \\"$tmp_test_json_cpp\\"; then"',
     );
     script.line(
       '        print "                mv \\"$tmp_test_json_cpp\\" \\"$test_json_cpp\\""',

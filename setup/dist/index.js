@@ -31830,7 +31830,7 @@ function renderSetupScript(plan) {
         script.line('        print "        test_json_cpp=\\"$srcDir/src/vcpkg-test/json.cpp\\""');
         script.line('        print "        if [ -f \\"$test_json_cpp\\" ]; then"');
         script.line('        print "            tmp_test_json_cpp=\\"${test_json_cpp}.vcpkg-github-cache.tmp\\""');
-        script.line('        print "            if sed \\"s/!signbit(/!std::signbit(/\\" \\"$test_json_cpp\\" > \\"$tmp_test_json_cpp\\" && ! cmp -s \\"$test_json_cpp\\" \\"$tmp_test_json_cpp\\"; then"');
+        script.line('        print "            if sed -e \\"s/!signbit(/!std::signbit(/\\" -e \\"s/REQUIRE(signbit(/REQUIRE(std::signbit(/\\" \\"$test_json_cpp\\" > \\"$tmp_test_json_cpp\\" && ! cmp -s \\"$test_json_cpp\\" \\"$tmp_test_json_cpp\\"; then"');
         script.line('        print "                mv \\"$tmp_test_json_cpp\\" \\"$test_json_cpp\\""');
         script.line('        print "                printf \\"%s\\\\n\\" \\"Patched NetBSD vcpkg-tool test signbit handling\\""');
         script.line('        print "            else"');
