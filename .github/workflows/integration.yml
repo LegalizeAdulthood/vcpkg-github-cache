@@ -56,6 +56,7 @@ jobs:
       install_nuget: ${{ steps.inputs.outputs.install_nuget }}
       retention: ${{ steps.inputs.outputs.retention }}
       ubuntu: ${{ steps.inputs.outputs.ubuntu }}
+      windows: ${{ steps.inputs.outputs.windows }}
 
     steps:
       - name: Checkout
@@ -75,6 +76,7 @@ jobs:
         shell: bash
         run: |
           ubuntu=false
+          windows=false
           platforms=""
 
           IFS=',' read -ra selected_platforms <<< "$PLATFORMS"
@@ -94,8 +96,15 @@ jobs:
             fi
 
             case "$platform" in
-              all|linux|ubuntu|ubuntu-latest)
+              all)
                 ubuntu=true
+                windows=true
+                ;;
+              linux|ubuntu|ubuntu-latest)
+                ubuntu=true
+                ;;
+              win32|windows|windows-2022|windows-latest)
+                windows=true
                 ;;
             esac
           done
@@ -123,6 +132,7 @@ jobs:
             echo "install_nuget=${install_nuget}"
             echo "retention=${ARTIFACT_RETENTION_DAYS}"
             echo "ubuntu=${ubuntu}"
+            echo "windows=${windows}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Resolve vcpkg refs
@@ -224,6 +234,73 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ubuntu-fixture-${{ matrix.vcpkg_ref_slug }}
+          path: |
+            build.log
+            build.status
+          if-no-files-found: warn
+          retention-days: ${{ needs.plan.outputs.retention }}
+
+  windows:
+    name: Windows fixture (${{ matrix.vcpkg_ref }})
+    needs: plan
+    if: ${{ needs.plan.outputs.windows == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+
+    steps:
+      - name: Checkout action
+        uses: actions/checkout@v6
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v6
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ matrix.vcpkg_ref }}
+          path: vcpkg
+          persist-credentials: false
+
+      - name: Setup vcpkg cache
+        uses: ./
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          access: ${{ needs.plan.outputs.cache_access }}
+          install-nuget: ${{ needs.plan.outputs.install_nuget }}
+
+      - name: Build fixture
+        shell: cmd
+        env:
+          BUILD_DIR: ${{ runner.temp }}\vcpkg-github-cache-fixture
+          BUILD_LOG: build.log
+          BUILD_STATUS: build.status
+          VCPKG_ROOT: vcpkg
+        run: call test\fixtures\cmake-vcpkg\build-fixture.bat
+
+      - name: Ensure fixture log exists
+        if: always()
+        shell: cmd
+        run: |
+          if not exist build.log type nul > build.log
+          if not exist build.status > build.status echo 1
+
+      - name: Analyze fixture cache
+        if: always()
+        uses: ./analyze
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build.log
+          fail-on: never
+
+      - name: Upload fixture logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
             build.log
             build.status
