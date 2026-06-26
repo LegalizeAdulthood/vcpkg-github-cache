@@ -518,7 +518,7 @@ jobs:
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log tool-warm.log
+          touch setup.log build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
@@ -559,7 +559,7 @@ jobs:
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: freebsd
-          TOOL_LOG_FILE: build.log
+          TOOL_LOG_FILE: setup.log
           TOOL_WARM_LOG_FILE: tool-warm.log
           TOOL_WARM_STATUS_FILE: tool-warm.status
         run: node scripts/assert-bsd-tool-cache.mjs
@@ -597,6 +597,7 @@ jobs:
         with:
           name: freebsd-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
+            setup.log
             build.log
             build.status
             build-warm.log
@@ -669,7 +670,7 @@ jobs:
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log tool-warm.log
+          touch setup.log build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
@@ -710,7 +711,7 @@ jobs:
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: openbsd
-          TOOL_LOG_FILE: build.log
+          TOOL_LOG_FILE: setup.log
           TOOL_WARM_LOG_FILE: tool-warm.log
           TOOL_WARM_STATUS_FILE: tool-warm.status
         run: node scripts/assert-bsd-tool-cache.mjs
@@ -748,6 +749,7 @@ jobs:
         with:
           name: openbsd-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
+            setup.log
             build.log
             build.status
             build-warm.log
@@ -821,7 +823,7 @@ jobs:
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log tool-warm.log
+          touch setup.log build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
@@ -862,7 +864,7 @@ jobs:
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: netbsd
-          TOOL_LOG_FILE: build.log
+          TOOL_LOG_FILE: setup.log
           TOOL_WARM_LOG_FILE: tool-warm.log
           TOOL_WARM_STATUS_FILE: tool-warm.status
         run: node scripts/assert-bsd-tool-cache.mjs
@@ -900,6 +902,7 @@ jobs:
         with:
           name: netbsd-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
+            setup.log
             build.log
             build.status
             build-warm.log
