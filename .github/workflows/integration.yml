@@ -10,13 +10,21 @@ on:
       - develop
   workflow_dispatch:
     inputs:
+      matrix-mode:
+        description: Integration matrix shape.
+        required: false
+        default: selected
+        type: choice
+        options:
+          - selected
+          - full-release
       explicit-refs:
-        description: Comma-separated vcpkg refs. Empty uses latest-tags.
+        description: Comma-separated vcpkg refs.
         required: false
         default: ""
         type: string
       latest-tags:
-        description: Number of latest vcpkg release tags to test.
+        description: Number of latest release tags in selected mode.
         required: false
         default: "1"
         type: string
@@ -66,6 +74,7 @@ jobs:
       cache_access: ${{ steps.inputs.outputs.cache_access }}
       freebsd: ${{ steps.inputs.outputs.freebsd }}
       install_nuget: ${{ steps.inputs.outputs.install_nuget }}
+      matrix_mode: ${{ steps.inputs.outputs.matrix_mode }}
       missing_dependency_probe: >-
         ${{ steps.inputs.outputs.missing_dependency_probe }}
       netbsd: ${{ steps.inputs.outputs.netbsd }}
@@ -89,22 +98,41 @@ jobs:
           ARTIFACT_RETENTION_DAYS: >-
             ${{ inputs['artifact-retention-days'] || '7' }}
           CACHE_MODE: ${{ inputs['cache-mode'] || 'readwrite' }}
+          EVENT_NAME: ${{ github.event_name }}
+          MATRIX_MODE: ${{ inputs['matrix-mode'] || 'selected' }}
           MISSING_DEPENDENCY_PROBE: >-
             ${{ inputs['missing-dependency-probe'] || 'none' }}
-          PLATFORMS: >-
-            ${{ github.event_name == 'push' &&
-                'ubuntu,windows,freebsd,openbsd,netbsd' ||
-                inputs.platforms || 'ubuntu' }}
+          RAW_PLATFORMS: ${{ inputs.platforms || '' }}
         shell: bash
         run: |
           freebsd=false
+          matrix_mode=$(printf '%s' "$MATRIX_MODE" |
+            tr '[:upper:]' '[:lower:]' |
+            tr -d '[:space:]')
           netbsd=false
           openbsd=false
           ubuntu=false
           windows=false
           platforms=""
 
-          IFS=',' read -ra selected_platforms <<< "$PLATFORMS"
+          case "$matrix_mode" in
+            selected|full-release)
+              ;;
+            *)
+              echo "Unsupported matrix mode: ${matrix_mode}" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "$EVENT_NAME" = "push" ]; then
+            selected_platforms_value=ubuntu,windows,freebsd,openbsd,netbsd
+          elif [ "$matrix_mode" = full-release ]; then
+            selected_platforms_value=all
+          else
+            selected_platforms_value=${RAW_PLATFORMS:-ubuntu}
+          fi
+
+          IFS=',' read -ra selected_platforms <<< "$selected_platforms_value"
           for platform in "${selected_platforms[@]}"; do
             platform=$(printf '%s' "$platform" |
               tr '[:upper:]' '[:lower:]' |
@@ -180,6 +208,7 @@ jobs:
             echo "cache_access=${cache_access}"
             echo "freebsd=${freebsd}"
             echo "install_nuget=${install_nuget}"
+            echo "matrix_mode=${matrix_mode}"
             echo "missing_dependency_probe=${missing_dependency_probe}"
             echo "netbsd=${netbsd}"
             echo "openbsd=${openbsd}"
@@ -192,14 +221,22 @@ jobs:
         id: refs
         env:
           EXPLICIT_REFS: ${{ inputs['explicit-refs'] || '' }}
+          EVENT_NAME: ${{ github.event_name }}
           LATEST_TAGS: >-
-            ${{ github.event_name == 'push' && '2' ||
-                inputs['latest-tags'] || '1' }}
+            ${{ inputs['latest-tags'] || '1' }}
+          MATRIX_MODE: ${{ steps.inputs.outputs.matrix_mode }}
         shell: bash
         run: |
           args=(--github-output "$GITHUB_OUTPUT")
 
-          if [ -n "$EXPLICIT_REFS" ]; then
+          if [ "$EVENT_NAME" = "push" ]; then
+            args+=(--latest 2)
+          elif [ "$MATRIX_MODE" = full-release ]; then
+            args+=(--latest 12)
+            if [ -n "$EXPLICIT_REFS" ]; then
+              args+=(--extra-refs "$EXPLICIT_REFS")
+            fi
+          elif [ -n "$EXPLICIT_REFS" ]; then
             args+=(--refs "$EXPLICIT_REFS")
           else
             args+=(--latest "$LATEST_TAGS")
@@ -211,6 +248,7 @@ jobs:
         env:
           ARTIFACT_RETENTION_DAYS: ${{ steps.inputs.outputs.retention }}
           CACHE_MODE: ${{ steps.inputs.outputs.cache_mode }}
+          MATRIX_MODE: ${{ steps.inputs.outputs.matrix_mode }}
           MATRIX: ${{ steps.refs.outputs.matrix }}
           MISSING_DEPENDENCY_PROBE: >-
             ${{ steps.inputs.outputs.missing_dependency_probe }}
@@ -220,6 +258,7 @@ jobs:
           {
             echo "## Integration plan"
             echo
+            echo "- Matrix mode: \`${MATRIX_MODE}\`"
             echo "- Platforms: \`${PLATFORMS}\`"
             echo "- Cache mode: \`${CACHE_MODE}\`"
             echo "- Missing dependency probe: \`${MISSING_DEPENDENCY_PROBE}\`"
