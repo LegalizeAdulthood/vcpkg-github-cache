@@ -387,6 +387,33 @@ export function renderSetupScript(plan: SetupPlan): string {
       '        print "            printf \\"%s\\\\n\\" \\"NetBSD vcpkg-tool isfinite patch skipped: json.cpp missing\\""',
     );
     script.line('        print "        fi"');
+    script.line(
+      '        print "        metrics_cpp=\\"$srcDir/src/vcpkg/metrics.cpp\\""',
+    );
+    script.line('        print "        if [ -f \\"$metrics_cpp\\" ]; then"');
+    script.line(
+      '        print "            tmp_metrics_cpp=\\"${metrics_cpp}.vcpkg-github-cache.tmp\\""',
+    );
+    script.line(
+      '        print "            if sed \\"s/if (!isfinite(value) || value < 0[.]0)/if (!std::isfinite(value) || value < 0.0)/\\" \\"$metrics_cpp\\" > \\"$tmp_metrics_cpp\\" && ! cmp -s \\"$metrics_cpp\\" \\"$tmp_metrics_cpp\\"; then"',
+    );
+    script.line(
+      '        print "                mv \\"$tmp_metrics_cpp\\" \\"$metrics_cpp\\""',
+    );
+    script.line(
+      '        print "                printf \\"%s\\\\n\\" \\"Patched NetBSD vcpkg-tool metrics isfinite handling\\""',
+    );
+    script.line('        print "            else"');
+    script.line('        print "                rm -f \\"$tmp_metrics_cpp\\""');
+    script.line(
+      '        print "                printf \\"%s\\\\n\\" \\"NetBSD vcpkg-tool metrics isfinite patch skipped\\""',
+    );
+    script.line('        print "            fi"');
+    script.line('        print "        else"');
+    script.line(
+      '        print "            printf \\"%s\\\\n\\" \\"NetBSD vcpkg-tool metrics isfinite patch skipped: metrics.cpp missing\\""',
+    );
+    script.line('        print "        fi"');
     script.line('        print "    fi"');
     script.line("        patched = 1");
     script.line("      }");

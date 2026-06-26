@@ -194,6 +194,10 @@ describe("setup script emission", () => {
       "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch",
     );
     expect(script).toContain("std::isfinite(d)");
+    expect(script).toContain("std::isfinite(value)");
+    expect(script).toContain(
+      "Patched NetBSD vcpkg-tool metrics isfinite handling",
+    );
     expect(script).toContain("/usr/sbin/pkg_add -u mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
