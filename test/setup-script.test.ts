@@ -188,6 +188,12 @@ describe("setup script emission", () => {
     expect(script).toContain("/usr/sbin/pkg_add -u ${missing_packages}");
     expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
+    expect(script).toContain("patch_netbsd_vcpkg_tool_bootstrap");
+    expect(script).toContain("Patched NetBSD vcpkg-tool bootstrap");
+    expect(script).toContain(
+      "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch",
+    );
+    expect(script).toContain("std::isfinite(d)");
     expect(script).toContain("/usr/sbin/pkg_add -u mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");

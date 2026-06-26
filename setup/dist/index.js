@@ -31729,6 +31729,67 @@ function renderSetupScript(plan) {
     }
     script.line("}");
     script.blank();
+    script.line("patch_netbsd_vcpkg_tool_bootstrap() {");
+    if (bsdTarget.targetOs === "netbsd") {
+        script.line('  bootstrap_file="${VCPKG_ROOT}/scripts/bootstrap.sh"');
+        script.line('  if [ ! -f "${bootstrap_file}" ]; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("NetBSD vcpkg-tool bootstrap patch skipped: bootstrap helper missing"),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  if grep -q "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch" "${bootstrap_file}"; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("NetBSD vcpkg-tool bootstrap patch already applied"),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  tmp_bootstrap_file="${bootstrap_file}.vcpkg-github-cache.tmp"');
+        script.line("  if ! awk '");
+        script.line("    {");
+        script.line("      print");
+        script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtractArchive "\\$archivePath" "\\$srcBaseDir"[[:space:]]*$/) {');
+        script.line('        print "    # vcpkg-github-cache NetBSD vcpkg-tool isfinite patch"');
+        script.line('        print "    if [ \\"$(uname -s)\\" = \\"NetBSD\\" ]; then"');
+        script.line('        print "        json_cpp=\\"$srcDir/src/vcpkg/base/json.cpp\\""');
+        script.line('        print "        if [ -f \\"$json_cpp\\" ]; then"');
+        script.line('        print "            tmp_json_cpp=\\"${json_cpp}.vcpkg-github-cache.tmp\\""');
+        script.line('        print "            if sed \\"s/check_exit(VCPKG_LINE_INFO, isfinite(d))/check_exit(VCPKG_LINE_INFO, std::isfinite(d))/\\" \\"$json_cpp\\" > \\"$tmp_json_cpp\\" && ! cmp -s \\"$json_cpp\\" \\"$tmp_json_cpp\\"; then"');
+        script.line('        print "                mv \\"$tmp_json_cpp\\" \\"$json_cpp\\""');
+        script.line('        print "                printf \\"%s\\\\n\\" \\"Patched NetBSD vcpkg-tool isfinite handling\\""');
+        script.line('        print "            else"');
+        script.line('        print "                rm -f \\"$tmp_json_cpp\\""');
+        script.line('        print "                printf \\"%s\\\\n\\" \\"NetBSD vcpkg-tool isfinite patch skipped\\""');
+        script.line('        print "            fi"');
+        script.line('        print "        else"');
+        script.line('        print "            printf \\"%s\\\\n\\" \\"NetBSD vcpkg-tool isfinite patch skipped: json.cpp missing\\""');
+        script.line('        print "        fi"');
+        script.line('        print "    fi"');
+        script.line("        patched = 1");
+        script.line("      }");
+        script.line("    }");
+        script.line("    END { if (!patched) exit 1 }");
+        script.line('  \' "${bootstrap_file}" > "${tmp_bootstrap_file}"; then');
+        script.line('    rm -f "${tmp_bootstrap_file}"');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Unable to patch NetBSD vcpkg-tool bootstrap"),
+        ]);
+        script.line("    exit 1");
+        script.line("  fi");
+        script.line('  mv "${tmp_bootstrap_file}" "${bootstrap_file}"');
+        script.command("  printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Patched NetBSD vcpkg-tool bootstrap"),
+        ]);
+    }
+    else {
+        script.line("  :");
+    }
+    script.line("}");
+    script.blank();
     script.line("sha512_file() {");
     script.line("  if command_exists sha512; then");
     script.line('    sha512 -q "$1"');
@@ -32128,6 +32189,9 @@ function renderSetupScript(plan) {
         script.blank();
     }
     if (plan.bootstrap) {
+        if (targetSettings) {
+            script.line("patch_netbsd_vcpkg_tool_bootstrap");
+        }
         if (targetSettings && !plan.installNuget) {
             script.line("ensure_bsd_bootstrap_packages");
             script.line("ensure_openbsd_libcurl_compat");
