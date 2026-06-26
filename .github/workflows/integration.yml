@@ -509,87 +509,24 @@ jobs:
             pkg update
             pkg install -y cmake ninja git pkgconf patchelf gmake bash bison
           run: |
-            set +e
-            set -u
-
-            copyback=.freebsd-copyback
-            mkdir -p "${copyback}"
-            : > build.log
-
-            run_logged() {
-              label=$1
-              shift
-              tmp_status="${copyback}/command.status"
-
-              {
-                printf '\n## %s\n' "${label}"
-                printf '> '
-                printf '%s ' "$@"
-                printf '\n'
-              } | tee -a build.log
-
-              ( "$@"; printf '%s\n' "$?" > "${tmp_status}" ) 2>&1 |
-                tee -a build.log
-
-              if [ -r "${tmp_status}" ]; then
-                IFS= read -r command_status < "${tmp_status}"
-                rm -f "${tmp_status}"
-              else
-                command_status=1
-              fi
-
-              return "${command_status}"
-            }
-
-            if run_logged "Setup vcpkg cache" \
-                sh "${{ steps.vc.outputs.setup-script }}"; then
-              . "${{ steps.vc.outputs.setup-env }}"
-              overlay_triplets=$(pwd -P)/test/fixtures/cmake-vcpkg/triplets
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture \
-                BUILD_LOG=build.log \
-                BUILD_STATUS=build.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-freebsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-freebsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-              build_status=$?
-            else
-              build_status=$?
-              printf '%s\n' "${build_status}" > build.status
-            fi
-
-            if [ "${build_status}" -eq 0 ] &&
-                [ "${CACHE_MODE}" = readwrite ]; then
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture-warm \
-                BUILD_LOG=build-warm.log \
-                BUILD_STATUS=build-warm.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-freebsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-freebsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-            else
-              : > build-warm.log
-              printf '%s\n' 1 > build-warm.status
-            fi
-
-            cp build.log build.status build-warm.log build-warm.status \
-              "${copyback}/"
-            find . -mindepth 1 -maxdepth 1 ! -name .git \
-              ! -name "${copyback}" -exec rm -rf {} +
-            mv "${copyback}"/* .
-            rmdir "${copyback}"
+            export BSD_COPYBACK_DIR=.freebsd-copyback
+            export BSD_TRIPLET=x64-freebsd-vcpkg-github-cache
+            export VCPKG_GITHUB_CACHE_SETUP_ENV="${{ steps.vc.outputs.setup-env }}"
+            export VCPKG_GITHUB_CACHE_SETUP_SCRIPT="${{ steps.vc.outputs.setup-script }}"
+            sh test/fixtures/cmake-vcpkg/run-bsd-fixture.sh
 
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log
+          touch build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
           if [ ! -f build-warm.status ]; then
             echo 1 > build-warm.status
+          fi
+          if [ ! -f tool-warm.status ]; then
+            echo 1 > tool-warm.status
           fi
 
       - name: Analyze fixture cache
@@ -616,6 +553,16 @@ jobs:
         if: always()
         run: |
           exit "$(cat build.status)"
+
+      - name: Assert FreeBSD vcpkg tool cache
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_STATUS_FILE: build.status
+          TARGET_OS: freebsd
+          TOOL_LOG_FILE: build.log
+          TOOL_WARM_LOG_FILE: tool-warm.log
+          TOOL_WARM_STATUS_FILE: tool-warm.status
+        run: node scripts/assert-bsd-tool-cache.mjs
 
       - name: Analyze warm fixture cache
         id: analyze_warm
@@ -654,6 +601,8 @@ jobs:
             build.status
             build-warm.log
             build-warm.status
+            tool-warm.log
+            tool-warm.status
           if-no-files-found: warn
           retention-days: ${{ needs.plan.outputs.retention }}
 
@@ -711,87 +660,24 @@ jobs:
           prepare: |
             pkg_add -I cmake ninja git gmake bash bison patchelf rsync
           run: |
-            set +e
-            set -u
-
-            copyback=.openbsd-copyback
-            mkdir -p "${copyback}"
-            : > build.log
-
-            run_logged() {
-              label=$1
-              shift
-              tmp_status="${copyback}/command.status"
-
-              {
-                printf '\n## %s\n' "${label}"
-                printf '> '
-                printf '%s ' "$@"
-                printf '\n'
-              } | tee -a build.log
-
-              ( "$@"; printf '%s\n' "$?" > "${tmp_status}" ) 2>&1 |
-                tee -a build.log
-
-              if [ -r "${tmp_status}" ]; then
-                IFS= read -r command_status < "${tmp_status}"
-                rm -f "${tmp_status}"
-              else
-                command_status=1
-              fi
-
-              return "${command_status}"
-            }
-
-            if run_logged "Setup vcpkg cache" \
-                sh "${{ steps.vc.outputs.setup-script }}"; then
-              . "${{ steps.vc.outputs.setup-env }}"
-              overlay_triplets=$(pwd -P)/test/fixtures/cmake-vcpkg/triplets
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture \
-                BUILD_LOG=build.log \
-                BUILD_STATUS=build.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-openbsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-openbsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-              build_status=$?
-            else
-              build_status=$?
-              printf '%s\n' "${build_status}" > build.status
-            fi
-
-            if [ "${build_status}" -eq 0 ] &&
-                [ "${CACHE_MODE}" = readwrite ]; then
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture-warm \
-                BUILD_LOG=build-warm.log \
-                BUILD_STATUS=build-warm.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-openbsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-openbsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-            else
-              : > build-warm.log
-              printf '%s\n' 1 > build-warm.status
-            fi
-
-            cp build.log build.status build-warm.log build-warm.status \
-              "${copyback}/"
-            find . -mindepth 1 -maxdepth 1 ! -name .git \
-              ! -name "${copyback}" -exec rm -rf {} +
-            mv "${copyback}"/* .
-            rmdir "${copyback}"
+            export BSD_COPYBACK_DIR=.openbsd-copyback
+            export BSD_TRIPLET=x64-openbsd-vcpkg-github-cache
+            export VCPKG_GITHUB_CACHE_SETUP_ENV="${{ steps.vc.outputs.setup-env }}"
+            export VCPKG_GITHUB_CACHE_SETUP_SCRIPT="${{ steps.vc.outputs.setup-script }}"
+            sh test/fixtures/cmake-vcpkg/run-bsd-fixture.sh
 
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log
+          touch build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
           if [ ! -f build-warm.status ]; then
             echo 1 > build-warm.status
+          fi
+          if [ ! -f tool-warm.status ]; then
+            echo 1 > tool-warm.status
           fi
 
       - name: Analyze fixture cache
@@ -818,6 +704,16 @@ jobs:
         if: always()
         run: |
           exit "$(cat build.status)"
+
+      - name: Assert OpenBSD vcpkg tool cache
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_STATUS_FILE: build.status
+          TARGET_OS: openbsd
+          TOOL_LOG_FILE: build.log
+          TOOL_WARM_LOG_FILE: tool-warm.log
+          TOOL_WARM_STATUS_FILE: tool-warm.status
+        run: node scripts/assert-bsd-tool-cache.mjs
 
       - name: Analyze warm fixture cache
         id: analyze_warm
@@ -856,6 +752,8 @@ jobs:
             build.status
             build-warm.log
             build-warm.status
+            tool-warm.log
+            tool-warm.status
           if-no-files-found: warn
           retention-days: ${{ needs.plan.outputs.retention }}
 
@@ -914,87 +812,24 @@ jobs:
             /usr/sbin/pkg_add -u cmake ninja-build git gmake bash bison
             /usr/sbin/pkg_add -u patchelf pkgconf rsync
           run: |
-            set +e
-            set -u
-
-            copyback=.netbsd-copyback
-            mkdir -p "${copyback}"
-            : > build.log
-
-            run_logged() {
-              label=$1
-              shift
-              tmp_status="${copyback}/command.status"
-
-              {
-                printf '\n## %s\n' "${label}"
-                printf '> '
-                printf '%s ' "$@"
-                printf '\n'
-              } | tee -a build.log
-
-              ( "$@"; printf '%s\n' "$?" > "${tmp_status}" ) 2>&1 |
-                tee -a build.log
-
-              if [ -r "${tmp_status}" ]; then
-                IFS= read -r command_status < "${tmp_status}"
-                rm -f "${tmp_status}"
-              else
-                command_status=1
-              fi
-
-              return "${command_status}"
-            }
-
-            if run_logged "Setup vcpkg cache" \
-                sh "${{ steps.vc.outputs.setup-script }}"; then
-              . "${{ steps.vc.outputs.setup-env }}"
-              overlay_triplets=$(pwd -P)/test/fixtures/cmake-vcpkg/triplets
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture \
-                BUILD_LOG=build.log \
-                BUILD_STATUS=build.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-netbsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-netbsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-              build_status=$?
-            else
-              build_status=$?
-              printf '%s\n' "${build_status}" > build.status
-            fi
-
-            if [ "${build_status}" -eq 0 ] &&
-                [ "${CACHE_MODE}" = readwrite ]; then
-              BUILD_DIR=/tmp/vcpkg-github-cache-fixture-warm \
-                BUILD_LOG=build-warm.log \
-                BUILD_STATUS=build-warm.status \
-                CMAKE_GENERATOR=Ninja \
-                VCPKG_HOST_TRIPLET=x64-netbsd-vcpkg-github-cache \
-                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
-                VCPKG_TARGET_TRIPLET=x64-netbsd-vcpkg-github-cache \
-                sh test/fixtures/cmake-vcpkg/build-fixture.sh
-            else
-              : > build-warm.log
-              printf '%s\n' 1 > build-warm.status
-            fi
-
-            cp build.log build.status build-warm.log build-warm.status \
-              "${copyback}/"
-            find . -mindepth 1 -maxdepth 1 ! -name .git \
-              ! -name "${copyback}" -exec rm -rf {} +
-            mv "${copyback}"/* .
-            rmdir "${copyback}"
+            export BSD_COPYBACK_DIR=.netbsd-copyback
+            export BSD_TRIPLET=x64-netbsd-vcpkg-github-cache
+            export VCPKG_GITHUB_CACHE_SETUP_ENV="${{ steps.vc.outputs.setup-env }}"
+            export VCPKG_GITHUB_CACHE_SETUP_SCRIPT="${{ steps.vc.outputs.setup-script }}"
+            sh test/fixtures/cmake-vcpkg/run-bsd-fixture.sh
 
       - name: Ensure fixture log exists
         if: always()
         run: |
-          touch build.log build-warm.log
+          touch build.log build-warm.log tool-warm.log
           if [ ! -f build.status ]; then
             echo 1 > build.status
           fi
           if [ ! -f build-warm.status ]; then
             echo 1 > build-warm.status
+          fi
+          if [ ! -f tool-warm.status ]; then
+            echo 1 > tool-warm.status
           fi
 
       - name: Analyze fixture cache
@@ -1021,6 +856,16 @@ jobs:
         if: always()
         run: |
           exit "$(cat build.status)"
+
+      - name: Assert NetBSD vcpkg tool cache
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_STATUS_FILE: build.status
+          TARGET_OS: netbsd
+          TOOL_LOG_FILE: build.log
+          TOOL_WARM_LOG_FILE: tool-warm.log
+          TOOL_WARM_STATUS_FILE: tool-warm.status
+        run: node scripts/assert-bsd-tool-cache.mjs
 
       - name: Analyze warm fixture cache
         id: analyze_warm
@@ -1059,5 +904,7 @@ jobs:
             build.status
             build-warm.log
             build-warm.status
+            tool-warm.log
+            tool-warm.status
           if-no-files-found: warn
           retention-days: ${{ needs.plan.outputs.retention }}
