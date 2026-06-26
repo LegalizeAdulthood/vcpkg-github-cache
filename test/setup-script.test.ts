@@ -59,7 +59,7 @@ describe("setup script emission", () => {
     expect(script).toContain("ensure_bsd_bootstrap_packages");
     expect(script).toContain('missing_packages="${missing_packages} unzip"');
     expect(script).toContain("pkg install -y ${missing_packages}");
-    expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
+    expect(script).toContain("ensure_bsd_libcurl_compat() {\n  :\n}");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
     expect(script.match(/^ensure_bsd_nuget_command$/gm) ?? []).toHaveLength(1);
@@ -125,16 +125,15 @@ describe("setup script emission", () => {
     expect(script).toContain("printf '%s\\n' 'Target OS: openbsd'");
     expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
     expect(script).toContain("ensure_bsd_bootstrap_packages");
-    expect(script).toContain("ls /usr/local/lib/libcurl.so.* >/dev/null 2>&1");
+    expect(script).toContain("find_bsd_libcurl");
+    expect(script).toContain("/usr/local/lib/libcurl.so.4");
     expect(script).toContain('missing_packages="${missing_packages} unzip--"');
     expect(script).toContain("pkg_add -I ${missing_packages}");
     expect(script).toContain('compat_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(script).toContain('ln -sf "${libcurl_file}"');
-    expect(script).toContain(
-      'openbsd_library_path="${compat_dir}:/usr/local/lib"',
-    );
-    expect(script).toContain('LD_LIBRARY_PATH="${openbsd_library_path}"');
-    expect(script).toContain("ensure_openbsd_libcurl_compat");
+    expect(script).toContain('bsd_library_path="${compat_dir}:${libcurl_dir}"');
+    expect(script).toContain('LD_LIBRARY_PATH="${bsd_library_path}"');
+    expect(script).toContain("ensure_bsd_libcurl_compat");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
     expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
     expect(script).toContain("Patched OpenBSD vcpkg core Ninja handling");
@@ -186,7 +185,10 @@ describe("setup script emission", () => {
     expect(script).toContain("ensure_bsd_bootstrap_packages");
     expect(script).toContain('missing_packages="${missing_packages} unzip"');
     expect(script).toContain("/usr/sbin/pkg_add -u ${missing_packages}");
-    expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
+    expect(script).toContain("/usr/lib/libcurl.so.4");
+    expect(script).toContain("/usr/pkg/lib/libcurl.so.4");
+    expect(script).toContain("ensure_bsd_libcurl_compat");
+    expect(script).toContain("NetBSD libcurl compatibility path: ");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
     expect(script).toContain("patch_netbsd_vcpkg_tool_bootstrap");
     expect(script).toContain("Patched NetBSD vcpkg-tool bootstrap");
@@ -294,18 +296,39 @@ describe("setup script emission", () => {
 
     expect(env).toContain("export VCPKG_BINARY_SOURCES=");
     expect(env).not.toContain("VCPKG_FORCE_SYSTEM_BINARIES");
-    expect(env).toContain('openbsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
+    expect(env).toContain('bsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
     expect(env).toContain(
-      'openbsd_libcurl_dir="${openbsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',
+      'bsd_libcurl_dir="${bsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',
     );
-    expect(env).toContain('openbsd_library_path="/usr/local/lib"');
+    expect(env).toContain("bsd_library_path='/usr/local/lib'");
     expect(env).toContain(
-      'openbsd_library_path="${openbsd_libcurl_dir}:${openbsd_library_path}"',
+      'bsd_library_path="${bsd_libcurl_dir}:${bsd_library_path}"',
     );
     expect(env).toContain("export LD_LIBRARY_PATH=");
     expect(env).toContain(
-      "unset openbsd_libcurl_dir openbsd_library_path openbsd_vcpkg_root",
+      "unset bsd_libcurl_dir bsd_library_path bsd_vcpkg_root",
     );
+  });
+
+  test("renders NetBSD libcurl compatibility environment", () => {
+    const plan = buildSetupPlan({
+      accessInput: "readwrite",
+      executionModeInput: "emit-script",
+      feedOwnerInput: "octo",
+      targetOsInput: "netbsd",
+    });
+    const env = renderSetupEnvironment(plan);
+
+    expect(env).toContain("export VCPKG_BINARY_SOURCES=");
+    expect(env).toContain('bsd_vcpkg_root="$(pwd -P)/${VCPKG_ROOT}"');
+    expect(env).toContain(
+      'bsd_libcurl_dir="${bsd_vcpkg_root}/buildtrees/vcpkg-github-cache/lib"',
+    );
+    expect(env).toContain("bsd_library_path='/usr/pkg/lib'");
+    expect(env).toContain(
+      'bsd_library_path="${bsd_libcurl_dir}:${bsd_library_path}"',
+    );
+    expect(env).toContain("export LD_LIBRARY_PATH=");
   });
 
   test("writes setup files and returns relative output paths", async () => {
