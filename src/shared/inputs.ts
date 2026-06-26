@@ -6,7 +6,7 @@
 
 export type TokenKind = "github" | "pat";
 export type SetupExecutionMode = "run" | "emit-script";
-export type SetupTargetOs = "current" | "freebsd" | "openbsd";
+export type SetupTargetOs = "current" | "freebsd" | "netbsd" | "openbsd";
 
 const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
 
@@ -55,6 +55,10 @@ export function normalizeSetupTargetOs(
 
   if (normalized === "freebsd") {
     return "freebsd";
+  }
+
+  if (normalized === "netbsd") {
+    return "netbsd";
   }
 
   if (normalized === "openbsd") {

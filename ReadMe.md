@@ -302,6 +302,88 @@ The emitted OpenBSD setup script also handles OpenBSD-specific vcpkg tool
 setup, NuGet metadata, Ninja handling, and runtime library path setup.
 Project prerequisites remain the caller workflow's responsibility.
 
+### NetBSD VM Build
+
+NetBSD uses the same `emit-script` pattern as the other BSD VMs.  The
+emitted setup script handles generic BSD setup, target-side NuGet metadata,
+and vcpkg tool package caching.  It does not emit the OpenBSD-specific
+runtime library path or Ninja patches.
+
+```yaml
+permissions:
+  contents: read
+  packages: write
+
+steps:
+  - uses: actions/checkout@v6
+    with:
+      submodules: true
+
+  - name: Generate vcpkg cache setup script
+    id: vc_setup
+    uses: LegalizeAdulthood/vcpkg-github-cache@v1
+    with:
+      token: ${{ github.token }}
+      execution-mode: emit-script
+      target-os: netbsd
+      bootstrap: "true"
+      install-nuget: "true"
+      install-mono: "true"
+
+  - name: Build on NetBSD
+    uses: vmactions/netbsd-vm@v1
+    env:
+      VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
+      VCPKG_ROOT: vcpkg
+    with:
+      release: "10.1"
+      usesh: true
+      sync: rsync
+      copyback: true
+      envs: VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+      prepare: |
+        /usr/sbin/pkg_add -u cmake ninja-build git gmake bash bison patchelf
+        /usr/sbin/pkg_add -u pkgconf rsync
+      run: |
+        set +e
+        set -u
+        # This staging directory name is arbitrary, not an action convention.
+        mkdir -p .netbsd-copyback
+
+        {
+          sh "${{ steps.vc_setup.outputs.setup-script }}" &&
+          . "${{ steps.vc_setup.outputs.setup-env }}" &&
+          cmake --workflow --preset ci
+          status=$?
+          echo "${status}" > build.status
+        } 2>&1 | tee build.log
+
+        cp build.log build.status .netbsd-copyback/
+        # Copy project build products needed by host steps here.
+        find . -mindepth 1 -maxdepth 1 ! -name .git \
+          ! -name .netbsd-copyback -exec rm -rf {} +
+        mv .netbsd-copyback/* .
+        rmdir .netbsd-copyback
+
+  - name: Analyze vcpkg package cache
+    if: always()
+    uses: LegalizeAdulthood/vcpkg-github-cache/analyze@v1
+    with:
+      token: ${{ github.token }}
+      build-log: build.log
+      artifact-name: netbsd-cache-${{ github.run_attempt }}
+      fail-on: "never"
+
+  - name: Check NetBSD build status
+    if: always()
+    run: |
+      if [ ! -f build.status ]; then
+        echo "build.status was not copied back from the NetBSD VM"
+        exit 1
+      fi
+      exit "$(cat build.status)"
+```
+
 ### Troubleshooting
 
 Enable `debug` while tuning package permissions.  This keeps the analyzer
@@ -359,7 +441,7 @@ and `"false"` in workflow YAML.
 - `access`: default `"readwrite"`.  vcpkg binary source access mode.
 - `execution-mode`: default `"run"`.  Setup mode: `run` or `emit-script`.
 - `target-os`: default `"current"`.  Target OS for emitted setup scripts:
-  `current`, `freebsd`, or `openbsd`.
+  `current`, `freebsd`, `netbsd`, or `openbsd`.
 - `script-directory`: default `".vcpkg-github-cache"`.  Directory for
   generated setup files.
 - `debug`: default `"false"`.  Emit additional diagnostics.

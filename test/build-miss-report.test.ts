@@ -281,6 +281,24 @@ describe("build miss report", () => {
     ]);
   });
 
+  test("lists a source-built NetBSD vcpkg tool package", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        vcpkgTool: {
+          packageId: "vcpkg-tool_netbsd-x64",
+          publishStatus: "published",
+          status: "built-from-source",
+          version: "1.0.0-vcpkgtoolabcdef0123456789",
+        },
+      }),
+    );
+
+    expect(buildMissReportRows(reports)).toEqual([
+      ["Package ID", "Version", "Upload"],
+      ["vcpkg-tool_netbsd-x64", "1.0.0-vcpkgtoolabcdef0123456789", "succeeded"],
+    ]);
+  });
+
   test("formats a Markdown table for logs", () => {
     const reports = buildMissReports(
       buildLogFacts({

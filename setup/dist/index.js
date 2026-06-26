@@ -31517,6 +31517,19 @@ const FREEBSD_TARGET = {
     toolPackagePrefix: "vcpkg-tool_freebsd",
     toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
+const NETBSD_TARGET = {
+    cacheToolPackage: true,
+    label: "NetBSD",
+    nugetDirectorySuffix: "netbsd",
+    nugetSha512: FREEBSD_NUGET_SHA512,
+    nugetVersion: FREEBSD_NUGET_VERSION,
+    packageInstallCommand: "/usr/sbin/pkg_add -u",
+    packageInstallerLabel: "pkg_add",
+    releaseKey: "netbsd-release",
+    targetOs: "netbsd",
+    toolPackagePrefix: "vcpkg-tool_netbsd",
+    toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+};
 const OPENBSD_TARGET = {
     cacheToolPackage: true,
     label: "OpenBSD",
@@ -31546,6 +31559,9 @@ function resolveScriptDirectory(directory, workspace) {
 function bsdTargetSettings(targetOs) {
     if (targetOs === "freebsd") {
         return FREEBSD_TARGET;
+    }
+    if (targetOs === "netbsd") {
+        return NETBSD_TARGET;
     }
     if (targetOs === "openbsd") {
         return OPENBSD_TARGET;
@@ -32403,6 +32419,9 @@ function normalizeSetupTargetOs(value) {
     if (normalized === "freebsd") {
         return "freebsd";
     }
+    if (normalized === "netbsd") {
+        return "netbsd";
+    }
     if (normalized === "openbsd") {
         return "openbsd";
     }
@@ -32827,7 +32846,7 @@ async function run() {
     }
     if (plan.executionMode === "emit-script") {
         if (plan.targetOs === "current") {
-            throw new Error("target-os=freebsd or openbsd is required with execution-mode=emit-script");
+            throw new Error("target-os=freebsd, netbsd, or openbsd is required with execution-mode=emit-script");
         }
         const files = await emitSetupFiles(plan, process.env.GITHUB_WORKSPACE);
         const diagnosis = "vcpkg GitHub Packages cache setup script emitted";

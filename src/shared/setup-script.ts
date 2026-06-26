@@ -50,6 +50,20 @@ const FREEBSD_TARGET: BsdTargetSettings = {
   toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 
+const NETBSD_TARGET: BsdTargetSettings = {
+  cacheToolPackage: true,
+  label: "NetBSD",
+  nugetDirectorySuffix: "netbsd",
+  nugetSha512: FREEBSD_NUGET_SHA512,
+  nugetVersion: FREEBSD_NUGET_VERSION,
+  packageInstallCommand: "/usr/sbin/pkg_add -u",
+  packageInstallerLabel: "pkg_add",
+  releaseKey: "netbsd-release",
+  targetOs: "netbsd",
+  toolPackagePrefix: "vcpkg-tool_netbsd",
+  toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+};
+
 const OPENBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "OpenBSD",
@@ -97,6 +111,10 @@ function bsdTargetSettings(
 ): BsdTargetSettings | undefined {
   if (targetOs === "freebsd") {
     return FREEBSD_TARGET;
+  }
+
+  if (targetOs === "netbsd") {
+    return NETBSD_TARGET;
   }
 
   if (targetOs === "openbsd") {

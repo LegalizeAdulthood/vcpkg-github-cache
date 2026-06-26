@@ -165,7 +165,7 @@ export async function run(): Promise<void> {
   if (plan.executionMode === "emit-script") {
     if (plan.targetOs === "current") {
       throw new Error(
-        "target-os=freebsd or openbsd is required with execution-mode=emit-script",
+        "target-os=freebsd, netbsd, or openbsd is required with execution-mode=emit-script",
       );
     }
 

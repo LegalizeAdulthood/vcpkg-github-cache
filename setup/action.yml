@@ -37,7 +37,7 @@ inputs:
     description: "Setup execution mode: run or emit-script."
     default: run
   target-os:
-    description: "Target OS for emitted setup script: current, freebsd, or openbsd."
+    description: "Target OS for emitted setup script: current, freebsd, netbsd, or openbsd."
     default: current
   script-directory:
     description: Directory where generated setup files are written.

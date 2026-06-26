@@ -141300,7 +141300,7 @@ function rememberPackageUploadStatus(statuses, packageSpec, status) {
     });
 }
 function vcpkgToolRestorePackage(line) {
-    const match = /^Restoring (?:FreeBSD|OpenBSD) vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(line.trim());
+    const match = /^Restoring (?:FreeBSD|NetBSD|OpenBSD) vcpkg tool package:\s+([^\s]+)\s+([^\s]+)$/i.exec(line.trim());
     return match
         ? {
             packageId: match[1],
@@ -141404,11 +141404,11 @@ function parseBuildLog(content) {
             vcpkgToolRestoreAttempted = true;
             vcpkgToolStatus = "unknown";
         }
-        if (/^Restored cached (?:FreeBSD|OpenBSD) vcpkg tool\b/i.test(trimmed)) {
+        if (/^Restored cached (?:FreeBSD|NetBSD|OpenBSD) vcpkg tool\b/i.test(trimmed)) {
             vcpkgToolRestoreAttempted = true;
             vcpkgToolStatus = "restored";
         }
-        if (/^(?:FreeBSD|OpenBSD) vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(trimmed)) {
+        if (/^(?:FreeBSD|NetBSD|OpenBSD) vcpkg tool package (?:did not contain tools\/vcpkg|not restored)\b/i.test(trimmed)) {
             vcpkgToolRestoreAttempted = true;
             vcpkgToolStatus = "not-restored";
         }
@@ -141419,15 +141419,15 @@ function parseBuildLog(content) {
         if (/^Bootstrapping vcpkg\b/i.test(trimmed)) {
             bootstrappingVcpkg = true;
         }
-        if (/^Published (?:FreeBSD|OpenBSD) vcpkg tool package\b/i.test(trimmed)) {
+        if (/^Published (?:FreeBSD|NetBSD|OpenBSD) vcpkg tool package\b/i.test(trimmed)) {
             vcpkgToolStatus = "built-from-source";
             vcpkgToolPublishStatus = "published";
         }
-        if (/^(?:FreeBSD|OpenBSD) vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(trimmed)) {
+        if (/^(?:FreeBSD|NetBSD|OpenBSD) vcpkg tool package (?:creation failed|file was not found|publish failed)\b/i.test(trimmed)) {
             vcpkgToolStatus = "built-from-source";
             vcpkgToolPublishStatus = "failed";
         }
-        if (/^(?:FreeBSD|OpenBSD) vcpkg tool package skipped:/i.test(trimmed)) {
+        if (/^(?:FreeBSD|NetBSD|OpenBSD) vcpkg tool package skipped:/i.test(trimmed)) {
             vcpkgToolPublishStatus = "skipped";
         }
         if (/^-- Running vcpkg install - done\b/i.test(trimmed) ||
@@ -143036,6 +143036,9 @@ function normalizeSetupTargetOs(value) {
     }
     if (normalized === "freebsd") {
         return "freebsd";
+    }
+    if (normalized === "netbsd") {
+        return "netbsd";
     }
     if (normalized === "openbsd") {
         return "openbsd";

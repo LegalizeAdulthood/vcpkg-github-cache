@@ -172,6 +172,45 @@ describe("setup script emission", () => {
     expect(script).not.toContain("NuGet fetch skipped");
   });
 
+  test("renders NetBSD target-side vcpkg bootstrap and NuGet fetch", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "netbsd",
+      vcpkgRootInput: "deps/vcpkg",
+    });
+    const script = renderSetupScript(plan);
+
+    expect(script).toContain("printf '%s\\n' 'Target OS: netbsd'");
+    expect(script).toContain("  VCPKG_ROOT='deps/vcpkg'");
+    expect(script).toContain("ensure_bsd_bootstrap_packages");
+    expect(script).toContain('missing_packages="${missing_packages} unzip"');
+    expect(script).toContain("/usr/sbin/pkg_add -u ${missing_packages}");
+    expect(script).toContain("ensure_openbsd_libcurl_compat() {\n  :\n}");
+    expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
+    expect(script).toContain("/usr/sbin/pkg_add -u mono");
+    expect(script).toContain("ensure_bsd_nuget_command");
+    expect(script).toContain("configure_github_nuget_source");
+    expect(script).toContain("enable_bsd_nuget_tool");
+    expect(script).toContain("Added NetBSD NuGet tool metadata to vcpkg");
+    expect(script).toContain('nuget-6.8.0-netbsd"');
+    expect(script).toContain('\\"os\\": \\"netbsd\\"');
+    expect(script).toContain("target-os netbsd");
+    expect(script).toContain('netbsd-release "${bsd_release}"');
+    expect(script).toContain("vcpkg-tool_netbsd-${tool_arch}");
+    expect(script).toContain("restore_bsd_vcpkg_tool_package");
+    expect(script).toContain("publish_bsd_vcpkg_tool_package");
+    expect(script).toContain("Restoring NetBSD vcpkg tool package: ");
+    expect(script).toContain("Published NetBSD vcpkg tool package");
+    expect(script).toContain("vcpkg bootstrap skipped: cached tool restored");
+    expect(script).toContain('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
+    expect(script).toContain(
+      'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
+    );
+    expect(script).not.toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
+    expect(script).not.toContain("NuGet fetch skipped");
+  });
+
   test("honors skipped Mono install when NuGet is fetched", () => {
     const plan = buildSetupPlan({
       executionModeInput: "emit-script",

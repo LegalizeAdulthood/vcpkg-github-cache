@@ -329,6 +329,22 @@ Published OpenBSD vcpkg tool package
     });
   });
 
+  test("extracts NetBSD vcpkg tool source rebuilds", () => {
+    const facts = parseBuildLog(`
+Restoring NetBSD vcpkg tool package: vcpkg-tool_netbsd-x64 1.0.0-vcpkgtoolabcdef0123456789
+NetBSD vcpkg tool package not restored
+Bootstrapping vcpkg
+Published NetBSD vcpkg tool package
+`);
+
+    expect(facts.vcpkgTool).toEqual({
+      packageId: "vcpkg-tool_netbsd-x64",
+      publishStatus: "published",
+      status: "built-from-source",
+      version: "1.0.0-vcpkgtoolabcdef0123456789",
+    });
+  });
+
   test("extracts OpenBSD vcpkg tool restore hits", () => {
     const facts = parseBuildLog(`
 Restoring OpenBSD vcpkg tool package: vcpkg-tool_openbsd-x64 1.0.0-vcpkgtoolabcdef0123456789

@@ -94,4 +94,19 @@ describe("setup plan", () => {
       targetOs: "openbsd",
     });
   });
+
+  test("builds a NetBSD script-emission setup plan", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "netbsd",
+      workspace: "/work/repo",
+    });
+
+    expect(plan).toMatchObject({
+      executionMode: "emit-script",
+      feedOwner: "octo",
+      targetOs: "netbsd",
+    });
+  });
 });

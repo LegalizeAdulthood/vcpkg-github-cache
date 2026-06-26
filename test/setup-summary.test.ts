@@ -56,6 +56,16 @@ describe("setup summary", () => {
         targetOs: "openbsd",
       }),
     ).toContain("Target OS: openbsd");
+    expect(
+      setupEmitSummaryItems({
+        binarySourceMode: "readwrite",
+        diagnosis: "vcpkg GitHub Packages cache setup script emitted",
+        feedUrl: "https://nuget.pkg.github.com/octo/index.json",
+        setupEnv: ".vcpkg-github-cache/setup.env",
+        setupScript: ".vcpkg-github-cache/setup.sh",
+        targetOs: "netbsd",
+      }),
+    ).toContain("Target OS: netbsd");
   });
 
   test("renders run-mode summary rows with host-side setup details", () => {
