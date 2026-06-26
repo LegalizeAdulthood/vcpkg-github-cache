@@ -111,37 +111,31 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add missing-dependency probes
-
-   Add opt-in negative tests that omit one known prerequisite at a time for
-   each VM target.  Verify the summary identifies the missing tool and a
-   useful "needed by" context.
-
-2. Add the full release matrix
+1. Add the full release matrix
 
    Add a `workflow_dispatch` mode that runs all five platforms against the
    latest twelve vcpkg release tags, plus any explicit refs supplied by the
    caller.
 
-3. Add scheduled rotating coverage
+2. Add scheduled rotating coverage
 
    Add a scheduled workflow path that runs the latest vcpkg tag plus a
    rotating subset of older tags.  Keep full twelve-tag coverage manual
    unless runtime and quota are acceptable.
 
-4. Add canary repository instructions
+3. Add canary repository instructions
 
    Document the separate canary repository shape: tiny fixture, minimal
    workflows, package permissions, branch policy, and how to pin the action
    by SHA or release tag.
 
-5. Add canary workflow template
+4. Add canary workflow template
 
    Add a workflow template or documented snippet for the canary repository.
    It should use the published action, not `uses: ./`, and should cover the
    same external behavior trn previously proved.
 
-6. Document release qualification
+5. Document release qualification
 
     Document how to launch the full matrix and canary run, which artifacts
     to inspect, and what results are required before publishing a new action

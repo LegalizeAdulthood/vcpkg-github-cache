@@ -67,6 +67,7 @@ build_config=${BUILD_CONFIG:-Release}
 triplet=${VCPKG_TARGET_TRIPLET:-}
 host_triplet=${VCPKG_HOST_TRIPLET:-}
 overlay_triplets=${VCPKG_OVERLAY_TRIPLETS:-}
+require_bison=${FIXTURE_REQUIRE_BISON:-}
 generator=${CMAKE_GENERATOR:-}
 toolchain=${VCPKG_TOOLCHAIN_FILE:-$vcpkg_root/scripts/buildsystems/vcpkg.cmake}
 
@@ -106,6 +107,10 @@ fi
 
 if [ -n "$overlay_triplets" ]; then
     set -- "$@" "-DVCPKG_OVERLAY_TRIPLETS=$overlay_triplets"
+fi
+
+if [ -n "$require_bison" ]; then
+    set -- "$@" -DFIXTURE_REQUIRE_BISON=ON
 fi
 
 if [ -n "$generator" ]; then

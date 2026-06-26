@@ -56,6 +56,7 @@ build_fixture() {
         BUILD_LOG="${build_log}" \
         BUILD_STATUS="${build_status}" \
         CMAKE_GENERATOR=Ninja \
+        FIXTURE_REQUIRE_BISON="${FIXTURE_REQUIRE_BISON:-}" \
         VCPKG_HOST_TRIPLET="${triplet}" \
         VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
         VCPKG_TARGET_TRIPLET="${triplet}" \
