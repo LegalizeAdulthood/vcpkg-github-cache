@@ -84,3 +84,5 @@ The canary repository does not replace this repository's in-repository
 integration workflow.  It adds the external behavior that `uses: ./` cannot
 prove.
 
+See `docs/release-qualification.md` for the release gate that combines the
+in-repository matrix and the external canary run.
