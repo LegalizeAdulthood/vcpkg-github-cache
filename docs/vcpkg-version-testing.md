@@ -76,6 +76,9 @@ cannot fully prove:
 - summaries, annotations, and artifacts as seen by a real consumer;
 - release tags such as `v1.3.0` and the floating `v1` tag.
 
+See `docs/canary-repository.md` for the canary repository shape and
+operating rules.
+
 ## Cost Control
 
 The full cross product is expensive:
@@ -111,19 +114,13 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add canary repository instructions
-
-   Document the separate canary repository shape: tiny fixture, minimal
-   workflows, package permissions, branch policy, and how to pin the action
-   by SHA or release tag.
-
-2. Add canary workflow template
+1. Add canary workflow template
 
    Add a workflow template or documented snippet for the canary repository.
    It should use the published action, not `uses: ./`, and should cover the
-   same external behavior trn previously proved.
+   same external behavior expected by a real consumer repository.
 
-3. Document release qualification
+2. Document release qualification
 
    Document how to launch the full matrix and canary run, which artifacts to
    inspect, and what results are required before publishing a new action
