@@ -30,6 +30,8 @@ Some reports also require `curl` and `printf` to be available on `PATH`.
   package and is also a dry run unless `/delete` is supplied.
 - `resolve-vcpkg-refs.mjs`: resolves explicit or recent vcpkg release refs
   and emits a GitHub Actions matrix JSON object.
+- `assert-integration-result.mjs`: validates integration workflow analyzer
+  outputs against the cache mode being tested.
 
 ## Owner Scope
 

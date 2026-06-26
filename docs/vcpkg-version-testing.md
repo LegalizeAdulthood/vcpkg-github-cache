@@ -111,68 +111,62 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add analyzer result assertions
-
-   Parse analyzer output or diagnostics artifacts and fail the integration
-   job when the reported cache status does not match the expected scenario.
-   Keep matching tolerant of vcpkg wording changes.
-
-2. Add cold-seed and warm-hit passes
+1. Add cold-seed and warm-hit passes
 
    Add a two-pass mode for the same ref.  The first pass allows writes; the
    second pass verifies the fixture restores from cache.
 
-3. Add FreeBSD VM integration
+2. Add FreeBSD VM integration
 
    Add the FreeBSD emitted-script path.  Copy back only the build log,
    status file, and diagnostic artifacts needed by the host analyzer.
 
-4. Add OpenBSD VM integration
+3. Add OpenBSD VM integration
 
    Add the OpenBSD emitted-script path with the same fixture contract and
    copyback shape as FreeBSD.
 
-5. Add NetBSD VM integration
+4. Add NetBSD VM integration
 
    Add the NetBSD emitted-script path with the same fixture contract and
    copyback shape as the other BSD targets.
 
-6. Assert BSD vcpkg-tool cache behavior
+5. Assert BSD vcpkg-tool cache behavior
 
    Add checks that a cold BSD run reports the vcpkg-tool package as built
    and a warm BSD run skips rebuilding the tool from source.
 
-7. Add missing-dependency probes
+6. Add missing-dependency probes
 
    Add opt-in negative tests that omit one known prerequisite at a time for
    each VM target.  Verify the summary identifies the missing tool and a
    useful "needed by" context.
 
-8. Add the full release matrix
+7. Add the full release matrix
 
    Add a `workflow_dispatch` mode that runs all five platforms against the
    latest twelve vcpkg release tags, plus any explicit refs supplied by the
    caller.
 
-9. Add scheduled rotating coverage
+8. Add scheduled rotating coverage
 
    Add a scheduled workflow path that runs the latest vcpkg tag plus a
    rotating subset of older tags.  Keep full twelve-tag coverage manual
    unless runtime and quota are acceptable.
 
-10. Add canary repository instructions
+9. Add canary repository instructions
 
     Document the separate canary repository shape: tiny fixture, minimal
     workflows, package permissions, branch policy, and how to pin the action
     by SHA or release tag.
 
-11. Add canary workflow template
+10. Add canary workflow template
 
     Add a workflow template or documented snippet for the canary repository.
     It should use the published action, not `uses: ./`, and should cover the
     same external behavior trn previously proved.
 
-12. Document release qualification
+11. Document release qualification
 
     Document how to launch the full matrix and canary run, which artifacts
     to inspect, and what results are required before publishing a new action
