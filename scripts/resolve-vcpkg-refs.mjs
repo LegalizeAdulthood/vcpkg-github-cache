@@ -257,7 +257,8 @@ async function discoverReleaseTags(options) {
     const url =
       `https://api.github.com/repos/${options.owner}/${options.repo}/tags` +
       `?per_page=100&page=${page}`;
-    const pageTags = await requestJson(url, options.token);
+    const getJson = options.requestJson ?? requestJson;
+    const pageTags = await getJson(url, options.token);
 
     if (!Array.isArray(pageTags)) {
       throw new Error("GitHub tag response was not an array");
