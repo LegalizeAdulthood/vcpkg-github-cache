@@ -31808,6 +31808,86 @@ function renderSetupScript(plan) {
     }
     script.line("}");
     script.blank();
+    script.line("ensure_netbsd_vcpkg_toolchain() {");
+    if (bsdTarget.targetOs === "netbsd") {
+        script.line('  toolchain_dir="${VCPKG_ROOT}/scripts/toolchains"');
+        script.line('  toolchain_file="${toolchain_dir}/netbsd.cmake"');
+        script.line('  if [ -f "${toolchain_file}" ]; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("NetBSD vcpkg toolchain file already available"),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  mkdir -p "${toolchain_dir}"');
+        script.line("  cat > \"${toolchain_file}\" <<'VCPKG_GITHUB_CACHE_NETBSD_TOOLCHAIN'");
+        script.line("if(NOT _VCPKG_NETBSD_TOOLCHAIN)");
+        script.line("    set(_VCPKG_NETBSD_TOOLCHAIN 1)");
+        script.line('    if(CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD")');
+        script.line('        set(CMAKE_CROSSCOMPILING OFF CACHE BOOL "")');
+        script.line("    endif()");
+        script.line('    set(CMAKE_SYSTEM_NAME NetBSD CACHE STRING "")');
+        script.blank();
+        script.line("    if(NOT DEFINED CMAKE_SYSTEM_PROCESSOR)");
+        script.line('        if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")');
+        script.line('           set(CMAKE_SYSTEM_PROCESSOR x86_64 CACHE STRING "")');
+        script.line('        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")');
+        script.line('           set(CMAKE_SYSTEM_PROCESSOR x86 CACHE STRING "")');
+        script.line('        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")');
+        script.line('           set(CMAKE_SYSTEM_PROCESSOR arm64 CACHE STRING "")');
+        script.line("        else()");
+        script.line('           set(CMAKE_SYSTEM_PROCESSOR "${CMAKE_HOST_SYSTEM_PROCESSOR}" CACHE STRING "")');
+        script.line("        endif()");
+        script.line("    endif()");
+        script.blank();
+        script.line("    if(POLICY CMP0056)");
+        script.line("        cmake_policy(SET CMP0056 NEW)");
+        script.line("    endif()");
+        script.line("    if(POLICY CMP0066)");
+        script.line("        cmake_policy(SET CMP0066 NEW)");
+        script.line("    endif()");
+        script.line("    if(POLICY CMP0067)");
+        script.line("        cmake_policy(SET CMP0067 NEW)");
+        script.line("    endif()");
+        script.line("    if(POLICY CMP0137)");
+        script.line("        cmake_policy(SET CMP0137 NEW)");
+        script.line("    endif()");
+        script.line("    list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES");
+        script.line("        VCPKG_CRT_LINKAGE VCPKG_TARGET_ARCHITECTURE");
+        script.line("        VCPKG_C_FLAGS VCPKG_CXX_FLAGS");
+        script.line("        VCPKG_C_FLAGS_DEBUG VCPKG_CXX_FLAGS_DEBUG");
+        script.line("        VCPKG_C_FLAGS_RELEASE VCPKG_CXX_FLAGS_RELEASE");
+        script.line("        VCPKG_LINKER_FLAGS VCPKG_LINKER_FLAGS_RELEASE VCPKG_LINKER_FLAGS_DEBUG");
+        script.line("    )");
+        script.blank();
+        script.line('    string(APPEND CMAKE_C_FLAGS_INIT " -fPIC ${VCPKG_C_FLAGS} ")');
+        script.line('    string(APPEND CMAKE_CXX_FLAGS_INIT " -fPIC ${VCPKG_CXX_FLAGS} ")');
+        script.line('    string(APPEND CMAKE_C_FLAGS_DEBUG_INIT " ${VCPKG_C_FLAGS_DEBUG} ")');
+        script.line('    string(APPEND CMAKE_CXX_FLAGS_DEBUG_INIT " ${VCPKG_CXX_FLAGS_DEBUG} ")');
+        script.line('    string(APPEND CMAKE_C_FLAGS_RELEASE_INIT " ${VCPKG_C_FLAGS_RELEASE} ")');
+        script.line('    string(APPEND CMAKE_CXX_FLAGS_RELEASE_INIT " ${VCPKG_CXX_FLAGS_RELEASE} ")');
+        script.blank();
+        script.line('    string(APPEND CMAKE_MODULE_LINKER_FLAGS_INIT " ${VCPKG_LINKER_FLAGS} ")');
+        script.line('    string(APPEND CMAKE_SHARED_LINKER_FLAGS_INIT " ${VCPKG_LINKER_FLAGS} ")');
+        script.line('    string(APPEND CMAKE_EXE_LINKER_FLAGS_INIT " ${VCPKG_LINKER_FLAGS} ")');
+        script.line('    string(APPEND CMAKE_MODULE_LINKER_FLAGS_DEBUG_INIT " ${VCPKG_LINKER_FLAGS_DEBUG} ")');
+        script.line('    string(APPEND CMAKE_SHARED_LINKER_FLAGS_DEBUG_INIT " ${VCPKG_LINKER_FLAGS_DEBUG} ")');
+        script.line('    string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG_INIT " ${VCPKG_LINKER_FLAGS_DEBUG} ")');
+        script.line('    string(APPEND CMAKE_MODULE_LINKER_FLAGS_RELEASE_INIT " ${VCPKG_LINKER_FLAGS_RELEASE} ")');
+        script.line('    string(APPEND CMAKE_SHARED_LINKER_FLAGS_RELEASE_INIT " ${VCPKG_LINKER_FLAGS_RELEASE} ")');
+        script.line('    string(APPEND CMAKE_EXE_LINKER_FLAGS_RELEASE_INIT " ${VCPKG_LINKER_FLAGS_RELEASE} ")');
+        script.line("endif()");
+        script.line("VCPKG_GITHUB_CACHE_NETBSD_TOOLCHAIN");
+        script.command("  printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral("Added NetBSD vcpkg toolchain file"),
+        ]);
+    }
+    else {
+        script.line("  :");
+    }
+    script.line("}");
+    script.blank();
     script.line("patch_netbsd_vcpkg_tool_bootstrap() {");
     if (bsdTarget.targetOs === "netbsd") {
         script.line('  bootstrap_file="${VCPKG_ROOT}/scripts/bootstrap.sh"');
@@ -32250,6 +32330,10 @@ function renderSetupScript(plan) {
     script.line('vcpkg_exe="${VCPKG_ROOT}/vcpkg"');
     script.line("vcpkg_tool_restored=0");
     script.blank();
+    if (targetSettings) {
+        script.line("ensure_netbsd_vcpkg_toolchain");
+        script.blank();
+    }
     if (plan.installNuget && targetSettings) {
         script.line("ensure_bsd_bootstrap_packages");
         script.line("ensure_bsd_libcurl_compat");

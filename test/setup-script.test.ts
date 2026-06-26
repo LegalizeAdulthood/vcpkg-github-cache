@@ -189,6 +189,11 @@ describe("setup script emission", () => {
     expect(script).toContain("/usr/pkg/lib/libcurl.so.4");
     expect(script).toContain("ensure_bsd_libcurl_compat");
     expect(script).toContain("NetBSD libcurl compatibility path: ");
+    expect(script).toContain("ensure_netbsd_vcpkg_toolchain");
+    expect(script).toContain('toolchain_file="${toolchain_dir}/netbsd.cmake"');
+    expect(script).toContain("Added NetBSD vcpkg toolchain file");
+    expect(script).toContain("if(NOT _VCPKG_NETBSD_TOOLCHAIN)");
+    expect(script).toContain("set(CMAKE_SYSTEM_NAME NetBSD CACHE STRING");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
     expect(script).toContain("patch_netbsd_vcpkg_tool_bootstrap");
     expect(script).toContain("Patched NetBSD vcpkg-tool bootstrap");
