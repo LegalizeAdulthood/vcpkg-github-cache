@@ -10,6 +10,8 @@ if not defined VCPKG_ROOT (
     exit /b 1
 )
 
+for %%I in ("%VCPKG_ROOT%") do set "VCPKG_ROOT=%%~fI"
+
 if not defined BUILD_CONFIG set "BUILD_CONFIG=Release"
 if not defined RUNNER_TEMP set "RUNNER_TEMP=%TEMP%"
 if not defined BUILD_DIR (
@@ -18,6 +20,7 @@ if not defined BUILD_DIR (
 if not defined VCPKG_TOOLCHAIN_FILE (
     set "VCPKG_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
 )
+for %%I in ("%VCPKG_TOOLCHAIN_FILE%") do set "VCPKG_TOOLCHAIN_FILE=%%~fI"
 if not defined BUILD_LOG set "BUILD_LOG=%BUILD_DIR%\build.log"
 if not defined BUILD_STATUS set "BUILD_STATUS=%BUILD_DIR%\build.status"
 
