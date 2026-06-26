@@ -39,6 +39,14 @@ on:
         required: false
         default: "7"
         type: string
+      missing-dependency-probe:
+        description: Optional missing system dependency probe.
+        required: false
+        default: none
+        type: choice
+        options:
+          - none
+          - bison
 
 permissions:
   contents: read
@@ -58,6 +66,8 @@ jobs:
       cache_access: ${{ steps.inputs.outputs.cache_access }}
       freebsd: ${{ steps.inputs.outputs.freebsd }}
       install_nuget: ${{ steps.inputs.outputs.install_nuget }}
+      missing_dependency_probe: >-
+        ${{ steps.inputs.outputs.missing_dependency_probe }}
       netbsd: ${{ steps.inputs.outputs.netbsd }}
       openbsd: ${{ steps.inputs.outputs.openbsd }}
       retention: ${{ steps.inputs.outputs.retention }}
@@ -79,6 +89,8 @@ jobs:
           ARTIFACT_RETENTION_DAYS: >-
             ${{ inputs['artifact-retention-days'] || '7' }}
           CACHE_MODE: ${{ inputs['cache-mode'] || 'readwrite' }}
+          MISSING_DEPENDENCY_PROBE: >-
+            ${{ inputs['missing-dependency-probe'] || 'none' }}
           PLATFORMS: >-
             ${{ github.event_name == 'push' &&
                 'ubuntu,windows,freebsd,openbsd,netbsd' ||
@@ -141,6 +153,9 @@ jobs:
 
           cache_access=readwrite
           install_nuget=true
+          missing_dependency_probe=$(printf '%s' "$MISSING_DEPENDENCY_PROBE" |
+            tr '[:upper:]' '[:lower:]' |
+            tr -d '[:space:]')
           case "$CACHE_MODE" in
             readonly)
               cache_access=readonly
@@ -150,12 +165,22 @@ jobs:
               ;;
           esac
 
+          case "$missing_dependency_probe" in
+            none|bison)
+              ;;
+            *)
+              echo "Unsupported missing dependency probe: ${missing_dependency_probe}" >&2
+              exit 1
+              ;;
+          esac
+
           {
             echo "platforms=${platforms}"
             echo "cache_mode=${CACHE_MODE}"
             echo "cache_access=${cache_access}"
             echo "freebsd=${freebsd}"
             echo "install_nuget=${install_nuget}"
+            echo "missing_dependency_probe=${missing_dependency_probe}"
             echo "netbsd=${netbsd}"
             echo "openbsd=${openbsd}"
             echo "retention=${ARTIFACT_RETENTION_DAYS}"
@@ -187,6 +212,8 @@ jobs:
           ARTIFACT_RETENTION_DAYS: ${{ steps.inputs.outputs.retention }}
           CACHE_MODE: ${{ steps.inputs.outputs.cache_mode }}
           MATRIX: ${{ steps.refs.outputs.matrix }}
+          MISSING_DEPENDENCY_PROBE: >-
+            ${{ steps.inputs.outputs.missing_dependency_probe }}
           PLATFORMS: ${{ steps.inputs.outputs.platforms }}
           REFS: ${{ steps.refs.outputs.refs }}
         run: |
@@ -195,6 +222,7 @@ jobs:
             echo
             echo "- Platforms: \`${PLATFORMS}\`"
             echo "- Cache mode: \`${CACHE_MODE}\`"
+            echo "- Missing dependency probe: \`${MISSING_DEPENDENCY_PROBE}\`"
             echo "- Artifact retention: \`${ARTIFACT_RETENTION_DAYS}\` days"
             echo "- vcpkg refs: \`${REFS}\`"
             echo
@@ -497,6 +525,9 @@ jobs:
         uses: vmactions/freebsd-vm@b84ab5559b5a1bb4b8ee2737d2506a16e1737636 # v1
         env:
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          FIXTURE_REQUIRE_BISON: >-
+            ${{ needs.plan.outputs.missing_dependency_probe == 'bison' &&
+                'true' || '' }}
           VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
           VCPKG_ROOT: vcpkg
         with:
@@ -504,10 +535,17 @@ jobs:
           usesh: true
           sync: rsync
           copyback: true
-          envs: CACHE_MODE VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+          envs: >-
+            CACHE_MODE FIXTURE_REQUIRE_BISON VCPKG_GITHUB_CACHE_TOKEN
+            VCPKG_ROOT
           prepare: |
             pkg update
-            pkg install -y cmake ninja git pkgconf patchelf gmake bash bison
+            missing_dependency_probe=${{ needs.plan.outputs.missing_dependency_probe }}
+            packages="cmake ninja git pkgconf patchelf gmake bash"
+            if [ "${missing_dependency_probe}" != bison ]; then
+              packages="${packages} bison"
+            fi
+            pkg install -y ${packages}
           run: |
             export BSD_COPYBACK_DIR=.freebsd-copyback
             export BSD_TRIPLET=x64-freebsd-vcpkg-github-cache
@@ -550,12 +588,27 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check FreeBSD fixture status
-        if: always()
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build.status)"
 
+      - name: Assert FreeBSD missing dependency probe
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe != 'none' }}
+        env:
+          BUILD_LOG_FILE: build.log
+          BUILD_STATUS_FILE: build.status
+          EXPECTED_NEEDED_BY: project configure
+          EXPECTED_TOOL: ${{ needs.plan.outputs.missing_dependency_probe }}
+        run: node scripts/assert-missing-system-dependency.mjs
+
       - name: Assert FreeBSD vcpkg tool cache
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: freebsd
@@ -566,7 +619,9 @@ jobs:
 
       - name: Analyze warm fixture cache
         id: analyze_warm
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         uses: ./analyze
         with:
           token: ${{ github.token }}
@@ -575,7 +630,9 @@ jobs:
           fail-on: never
 
       - name: Assert warm fixture cache status
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build-warm.status
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
@@ -587,7 +644,9 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check FreeBSD warm fixture status
-        if: ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build-warm.status)"
 
@@ -650,6 +709,9 @@ jobs:
         uses: vmactions/openbsd-vm@18edb32f4e48dae5865d7b8b3a9587bc01218a20 # v1
         env:
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          FIXTURE_REQUIRE_BISON: >-
+            ${{ needs.plan.outputs.missing_dependency_probe == 'bison' &&
+                'true' || '' }}
           VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
           VCPKG_ROOT: vcpkg
         with:
@@ -657,9 +719,16 @@ jobs:
           usesh: true
           sync: rsync
           copyback: true
-          envs: CACHE_MODE VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+          envs: >-
+            CACHE_MODE FIXTURE_REQUIRE_BISON VCPKG_GITHUB_CACHE_TOKEN
+            VCPKG_ROOT
           prepare: |
-            pkg_add -I cmake ninja git gmake bash bison patchelf rsync
+            missing_dependency_probe=${{ needs.plan.outputs.missing_dependency_probe }}
+            packages="cmake ninja git gmake bash patchelf rsync"
+            if [ "${missing_dependency_probe}" != bison ]; then
+              packages="${packages} bison"
+            fi
+            pkg_add -I ${packages}
           run: |
             export BSD_COPYBACK_DIR=.openbsd-copyback
             export BSD_TRIPLET=x64-openbsd-vcpkg-github-cache
@@ -702,12 +771,27 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check OpenBSD fixture status
-        if: always()
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build.status)"
 
+      - name: Assert OpenBSD missing dependency probe
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe != 'none' }}
+        env:
+          BUILD_LOG_FILE: build.log
+          BUILD_STATUS_FILE: build.status
+          EXPECTED_NEEDED_BY: project configure
+          EXPECTED_TOOL: ${{ needs.plan.outputs.missing_dependency_probe }}
+        run: node scripts/assert-missing-system-dependency.mjs
+
       - name: Assert OpenBSD vcpkg tool cache
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: openbsd
@@ -718,7 +802,9 @@ jobs:
 
       - name: Analyze warm fixture cache
         id: analyze_warm
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         uses: ./analyze
         with:
           token: ${{ github.token }}
@@ -727,7 +813,9 @@ jobs:
           fail-on: never
 
       - name: Assert warm fixture cache status
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build-warm.status
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
@@ -739,7 +827,9 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check OpenBSD warm fixture status
-        if: ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build-warm.status)"
 
@@ -802,6 +892,9 @@ jobs:
         uses: vmactions/netbsd-vm@99816dccf75edf233ed6cd00a159e3a5b85ea373 # v1
         env:
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          FIXTURE_REQUIRE_BISON: >-
+            ${{ needs.plan.outputs.missing_dependency_probe == 'bison' &&
+                'true' || '' }}
           VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
           VCPKG_ROOT: vcpkg
         with:
@@ -809,9 +902,16 @@ jobs:
           usesh: true
           sync: rsync
           copyback: true
-          envs: CACHE_MODE VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+          envs: >-
+            CACHE_MODE FIXTURE_REQUIRE_BISON VCPKG_GITHUB_CACHE_TOKEN
+            VCPKG_ROOT
           prepare: |
-            /usr/sbin/pkg_add -u cmake ninja-build git gmake bash bison
+            missing_dependency_probe=${{ needs.plan.outputs.missing_dependency_probe }}
+            packages="cmake ninja-build git gmake bash"
+            if [ "${missing_dependency_probe}" != bison ]; then
+              packages="${packages} bison"
+            fi
+            /usr/sbin/pkg_add -u ${packages}
             /usr/sbin/pkg_add -u patchelf pkgconf rsync
           run: |
             export BSD_COPYBACK_DIR=.netbsd-copyback
@@ -855,12 +955,27 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check NetBSD fixture status
-        if: always()
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build.status)"
 
+      - name: Assert NetBSD missing dependency probe
+        if: >-
+          ${{ always() &&
+              needs.plan.outputs.missing_dependency_probe != 'none' }}
+        env:
+          BUILD_LOG_FILE: build.log
+          BUILD_STATUS_FILE: build.status
+          EXPECTED_NEEDED_BY: project configure
+          EXPECTED_TOOL: ${{ needs.plan.outputs.missing_dependency_probe }}
+        run: node scripts/assert-missing-system-dependency.mjs
+
       - name: Assert NetBSD vcpkg tool cache
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build.status
           TARGET_OS: netbsd
@@ -871,7 +986,9 @@ jobs:
 
       - name: Analyze warm fixture cache
         id: analyze_warm
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         uses: ./analyze
         with:
           token: ${{ github.token }}
@@ -880,7 +997,9 @@ jobs:
           fail-on: never
 
       - name: Assert warm fixture cache status
-        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         env:
           BUILD_STATUS_FILE: build-warm.status
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
@@ -892,7 +1011,9 @@ jobs:
         run: node scripts/assert-integration-result.mjs
 
       - name: Check NetBSD warm fixture status
-        if: ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        if: >-
+          ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' &&
+              needs.plan.outputs.missing_dependency_probe == 'none' }}
         run: |
           exit "$(cat build-warm.status)"
 

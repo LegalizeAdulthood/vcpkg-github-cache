@@ -6,6 +6,10 @@ cmake_minimum_required(VERSION 3.21)
 
 project(vcpkg_github_cache_fixture LANGUAGES CXX)
 
+if(FIXTURE_REQUIRE_BISON)
+  find_package(BISON REQUIRED)
+endif()
+
 find_package(fmt CONFIG REQUIRED)
 
 if(NOT fmt_DIR MATCHES "(/|\\\\)(vcpkg_installed|installed)(/|\\\\)")
