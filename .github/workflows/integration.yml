@@ -56,6 +56,7 @@ jobs:
       platforms: ${{ steps.inputs.outputs.platforms }}
       cache_mode: ${{ steps.inputs.outputs.cache_mode }}
       cache_access: ${{ steps.inputs.outputs.cache_access }}
+      freebsd: ${{ steps.inputs.outputs.freebsd }}
       install_nuget: ${{ steps.inputs.outputs.install_nuget }}
       retention: ${{ steps.inputs.outputs.retention }}
       ubuntu: ${{ steps.inputs.outputs.ubuntu }}
@@ -77,10 +78,11 @@ jobs:
             ${{ inputs['artifact-retention-days'] || '7' }}
           CACHE_MODE: ${{ inputs['cache-mode'] || 'readwrite' }}
           PLATFORMS: >-
-            ${{ github.event_name == 'push' && 'ubuntu,windows' ||
+            ${{ github.event_name == 'push' && 'ubuntu,windows,freebsd' ||
                 inputs.platforms || 'ubuntu' }}
         shell: bash
         run: |
+          freebsd=false
           ubuntu=false
           windows=false
           platforms=""
@@ -103,8 +105,12 @@ jobs:
 
             case "$platform" in
               all)
+                freebsd=true
                 ubuntu=true
                 windows=true
+                ;;
+              freebsd|freebsd-vm)
+                freebsd=true
                 ;;
               linux|ubuntu|ubuntu-latest)
                 ubuntu=true
@@ -135,6 +141,7 @@ jobs:
             echo "platforms=${platforms}"
             echo "cache_mode=${CACHE_MODE}"
             echo "cache_access=${cache_access}"
+            echo "freebsd=${freebsd}"
             echo "install_nuget=${install_nuget}"
             echo "retention=${ARTIFACT_RETENTION_DAYS}"
             echo "ubuntu=${ubuntu}"
@@ -424,6 +431,209 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: windows-fixture-${{ matrix.vcpkg_ref_slug }}
+          path: |
+            build.log
+            build.status
+            build-warm.log
+            build-warm.status
+          if-no-files-found: warn
+          retention-days: ${{ needs.plan.outputs.retention }}
+
+  freebsd:
+    name: FreeBSD fixture (${{ matrix.vcpkg_ref }})
+    needs: plan
+    if: ${{ needs.plan.outputs.freebsd == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+
+    steps:
+      - name: Checkout action
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Checkout vcpkg
+        uses: actions/checkout@v6
+        with:
+          repository: microsoft/vcpkg
+          ref: ${{ matrix.vcpkg_ref }}
+          path: vcpkg
+          persist-credentials: false
+
+      - name: Generate vcpkg cache setup script
+        id: vc
+        uses: ./
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          access: ${{ needs.plan.outputs.cache_access }}
+          install-nuget: ${{ needs.plan.outputs.install_nuget }}
+          execution-mode: emit-script
+          target-os: freebsd
+
+      - name: Build fixture on FreeBSD
+        uses: vmactions/freebsd-vm@b84ab5559b5a1bb4b8ee2737d2506a16e1737636 # v1
+        env:
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
+          VCPKG_ROOT: vcpkg
+        with:
+          release: "14.3"
+          usesh: true
+          sync: rsync
+          copyback: true
+          envs: CACHE_MODE VCPKG_GITHUB_CACHE_TOKEN VCPKG_ROOT
+          prepare: |
+            pkg update
+            pkg install -y cmake ninja git pkgconf patchelf gmake bash bison
+          run: |
+            set +e
+            set -u
+
+            copyback=.freebsd-copyback
+            mkdir -p "${copyback}"
+            : > build.log
+
+            run_logged() {
+              label=$1
+              shift
+              tmp_status="${copyback}/command.status"
+
+              {
+                printf '\n## %s\n' "${label}"
+                printf '> '
+                printf '%s ' "$@"
+                printf '\n'
+              } | tee -a build.log
+
+              ( "$@"; printf '%s\n' "$?" > "${tmp_status}" ) 2>&1 |
+                tee -a build.log
+
+              if [ -r "${tmp_status}" ]; then
+                IFS= read -r command_status < "${tmp_status}"
+                rm -f "${tmp_status}"
+              else
+                command_status=1
+              fi
+
+              return "${command_status}"
+            }
+
+            if run_logged "Setup vcpkg cache" \
+                sh "${{ steps.vc.outputs.setup-script }}"; then
+              . "${{ steps.vc.outputs.setup-env }}"
+              overlay_triplets=$(pwd -P)/test/fixtures/cmake-vcpkg/triplets
+              BUILD_DIR=/tmp/vcpkg-github-cache-fixture \
+                BUILD_LOG=build.log \
+                BUILD_STATUS=build.status \
+                CMAKE_GENERATOR=Ninja \
+                VCPKG_HOST_TRIPLET=x64-freebsd-vcpkg-github-cache \
+                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
+                VCPKG_TARGET_TRIPLET=x64-freebsd-vcpkg-github-cache \
+                sh test/fixtures/cmake-vcpkg/build-fixture.sh
+              build_status=$?
+            else
+              build_status=$?
+              printf '%s\n' "${build_status}" > build.status
+            fi
+
+            if [ "${build_status}" -eq 0 ] &&
+                [ "${CACHE_MODE}" = readwrite ]; then
+              BUILD_DIR=/tmp/vcpkg-github-cache-fixture-warm \
+                BUILD_LOG=build-warm.log \
+                BUILD_STATUS=build-warm.status \
+                CMAKE_GENERATOR=Ninja \
+                VCPKG_HOST_TRIPLET=x64-freebsd-vcpkg-github-cache \
+                VCPKG_OVERLAY_TRIPLETS="${overlay_triplets}" \
+                VCPKG_TARGET_TRIPLET=x64-freebsd-vcpkg-github-cache \
+                sh test/fixtures/cmake-vcpkg/build-fixture.sh
+            else
+              : > build-warm.log
+              printf '%s\n' 1 > build-warm.status
+            fi
+
+            cp build.log build.status build-warm.log build-warm.status \
+              "${copyback}/"
+            find . -mindepth 1 -maxdepth 1 ! -name .git \
+              ! -name "${copyback}" -exec rm -rf {} +
+            mv "${copyback}"/* .
+            rmdir "${copyback}"
+
+      - name: Ensure fixture log exists
+        if: always()
+        run: |
+          touch build.log build-warm.log
+          if [ ! -f build.status ]; then
+            echo 1 > build.status
+          fi
+          if [ ! -f build-warm.status ]; then
+            echo 1 > build-warm.status
+          fi
+
+      - name: Analyze fixture cache
+        id: analyze
+        if: always()
+        uses: ./analyze
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build.log
+          fail-on: never
+
+      - name: Assert fixture cache status
+        if: always()
+        env:
+          BUILD_STATUS_FILE: build.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze.outputs.diagnosis }}
+          FAILURE_KIND: ${{ steps.analyze.outputs['failure-kind'] }}
+        run: node scripts/assert-integration-result.mjs
+
+      - name: Check FreeBSD fixture status
+        if: always()
+        run: |
+          exit "$(cat build.status)"
+
+      - name: Analyze warm fixture cache
+        id: analyze_warm
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        uses: ./analyze
+        with:
+          token: ${{ github.token }}
+          vcpkg-root: vcpkg
+          build-log: build-warm.log
+          fail-on: never
+
+      - name: Assert warm fixture cache status
+        if: ${{ success() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        env:
+          BUILD_STATUS_FILE: build-warm.status
+          CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
+          CACHE_STATUS: ${{ steps.analyze_warm.outputs['cache-status'] }}
+          DIAGNOSIS: ${{ steps.analyze_warm.outputs.diagnosis }}
+          EXPECTED_CACHE_STATUS: warm-hit
+          EXPECTED_FAILURE_KIND: ""
+          FAILURE_KIND: ${{ steps.analyze_warm.outputs['failure-kind'] }}
+        run: node scripts/assert-integration-result.mjs
+
+      - name: Check FreeBSD warm fixture status
+        if: ${{ always() && needs.plan.outputs.cache_mode == 'readwrite' }}
+        run: |
+          exit "$(cat build-warm.status)"
+
+      - name: Upload fixture logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: freebsd-fixture-${{ matrix.vcpkg_ref_slug }}
           path: |
             build.log
             build.status
