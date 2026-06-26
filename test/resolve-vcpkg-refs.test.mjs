@@ -10,6 +10,7 @@ import {
   matrixFromRefs,
   parseArgs,
   parseRefList,
+  refSlug,
   releaseTagKey,
   resolveRefs,
   selectLatestReleaseTags,
@@ -68,8 +69,9 @@ describe("vcpkg ref resolver", () => {
     );
     expect(JSON.stringify(matrix)).toBe(
       '{"include":[{"vcpkg_ref":"2026.06.01",' +
-        '"vcpkg_ref_kind":"explicit"},{"vcpkg_ref":"master",' +
-        '"vcpkg_ref_kind":"explicit"}]}',
+        '"vcpkg_ref_kind":"explicit","vcpkg_ref_slug":"2026.06.01"},' +
+        '{"vcpkg_ref":"master","vcpkg_ref_kind":"explicit",' +
+        '"vcpkg_ref_slug":"master"}]}',
     );
   });
 
@@ -91,10 +93,26 @@ describe("vcpkg ref resolver", () => {
 
     await expect(resolveRefs(options)).resolves.toEqual({
       include: [
-        { vcpkg_ref: "2026.06.01", vcpkg_ref_kind: "release-tag" },
-        { vcpkg_ref: "2026.05.01", vcpkg_ref_kind: "release-tag" },
-        { vcpkg_ref: "2026.04.01", vcpkg_ref_kind: "release-tag" },
-        { vcpkg_ref: "master", vcpkg_ref_kind: "explicit" },
+        {
+          vcpkg_ref: "2026.06.01",
+          vcpkg_ref_kind: "release-tag",
+          vcpkg_ref_slug: "2026.06.01",
+        },
+        {
+          vcpkg_ref: "2026.05.01",
+          vcpkg_ref_kind: "release-tag",
+          vcpkg_ref_slug: "2026.05.01",
+        },
+        {
+          vcpkg_ref: "2026.04.01",
+          vcpkg_ref_kind: "release-tag",
+          vcpkg_ref_slug: "2026.04.01",
+        },
+        {
+          vcpkg_ref: "master",
+          vcpkg_ref_kind: "explicit",
+          vcpkg_ref_slug: "master",
+        },
       ],
     });
     expect(requestedUrls).toEqual([
@@ -118,5 +136,11 @@ describe("vcpkg ref resolver", () => {
       "master",
       "2026.06.01",
     ]);
+  });
+
+  test("slugifies refs for artifact names", () => {
+    expect(refSlug("feature/vcpkg test")).toBe("feature-vcpkg-test");
+    expect(refSlug("2026.06.01")).toBe("2026.06.01");
+    expect(refSlug("///")).toBe("ref");
   });
 });
