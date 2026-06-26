@@ -1,0 +1,114 @@
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# Copyright 2026 Richard Thomson
+
+name: Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      explicit-refs:
+        description: Comma-separated vcpkg refs. Empty uses latest-tags.
+        required: false
+        default: ""
+        type: string
+      latest-tags:
+        description: Number of latest vcpkg release tags to test.
+        required: false
+        default: "1"
+        type: string
+      platforms:
+        description: Comma-separated platforms to test.
+        required: false
+        default: ubuntu
+        type: string
+      cache-mode:
+        description: Cache scenario to run.
+        required: false
+        default: readwrite
+        type: choice
+        options:
+          - readwrite
+          - readonly
+          - disabled
+      artifact-retention-days:
+        description: Retention days for integration logs and artifacts.
+        required: false
+        default: "7"
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  plan:
+    name: Plan integration matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      matrix: ${{ steps.refs.outputs.matrix }}
+      refs: ${{ steps.refs.outputs.refs }}
+      platforms: ${{ steps.inputs.outputs.platforms }}
+      cache-mode: ${{ steps.inputs.outputs.cache_mode }}
+      artifact-retention-days: ${{ steps.inputs.outputs.retention }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Record integration inputs
+        id: inputs
+        env:
+          ARTIFACT_RETENTION_DAYS: ${{ inputs['artifact-retention-days'] }}
+          CACHE_MODE: ${{ inputs['cache-mode'] }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          {
+            echo "platforms=${PLATFORMS}"
+            echo "cache_mode=${CACHE_MODE}"
+            echo "retention=${ARTIFACT_RETENTION_DAYS}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve vcpkg refs
+        id: refs
+        env:
+          EXPLICIT_REFS: ${{ inputs['explicit-refs'] }}
+          LATEST_TAGS: ${{ inputs['latest-tags'] }}
+        run: |
+          args=(--github-output "$GITHUB_OUTPUT")
+
+          if [ -n "$EXPLICIT_REFS" ]; then
+            args+=(--refs "$EXPLICIT_REFS")
+          else
+            args+=(--latest "$LATEST_TAGS")
+          fi
+
+          node scripts/resolve-vcpkg-refs.mjs "${args[@]}"
+
+      - name: Write integration plan summary
+        env:
+          ARTIFACT_RETENTION_DAYS: ${{ steps.inputs.outputs.retention }}
+          CACHE_MODE: ${{ steps.inputs.outputs.cache_mode }}
+          MATRIX: ${{ steps.refs.outputs.matrix }}
+          PLATFORMS: ${{ steps.inputs.outputs.platforms }}
+          REFS: ${{ steps.refs.outputs.refs }}
+        run: |
+          {
+            echo "## Integration plan"
+            echo
+            echo "- Platforms: \`${PLATFORMS}\`"
+            echo "- Cache mode: \`${CACHE_MODE}\`"
+            echo "- Artifact retention: \`${ARTIFACT_RETENTION_DAYS}\` days"
+            echo "- vcpkg refs: \`${REFS}\`"
+            echo
+            echo '```json'
+            echo "$MATRIX"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

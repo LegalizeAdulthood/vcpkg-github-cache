@@ -111,91 +111,85 @@ binary or runtime compatibility.
 
 ## Slices
 
-1. Add an integration workflow skeleton
-
-   Add a workflow for action integration with `workflow_dispatch` inputs for
-   explicit refs, latest tag count, platform selection, cache mode, and
-   artifact retention.  Start with no expensive matrix jobs.
-
-2. Add Ubuntu host integration
+1. Add Ubuntu host integration
 
    Run the fixture on Ubuntu with `uses: ./`, a selected vcpkg ref, setup,
    build, analyze, and log upload.  Keep this as the first executable matrix
    cell.
 
-3. Add Windows host integration
+2. Add Windows host integration
 
    Add the same host-path fixture coverage on Windows.  Keep behavior
    parallel with Ubuntu unless platform differences are required.
 
-4. Add bounded `develop` coverage
+3. Add bounded `develop` coverage
 
    Trigger the integration workflow on pushes to `develop` with a small
    default matrix, such as latest tag plus one older tag on Ubuntu and
    Windows.
 
-5. Add analyzer result assertions
+4. Add analyzer result assertions
 
    Parse analyzer output or diagnostics artifacts and fail the integration
    job when the reported cache status does not match the expected scenario.
    Keep matching tolerant of vcpkg wording changes.
 
-6. Add cold-seed and warm-hit passes
+5. Add cold-seed and warm-hit passes
 
    Add a two-pass mode for the same ref.  The first pass allows writes; the
    second pass verifies the fixture restores from cache.
 
-7. Add FreeBSD VM integration
+6. Add FreeBSD VM integration
 
    Add the FreeBSD emitted-script path.  Copy back only the build log,
    status file, and diagnostic artifacts needed by the host analyzer.
 
-8. Add OpenBSD VM integration
+7. Add OpenBSD VM integration
 
    Add the OpenBSD emitted-script path with the same fixture contract and
    copyback shape as FreeBSD.
 
-9. Add NetBSD VM integration
+8. Add NetBSD VM integration
 
    Add the NetBSD emitted-script path with the same fixture contract and
    copyback shape as the other BSD targets.
 
-10. Assert BSD vcpkg-tool cache behavior
+9. Assert BSD vcpkg-tool cache behavior
 
-    Add checks that a cold BSD run reports the vcpkg-tool package as built
-    and a warm BSD run skips rebuilding the tool from source.
+   Add checks that a cold BSD run reports the vcpkg-tool package as built
+   and a warm BSD run skips rebuilding the tool from source.
 
-11. Add missing-dependency probes
+10. Add missing-dependency probes
 
     Add opt-in negative tests that omit one known prerequisite at a time for
     each VM target.  Verify the summary identifies the missing tool and a
     useful "needed by" context.
 
-12. Add the full release matrix
+11. Add the full release matrix
 
     Add a `workflow_dispatch` mode that runs all five platforms against the
     latest twelve vcpkg release tags, plus any explicit refs supplied by the
     caller.
 
-13. Add scheduled rotating coverage
+12. Add scheduled rotating coverage
 
     Add a scheduled workflow path that runs the latest vcpkg tag plus a
     rotating subset of older tags.  Keep full twelve-tag coverage manual
     unless runtime and quota are acceptable.
 
-14. Add canary repository instructions
+13. Add canary repository instructions
 
     Document the separate canary repository shape: tiny fixture, minimal
     workflows, package permissions, branch policy, and how to pin the action
     by SHA or release tag.
 
-15. Add canary workflow template
+14. Add canary workflow template
 
     Add a workflow template or documented snippet for the canary repository.
     It should use the published action, not `uses: ./`, and should cover the
     same external behavior trn previously proved.
 
-16. Document release qualification
+15. Document release qualification
 
     Document how to launch the full matrix and canary run, which artifacts
     to inspect, and what results are required before publishing a new action
