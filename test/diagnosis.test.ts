@@ -451,6 +451,50 @@ describe("cache diagnosis", () => {
     expect(shouldFailDiagnosis(diagnosis, "upload-failure")).toBe(true);
   });
 
+  test("classifies cold already-present uploads as a cache seed", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [],
+        builtCount: 3,
+        builtPackages: [],
+        failedHttpStatuses: [],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageAbiHashes: [],
+        packageHandleTimes: [],
+        packageUploadStatuses: [
+          {
+            packageId: "fmt_x64-windows-vcpkg-github-cache",
+            packageSpec: "fmt:x64-windows-vcpkg-github-cache@12.1.0",
+            status: "already present",
+          },
+        ],
+        quotaMessages: [],
+        requestedCount: 3,
+        restoredCount: 0,
+        restoredPackages: [],
+        submissionsStarted: 3,
+        uploadedCount: undefined,
+        uploadsAttempted: 3,
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 3,
+      },
+      liveProbes: liveProbes(),
+      requestedCount: 3,
+      restoreProbe: restoreProbe(
+        "failed",
+        "NuGet restore failed; restored 0/3 packages",
+        0,
+      ),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("cold-seed");
+    expect(diagnosis.failureKind).toBe("cache-miss");
+    expect(diagnosis.diagnosis).toContain("already present 1");
+    expect(diagnosis.diagnosis).not.toContain("upload failure");
+  });
+
   test("classifies exact restore health without a build log", () => {
     const diagnosis = classifyCache({
       liveProbes: liveProbes(),
