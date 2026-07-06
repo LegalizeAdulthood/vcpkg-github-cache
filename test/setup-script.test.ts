@@ -109,6 +109,7 @@ describe("setup script emission", () => {
     expect(script).toContain("publish_bsd_vcpkg_tool_package");
     expect(script).toContain("vcpkg-tool_freebsd-octo-repo-${tool_arch}");
     expect(script).toContain("1.0.0-vcpkgtool${identity_hash}");
+    expect(script).toContain("run_nuget locals http-cache -clear || true");
     expect(script).toContain("run_nuget install \\");
     expect(script).toContain("run_nuget pack \\");
     expect(script).toContain("run_nuget push \\");
