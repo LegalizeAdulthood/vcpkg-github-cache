@@ -17,6 +17,8 @@ import { PackageMetadataProbe } from "../src/shared/package-metadata";
 
 const SETTINGS_URL =
   "https://github.com/users/octo/packages/nuget/fmt_x64-windows/settings";
+const ZLIB_SETTINGS_URL =
+  "https://github.com/users/octo/packages/nuget/zlib_x64-windows/settings";
 
 function buildLogFacts(values: Partial<BuildLogFacts>): BuildLogFacts {
   return {
@@ -93,7 +95,7 @@ describe("build miss report", () => {
       {
         buildTime: undefined,
         packageId: "zlib_x64-windows",
-        packageSettingsUrl: undefined,
+        packageSettingsUrl: ZLIB_SETTINGS_URL,
         packageSpec: "zlib:x64-windows@1.3.1",
         uploadStatus: "unknown",
         version: "1.3.1",
@@ -192,7 +194,7 @@ describe("build miss report", () => {
     );
   });
 
-  test("does not link missing package IDs", () => {
+  test("links missing package IDs with fallback settings URLs", () => {
     const reports = buildMissReports(
       buildLogFacts({
         builtPackages: ["fmt:x64-windows@8.0.0#1"],
@@ -206,16 +208,33 @@ describe("build miss report", () => {
           {
             detail: "HTTP 404 Not Found",
             name: "fmt_x64-windows",
-            settingsUrl: SETTINGS_URL,
             status: "missing",
           },
         ],
       },
     );
 
-    expect(buildMissReportRows(reports, "html")[1][0]).toBe("fmt_x64-windows");
+    expect(buildMissReportRows(reports, "html")[1][0]).toBe(
+      `<a href="${SETTINGS_URL}">fmt_x64-windows</a>`,
+    );
     expect(formatBuildMissReportTable(reports)).toContain(
-      "| fmt_x64-windows | 8.0.0#1 | unknown |",
+      `| [fmt_x64-windows](${SETTINGS_URL}) | 8.0.0#1 | unknown |`,
+    );
+  });
+
+  test("links unprobed package IDs with fallback settings URLs", () => {
+    const reports = buildMissReports(
+      buildLogFacts({
+        builtPackages: ["zlib:x64-windows@1.3.1"],
+      }),
+      packageMetadata(),
+    );
+
+    expect(buildMissReportRows(reports, "html")[1][0]).toBe(
+      `<a href="${ZLIB_SETTINGS_URL}">zlib_x64-windows</a>`,
+    );
+    expect(formatBuildMissReportTable(reports)).toContain(
+      `| [zlib_x64-windows](${ZLIB_SETTINGS_URL}) | 1.3.1 | unknown |`,
     );
   });
 

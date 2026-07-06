@@ -112,6 +112,21 @@ export function packageSettingsUrl(
   )}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
 }
 
+export function packageSettingsUrlFromProbe(
+  probe: PackageMetadataProbe | undefined,
+  packageName: string,
+): string | undefined {
+  if (!probe) {
+    return undefined;
+  }
+
+  return packageSettingsUrl(
+    probe.ownerEndpoint ?? "users",
+    probe.owner,
+    packageName,
+  );
+}
+
 function ownerMetadataUrl(apiUrl: string, owner: string): string {
   return `${trimApiUrl(apiUrl)}/users/${encodeURIComponent(owner)}`;
 }
