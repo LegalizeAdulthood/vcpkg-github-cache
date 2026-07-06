@@ -163,7 +163,7 @@ steps:
       VCPKG_GITHUB_CACHE_TOKEN: ${{ github.token }}
       VCPKG_ROOT: vcpkg
     with:
-      release: "14.3"
+      release: "14.4"
       usesh: true
       sync: rsync
       copyback: true
