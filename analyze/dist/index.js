@@ -141697,6 +141697,12 @@ function packageMetadataUrl(apiUrl, endpoint, owner, packageName) {
 function packageSettingsUrl(endpoint, owner, packageName) {
     return `https://github.com/${endpoint}/${encodeURIComponent(owner)}/packages/nuget/${encodeURIComponent(packageName)}/settings`;
 }
+function packageSettingsUrlFromProbe(probe, packageName) {
+    if (!probe) {
+        return undefined;
+    }
+    return packageSettingsUrl(probe.ownerEndpoint ?? "users", probe.owner, packageName);
+}
 function ownerMetadataUrl(apiUrl, owner) {
     return `${trimApiUrl(apiUrl)}/users/${encodeURIComponent(owner)}`;
 }
@@ -142036,8 +142042,9 @@ function buildTimeByPackageId(buildLogFacts) {
 function packageMetadataResults(packageMetadata) {
     return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
 }
-function build_miss_report_packageSettingsUrl(result) {
-    return result?.status === "missing" ? undefined : result?.settingsUrl;
+function reportPackageSettingsUrl(packageMetadata, packageId, result) {
+    return (result?.settingsUrl ??
+        packageSettingsUrlFromProbe(packageMetadata, packageId));
 }
 function uploadStatusByPackageId(buildLogFacts) {
     return new Map(buildLogFacts.packageUploadStatuses.map((value) => [
@@ -142119,7 +142126,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
         return {
             buildTime: handleTimes.get(packageId),
             packageId,
-            packageSettingsUrl: build_miss_report_packageSettingsUrl(result),
+            packageSettingsUrl: reportPackageSettingsUrl(packageMetadata, packageId, result),
             packageSpec,
             uploadStatus: uploadStatus(packageId, uploads, deniedPackages, metadata, abiHashes),
             version: packageSpecVersion(packageSpec) ?? "unknown",
@@ -142137,7 +142144,7 @@ function buildMissReports(buildLogFacts, packageMetadata) {
         {
             buildTime: undefined,
             packageId: tool.packageId,
-            packageSettingsUrl: build_miss_report_packageSettingsUrl(result),
+            packageSettingsUrl: reportPackageSettingsUrl(packageMetadata, tool.packageId, result),
             packageSpec: tool.packageId,
             uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
             version: tool.version,
@@ -143447,6 +143454,10 @@ function packageHandleTimes(buildLogFacts) {
 function analyze_packageMetadataResults(packageMetadata) {
     return new Map((packageMetadata?.results ?? []).map((value) => [value.name, value]));
 }
+function analyze_reportPackageSettingsUrl(packageMetadata, packageId, result) {
+    return (result?.settingsUrl ??
+        packageSettingsUrlFromProbe(packageMetadata, packageId));
+}
 function logPackageQuotaRisks(packageMetadata) {
     for (const result of packageMetadata?.results ?? []) {
         if (result.quotaRisk === PACKAGE_QUOTA_RISK_PRIVATE_STORAGE) {
@@ -143485,7 +143496,7 @@ async function analyze_deniedPackageReports(buildLogFacts, packageMetadata, vcpk
             buildTime: handleTimes.get(value.packageId),
             nupkgSize: await nupkgSize(vcpkgRoot, value),
             packageId: value.packageId,
-            packageSettingsUrl: result?.settingsUrl,
+            packageSettingsUrl: analyze_reportPackageSettingsUrl(packageMetadata, value.packageId, result),
             packageVersionCount: result?.versionCount,
             quotaRisk: result?.quotaRisk,
             repository: result?.repository,

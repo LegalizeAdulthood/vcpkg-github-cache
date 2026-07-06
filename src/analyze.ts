@@ -63,6 +63,7 @@ import {
   packageMetadataQuotaRiskCount,
   PackageMetadataProbe,
   PackageMetadataResult,
+  packageSettingsUrlFromProbe,
   runPackageMetadataProbe,
 } from "./shared/package-metadata";
 import { RestoreProbe, runRestoreProbe } from "./shared/restore-probe";
@@ -200,6 +201,17 @@ function packageMetadataResults(
   );
 }
 
+function reportPackageSettingsUrl(
+  packageMetadata: PackageMetadataProbe | undefined,
+  packageId: string,
+  result: PackageMetadataResult | undefined,
+): string | undefined {
+  return (
+    result?.settingsUrl ??
+    packageSettingsUrlFromProbe(packageMetadata, packageId)
+  );
+}
+
 function logPackageQuotaRisks(
   packageMetadata: PackageMetadataProbe | undefined,
 ): void {
@@ -261,7 +273,11 @@ async function deniedPackageReports(
         buildTime: handleTimes.get(value.packageId),
         nupkgSize: await nupkgSize(vcpkgRoot, value),
         packageId: value.packageId,
-        packageSettingsUrl: result?.settingsUrl,
+        packageSettingsUrl: reportPackageSettingsUrl(
+          packageMetadata,
+          value.packageId,
+          result,
+        ),
         packageVersionCount: result?.versionCount,
         quotaRisk: result?.quotaRisk,
         repository: result?.repository,

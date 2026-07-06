@@ -15,6 +15,7 @@ import { PackageIdentity } from "./package-config";
 import {
   PackageMetadataProbe,
   PackageMetadataResult,
+  packageSettingsUrlFromProbe,
   packageVersionExists,
 } from "./package-metadata";
 
@@ -142,10 +143,15 @@ function packageMetadataResults(
   );
 }
 
-function packageSettingsUrl(
+function reportPackageSettingsUrl(
+  packageMetadata: PackageMetadataProbe | undefined,
+  packageId: string,
   result: PackageMetadataResult | undefined,
 ): string | undefined {
-  return result?.status === "missing" ? undefined : result?.settingsUrl;
+  return (
+    result?.settingsUrl ??
+    packageSettingsUrlFromProbe(packageMetadata, packageId)
+  );
 }
 
 function uploadStatusByPackageId(
@@ -279,7 +285,11 @@ export function buildMissReports(
     return {
       buildTime: handleTimes.get(packageId),
       packageId,
-      packageSettingsUrl: packageSettingsUrl(result),
+      packageSettingsUrl: reportPackageSettingsUrl(
+        packageMetadata,
+        packageId,
+        result,
+      ),
       packageSpec,
       uploadStatus: uploadStatus(
         packageId,
@@ -308,7 +318,11 @@ export function buildMissReports(
     {
       buildTime: undefined,
       packageId: tool.packageId,
-      packageSettingsUrl: packageSettingsUrl(result),
+      packageSettingsUrl: reportPackageSettingsUrl(
+        packageMetadata,
+        tool.packageId,
+        result,
+      ),
       packageSpec: tool.packageId,
       uploadStatus: vcpkgToolUploadStatus(tool.publishStatus),
       version: tool.version,

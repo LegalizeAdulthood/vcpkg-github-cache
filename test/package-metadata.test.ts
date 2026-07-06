@@ -13,6 +13,7 @@ import {
   packageMetadataUrl,
   packageQuotaRisk,
   packageSettingsUrl,
+  packageSettingsUrlFromProbe,
   packageVersionExists,
   packageVersionsUrl,
   runPackageMetadataProbe,
@@ -32,6 +33,35 @@ describe("package metadata probes", () => {
     );
     expect(packageSettingsUrl("users", "octo", "fmt:x64-windows")).toBe(
       "https://github.com/users/octo/packages/nuget/fmt%3Ax64-windows/settings",
+    );
+    expect(
+      packageSettingsUrlFromProbe(
+        {
+          limit: 20,
+          owner: "octo-org",
+          ownerEndpoint: "orgs",
+          probedPackageIds: 0,
+          requestedPackageIds: 1,
+          results: [],
+        },
+        "fmt:x64-linux",
+      ),
+    ).toBe(
+      "https://github.com/orgs/octo-org/packages/nuget/fmt%3Ax64-linux/settings",
+    );
+    expect(
+      packageSettingsUrlFromProbe(
+        {
+          limit: 20,
+          owner: "octo",
+          probedPackageIds: 0,
+          requestedPackageIds: 1,
+          results: [],
+        },
+        "fmt:x64-linux",
+      ),
+    ).toBe(
+      "https://github.com/users/octo/packages/nuget/fmt%3Ax64-linux/settings",
     );
     expect(
       packageVersionsUrl(
