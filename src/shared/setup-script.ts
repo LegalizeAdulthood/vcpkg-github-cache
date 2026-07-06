@@ -713,7 +713,7 @@ export function renderSetupScript(plan: SetupPlan): string {
       '        print "            tmp_binarycaching_cpp=\\"${binarycaching_cpp}.vcpkg-github-cache.tmp\\""',
     );
     script.line(
-      '        print "            if sed \'s/\\\\.string_arg(\\"-DirectDownload\\")\\\\.string_arg(\\"-NoHttpCache\\")/.string_arg(\\"-DirectDownload\\")/\' \\"$binarycaching_cpp\\" > \\"$tmp_binarycaching_cpp\\" && ! cmp -s \\"$binarycaching_cpp\\" \\"$tmp_binarycaching_cpp\\"; then"',
+      String.raw`        print "            if sed \"s/\\.string_arg(\\\"-DirectDownload\\\")\\.string_arg(\\\"-NoHttpCache\\\")/.string_arg(\\\"-DirectDownload\\\")/\" \"$binarycaching_cpp\" > \"$tmp_binarycaching_cpp\" && ! cmp -s \"$binarycaching_cpp\" \"$tmp_binarycaching_cpp\"; then"`,
     );
     script.line(
       '        print "                mv \\"$tmp_binarycaching_cpp\\" \\"$binarycaching_cpp\\""',

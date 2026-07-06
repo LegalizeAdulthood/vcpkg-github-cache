@@ -32003,7 +32003,7 @@ function renderSetupScript(plan) {
         script.line('        print "        binarycaching_cpp=\\"$srcDir/src/vcpkg/binarycaching.cpp\\""');
         script.line('        print "        if [ -f \\"$binarycaching_cpp\\" ]; then"');
         script.line('        print "            tmp_binarycaching_cpp=\\"${binarycaching_cpp}.vcpkg-github-cache.tmp\\""');
-        script.line('        print "            if sed \'s/\\\\.string_arg(\\"-DirectDownload\\")\\\\.string_arg(\\"-NoHttpCache\\")/.string_arg(\\"-DirectDownload\\")/\' \\"$binarycaching_cpp\\" > \\"$tmp_binarycaching_cpp\\" && ! cmp -s \\"$binarycaching_cpp\\" \\"$tmp_binarycaching_cpp\\"; then"');
+        script.line(String.raw `        print "            if sed \"s/\\.string_arg(\\\"-DirectDownload\\\")\\.string_arg(\\\"-NoHttpCache\\\")/.string_arg(\\\"-DirectDownload\\\")/\" \"$binarycaching_cpp\" > \"$tmp_binarycaching_cpp\" && ! cmp -s \"$binarycaching_cpp\" \"$tmp_binarycaching_cpp\"; then"`);
         script.line('        print "                mv \\"$tmp_binarycaching_cpp\\" \\"$binarycaching_cpp\\""');
         script.line('        print "                printf \\"%s\\\\n\\" \\"Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling\\""');
         script.line('        print "            elif grep -q -- \\"-NoHttpCache\\" \\"$binarycaching_cpp\\"; then"');
