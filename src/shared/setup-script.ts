@@ -17,17 +17,12 @@ import { SetupPlan } from "./setup-plan";
 
 const SETUP_SCRIPT_NAME = "setup.sh";
 const SETUP_ENV_NAME = "setup.env";
-const FREEBSD_NUGET_VERSION = "6.8.0";
-const FREEBSD_NUGET_SHA512 =
-  "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c";
 const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
 
 interface BsdTargetSettings {
   readonly cacheToolPackage: boolean;
   readonly label: string;
   readonly nugetDirectorySuffix: string;
-  readonly nugetSha512: string;
-  readonly nugetVersion: string;
   readonly packageInstallCommand: string;
   readonly packageInstallerLabel: string;
   readonly releaseKey: string;
@@ -40,8 +35,6 @@ const FREEBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "FreeBSD",
   nugetDirectorySuffix: "freebsd",
-  nugetSha512: FREEBSD_NUGET_SHA512,
-  nugetVersion: FREEBSD_NUGET_VERSION,
   packageInstallCommand: "pkg install -y",
   packageInstallerLabel: "pkg",
   releaseKey: "freebsd-release",
@@ -54,8 +47,6 @@ const NETBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "NetBSD",
   nugetDirectorySuffix: "netbsd",
-  nugetSha512: FREEBSD_NUGET_SHA512,
-  nugetVersion: FREEBSD_NUGET_VERSION,
   packageInstallCommand: "/usr/sbin/pkg_add -u",
   packageInstallerLabel: "pkg_add",
   releaseKey: "netbsd-release",
@@ -68,8 +59,6 @@ const OPENBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "OpenBSD",
   nugetDirectorySuffix: "openbsd",
-  nugetSha512: FREEBSD_NUGET_SHA512,
-  nugetVersion: FREEBSD_NUGET_VERSION,
   packageInstallCommand: "pkg_add -I",
   packageInstallerLabel: "pkg_add",
   releaseKey: "openbsd-release",
@@ -728,9 +717,116 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line("  export VCPKG_TOOL_PACKAGE_VERSION");
   script.line("}");
   script.blank();
-  script.line("ensure_bsd_nuget_command() {");
+  script.line("set_bsd_nuget_metadata() {");
+  script.line('  if [ -n "${bsd_nuget_version:-}" ] &&');
+  script.line('      [ -n "${bsd_nuget_url:-}" ] &&');
+  script.line('      [ -n "${bsd_nuget_sha512:-}" ]; then');
+  script.line("    return");
+  script.line("  fi");
+  script.line('  if [ ! -f "${VCPKG_ROOT}/scripts/vcpkg-tools.json" ]; then');
+  script.command("    printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("vcpkg tool metadata file is missing"),
+  ]);
+  script.line("    exit 1");
+  script.line("  fi");
+  script.line("  bsd_nuget_metadata=$(awk '");
+  script.line("    BEGIN { in_block = 0; found = 0 }");
+  script.line("    /^[[:space:]]*{[[:space:]]*$/ {");
+  script.line("      in_block = 1");
+  script.line('      name = ""; os = ""; version = ""; url = ""; sha512 = ""');
+  script.line("      next");
+  script.line("    }");
+  script.line("    in_block {");
+  script.line("      line = $0");
+  script.line('      if (line ~ /"name"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+  script.line("        value = line");
+  script.line('        sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", value)');
+  script.line('        sub(/".*$/, "", value)');
+  script.line("        name = value");
+  script.line("      }");
+  script.line('      if (line ~ /"os"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+  script.line("        value = line");
+  script.line('        sub(/^.*"os"[[:space:]]*:[[:space:]]*"/, "", value)');
+  script.line('        sub(/".*$/, "", value)');
+  script.line("        os = value");
+  script.line("      }");
   script.line(
-    `  nuget_dir="\${VCPKG_ROOT}/downloads/tools/nuget-${bsdTarget.nugetVersion}-${bsdTarget.nugetDirectorySuffix}"`,
+    '      if (line ~ /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) {',
+  );
+  script.line("        value = line");
+  script.line(
+    '        sub(/^.*"version"[[:space:]]*:[[:space:]]*"/, "", value)',
+  );
+  script.line('        sub(/".*$/, "", value)');
+  script.line("        version = value");
+  script.line("      }");
+  script.line('      if (line ~ /"url"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+  script.line("        value = line");
+  script.line('        sub(/^.*"url"[[:space:]]*:[[:space:]]*"/, "", value)');
+  script.line('        sub(/".*$/, "", value)');
+  script.line("        url = value");
+  script.line("      }");
+  script.line('      if (line ~ /"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+  script.line("        value = line");
+  script.line(
+    '        sub(/^.*"sha512"[[:space:]]*:[[:space:]]*"/, "", value)',
+  );
+  script.line('        sub(/".*$/, "", value)');
+  script.line("        sha512 = value");
+  script.line("      }");
+  script.line("      if (line ~ /^[[:space:]]*}[,]?[[:space:]]*$/) {");
+  script.line('        if (name == "nuget" && os == "linux") {');
+  script.line(
+    '          if (version == "" || url == "" || sha512 == "") exit 1',
+  );
+  script.line(
+    '          printf "version=%s\\nurl=%s\\nsha512=%s\\n", version, url, sha512',
+  );
+  script.line("          found = 1");
+  script.line("          exit");
+  script.line("        }");
+  script.line("        in_block = 0");
+  script.line("      }");
+  script.line("    }");
+  script.line("    END { if (!found) exit 1 }");
+  script.line('  \' "${VCPKG_ROOT}/scripts/vcpkg-tools.json") || {');
+  script.command("    printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("Unable to read vcpkg NuGet tool metadata"),
+  ]);
+  script.line("    exit 1");
+  script.line("  }");
+  script.line(
+    "  bsd_nuget_version=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^version=//p')",
+  );
+  script.line(
+    "  bsd_nuget_url=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^url=//p')",
+  );
+  script.line(
+    "  bsd_nuget_sha512=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^sha512=//p')",
+  );
+  script.line('  if [ -z "${bsd_nuget_version}" ] ||');
+  script.line('      [ -z "${bsd_nuget_url}" ] ||');
+  script.line('      [ -z "${bsd_nuget_sha512}" ]; then');
+  script.command("    printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral("vcpkg NuGet tool metadata is incomplete"),
+  ]);
+  script.line("    exit 1");
+  script.line("  fi");
+  script.line("  export bsd_nuget_version bsd_nuget_url bsd_nuget_sha512");
+  script.command("  printf", [
+    posixLiteral("%s%s\\n"),
+    posixLiteral(`${bsdTarget.label} NuGet version: `),
+    posixRuntimeExpression('"${bsd_nuget_version}"'),
+  ]);
+  script.line("}");
+  script.blank();
+  script.line("ensure_bsd_nuget_command() {");
+  script.line("  set_bsd_nuget_metadata");
+  script.line(
+    `  nuget_dir="\${VCPKG_ROOT}/downloads/tools/nuget-\${bsd_nuget_version}-${bsdTarget.nugetDirectorySuffix}"`,
   );
   script.line('  nuget_exe="${nuget_dir}/nuget.exe"');
   script.line('  if [ ! -f "${nuget_exe}" ]; then');
@@ -739,11 +835,9 @@ export function renderSetupScript(plan: SetupPlan): string {
     posixLiteral("%s\\n"),
     posixLiteral(`Downloading NuGet for ${bsdTarget.label} setup`),
   ]);
-  script.line(
-    `    curl -L -o "\${nuget_exe}.tmp" "https://dist.nuget.org/win-x86-commandline/v${bsdTarget.nugetVersion}/nuget.exe"`,
-  );
+  script.line('    curl -L -o "${nuget_exe}.tmp" "${bsd_nuget_url}"');
   script.line('    actual_hash=$(sha512_file "${nuget_exe}.tmp")');
-  script.line(`    expected_hash="${bsdTarget.nugetSha512}"`);
+  script.line('    expected_hash="${bsd_nuget_sha512}"');
   script.line('    if [ "${actual_hash}" != "${expected_hash}" ]; then');
   script.command("      printf", [
     posixLiteral("%s\\n"),
@@ -828,6 +922,7 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line("}");
   script.blank();
   script.line("enable_bsd_nuget_tool() {");
+  script.line("  set_bsd_nuget_metadata");
   script.line('  tools_json="${VCPKG_ROOT}/scripts/vcpkg-tools.json"');
   script.line("  if has_bsd_nuget_tool; then");
   script.command("    printf", [
@@ -854,17 +949,6 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line(
     `              "\\"os\\": \\"${bsdTarget.targetOs}\\"", bsd_block)`,
   );
-  script.line('          sub(/"version"[[:space:]]*:[[:space:]]*"[^"]+"/,');
-  script.line(
-    `              "\\"version\\": \\"${bsdTarget.nugetVersion}\\"", bsd_block)`,
-  );
-  script.line("          sub(/\\/v[0-9.]+\\/nuget[.]exe/,");
-  script.line(
-    `              "/v${bsdTarget.nugetVersion}/nuget.exe", bsd_block)`,
-  );
-  script.line('          sub(/"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/,');
-  script.line(`              "\\"sha512\\": \\"${bsdTarget.nugetSha512}\\"",`);
-  script.line("              bsd_block)");
   script.line('          printf "%s", bsd_block');
   script.line("          patched = 1");
   script.line("          next");
