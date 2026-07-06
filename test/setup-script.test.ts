@@ -4,7 +4,8 @@
  * Copyright 2026 Richard Thomson
  */
 
-import { mkdtemp, readFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
@@ -89,6 +90,10 @@ describe("setup script emission", () => {
     expect(script).toContain(
       "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c",
     );
+    expect(script).toContain(
+      String.raw`if sed \"s/\\.string_arg(\\\"-DirectDownload\\\")`,
+    );
+    expect(script).not.toContain("if sed 's/");
     expect(script).toContain("patch_freebsd_vcpkg_tool_bootstrap");
     expect(script).toContain(
       "Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling",
@@ -134,6 +139,20 @@ describe("setup script emission", () => {
       "run_nuget 'setapikey' \"${VCPKG_GITHUB_CACHE_TOKEN}\"",
     );
     expect(script).not.toContain("C:/host/repo");
+  });
+
+  test("emits a POSIX-valid FreeBSD setup script", async () => {
+    const workspace = await mkdtemp(path.join(tmpdir(), "vc-cache-"));
+    const setupScript = path.join(workspace, "setup.sh");
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "freebsd",
+    });
+    const script = renderSetupScript(plan);
+
+    await writeFile(setupScript, script, "utf8");
+    execFileSync("sh", ["-n", setupScript], { stdio: "pipe" });
   });
 
   test("renders OpenBSD target-side vcpkg bootstrap and NuGet fetch", () => {
