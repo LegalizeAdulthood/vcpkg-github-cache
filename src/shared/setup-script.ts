@@ -17,12 +17,25 @@ import { SetupPlan } from "./setup-plan";
 
 const SETUP_SCRIPT_NAME = "setup.sh";
 const SETUP_ENV_NAME = "setup.env";
-const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
+const BSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
+const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "2";
+const FREEBSD_NUGET_VERSION = "6.8.0";
+const FREEBSD_NUGET_URL =
+  "https://dist.nuget.org/win-x86-commandline/v6.8.0/nuget.exe";
+const FREEBSD_NUGET_SHA512 =
+  "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c";
+
+interface BsdNugetMetadata {
+  readonly sha512: string;
+  readonly url: string;
+  readonly version: string;
+}
 
 interface BsdTargetSettings {
   readonly cacheToolPackage: boolean;
   readonly label: string;
   readonly nugetDirectorySuffix: string;
+  readonly nugetMetadata?: BsdNugetMetadata;
   readonly packageInstallCommand: string;
   readonly packageInstallerLabel: string;
   readonly releaseKey: string;
@@ -35,6 +48,11 @@ const FREEBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "FreeBSD",
   nugetDirectorySuffix: "freebsd",
+  nugetMetadata: {
+    sha512: FREEBSD_NUGET_SHA512,
+    url: FREEBSD_NUGET_URL,
+    version: FREEBSD_NUGET_VERSION,
+  },
   packageInstallCommand: "pkg install -y",
   packageInstallerLabel: "pkg",
   releaseKey: "freebsd-release",
@@ -52,7 +70,7 @@ const NETBSD_TARGET: BsdTargetSettings = {
   releaseKey: "netbsd-release",
   targetOs: "netbsd",
   toolPackagePrefix: "vcpkg-tool_netbsd",
-  toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+  toolSchemaVersion: BSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 
 const OPENBSD_TARGET: BsdTargetSettings = {
@@ -64,7 +82,7 @@ const OPENBSD_TARGET: BsdTargetSettings = {
   releaseKey: "openbsd-release",
   targetOs: "openbsd",
   toolPackagePrefix: "vcpkg-tool_openbsd",
-  toolSchemaVersion: FREEBSD_VCPKG_TOOL_SCHEMA_VERSION,
+  toolSchemaVersion: BSD_VCPKG_TOOL_SCHEMA_VERSION,
 };
 
 export interface EmittedSetupFiles {
@@ -649,6 +667,106 @@ export function renderSetupScript(plan: SetupPlan): string {
   }
   script.line("}");
   script.blank();
+  script.line("patch_freebsd_vcpkg_tool_bootstrap() {");
+  if (bsdTarget.targetOs === "freebsd") {
+    script.line('  bootstrap_file="${VCPKG_ROOT}/scripts/bootstrap.sh"');
+    script.line('  if [ ! -f "${bootstrap_file}" ]; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(
+        "FreeBSD vcpkg-tool bootstrap patch skipped: bootstrap helper missing",
+      ),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line(
+      '  if grep -q "vcpkg-github-cache FreeBSD vcpkg-tool NuGet NoHttpCache patch" "${bootstrap_file}"; then',
+    );
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("FreeBSD vcpkg-tool bootstrap patch already applied"),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line(
+      '  tmp_bootstrap_file="${bootstrap_file}.vcpkg-github-cache.tmp"',
+    );
+    script.line("  if ! awk '");
+    script.line("    {");
+    script.line("      print");
+    script.line(
+      '      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtractArchive "\\$archivePath" "\\$srcBaseDir"[[:space:]]*$/) {',
+    );
+    script.line(
+      '        print "    # vcpkg-github-cache FreeBSD vcpkg-tool NuGet NoHttpCache patch"',
+    );
+    script.line(
+      '        print "    if [ \\"$(uname -s)\\" = \\"FreeBSD\\" ]; then"',
+    );
+    script.line(
+      '        print "        binarycaching_cpp=\\"$srcDir/src/vcpkg/binarycaching.cpp\\""',
+    );
+    script.line(
+      '        print "        if [ -f \\"$binarycaching_cpp\\" ]; then"',
+    );
+    script.line(
+      '        print "            tmp_binarycaching_cpp=\\"${binarycaching_cpp}.vcpkg-github-cache.tmp\\""',
+    );
+    script.line(
+      '        print "            if sed \'s/\\\\.string_arg(\\"-DirectDownload\\")\\\\.string_arg(\\"-NoHttpCache\\")/.string_arg(\\"-DirectDownload\\")/\' \\"$binarycaching_cpp\\" > \\"$tmp_binarycaching_cpp\\" && ! cmp -s \\"$binarycaching_cpp\\" \\"$tmp_binarycaching_cpp\\"; then"',
+    );
+    script.line(
+      '        print "                mv \\"$tmp_binarycaching_cpp\\" \\"$binarycaching_cpp\\""',
+    );
+    script.line(
+      '        print "                printf \\"%s\\\\n\\" \\"Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling\\""',
+    );
+    script.line(
+      '        print "            elif grep -q -- \\"-NoHttpCache\\" \\"$binarycaching_cpp\\"; then"',
+    );
+    script.line(
+      '        print "                rm -f \\"$tmp_binarycaching_cpp\\""',
+    );
+    script.line(
+      '        print "                printf \\"%s\\\\n\\" \\"Unable to patch FreeBSD vcpkg-tool NuGet NoHttpCache handling\\""',
+    );
+    script.line('        print "                exit 1"');
+    script.line('        print "            else"');
+    script.line(
+      '        print "                rm -f \\"$tmp_binarycaching_cpp\\""',
+    );
+    script.line(
+      '        print "                printf \\"%s\\\\n\\" \\"FreeBSD vcpkg-tool NuGet NoHttpCache patch skipped\\""',
+    );
+    script.line('        print "            fi"');
+    script.line('        print "        else"');
+    script.line(
+      '        print "            printf \\"%s\\\\n\\" \\"FreeBSD vcpkg-tool NuGet NoHttpCache patch skipped: binarycaching.cpp missing\\""',
+    );
+    script.line('        print "        fi"');
+    script.line('        print "    fi"');
+    script.line("        patched = 1");
+    script.line("      }");
+    script.line("    }");
+    script.line("    END { if (!patched) exit 1 }");
+    script.line('  \' "${bootstrap_file}" > "${tmp_bootstrap_file}"; then');
+    script.line('    rm -f "${tmp_bootstrap_file}"');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Unable to patch FreeBSD vcpkg-tool bootstrap"),
+    ]);
+    script.line("    exit 1");
+    script.line("  fi");
+    script.line('  mv "${tmp_bootstrap_file}" "${bootstrap_file}"');
+    script.command("  printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Patched FreeBSD vcpkg-tool bootstrap"),
+    ]);
+  } else {
+    script.line("  :");
+  }
+  script.line("}");
+  script.blank();
   script.line("sha512_file() {");
   script.line("  if command_exists sha512; then");
   script.line('    sha512 -q "$1"');
@@ -723,98 +841,120 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line('      [ -n "${bsd_nuget_sha512:-}" ]; then');
   script.line("    return");
   script.line("  fi");
-  script.line('  if [ ! -f "${VCPKG_ROOT}/scripts/vcpkg-tools.json" ]; then');
-  script.command("    printf", [
-    posixLiteral("%s\\n"),
-    posixLiteral("vcpkg tool metadata file is missing"),
-  ]);
-  script.line("    exit 1");
-  script.line("  fi");
-  script.line("  bsd_nuget_metadata=$(awk '");
-  script.line("    BEGIN { in_block = 0; found = 0 }");
-  script.line("    /^[[:space:]]*{[[:space:]]*$/ {");
-  script.line("      in_block = 1");
-  script.line('      name = ""; os = ""; version = ""; url = ""; sha512 = ""');
-  script.line("      next");
-  script.line("    }");
-  script.line("    in_block {");
-  script.line("      line = $0");
-  script.line('      if (line ~ /"name"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
-  script.line("        value = line");
-  script.line('        sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", value)');
-  script.line('        sub(/".*$/, "", value)');
-  script.line("        name = value");
-  script.line("      }");
-  script.line('      if (line ~ /"os"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
-  script.line("        value = line");
-  script.line('        sub(/^.*"os"[[:space:]]*:[[:space:]]*"/, "", value)');
-  script.line('        sub(/".*$/, "", value)');
-  script.line("        os = value");
-  script.line("      }");
-  script.line(
-    '      if (line ~ /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) {',
-  );
-  script.line("        value = line");
-  script.line(
-    '        sub(/^.*"version"[[:space:]]*:[[:space:]]*"/, "", value)',
-  );
-  script.line('        sub(/".*$/, "", value)');
-  script.line("        version = value");
-  script.line("      }");
-  script.line('      if (line ~ /"url"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
-  script.line("        value = line");
-  script.line('        sub(/^.*"url"[[:space:]]*:[[:space:]]*"/, "", value)');
-  script.line('        sub(/".*$/, "", value)');
-  script.line("        url = value");
-  script.line("      }");
-  script.line('      if (line ~ /"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
-  script.line("        value = line");
-  script.line(
-    '        sub(/^.*"sha512"[[:space:]]*:[[:space:]]*"/, "", value)',
-  );
-  script.line('        sub(/".*$/, "", value)');
-  script.line("        sha512 = value");
-  script.line("      }");
-  script.line("      if (line ~ /^[[:space:]]*}[,]?[[:space:]]*$/) {");
-  script.line('        if (name == "nuget" && os == "linux") {');
-  script.line(
-    '          if (version == "" || url == "" || sha512 == "") exit 1',
-  );
-  script.line(
-    '          printf "version=%s\\nurl=%s\\nsha512=%s\\n", version, url, sha512',
-  );
-  script.line("          found = 1");
-  script.line("          exit");
-  script.line("        }");
-  script.line("        in_block = 0");
-  script.line("      }");
-  script.line("    }");
-  script.line("    END { if (!found) exit 1 }");
-  script.line('  \' "${VCPKG_ROOT}/scripts/vcpkg-tools.json") || {');
-  script.command("    printf", [
-    posixLiteral("%s\\n"),
-    posixLiteral("Unable to read vcpkg NuGet tool metadata"),
-  ]);
-  script.line("    exit 1");
-  script.line("  }");
-  script.line(
-    "  bsd_nuget_version=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^version=//p')",
-  );
-  script.line(
-    "  bsd_nuget_url=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^url=//p')",
-  );
-  script.line(
-    "  bsd_nuget_sha512=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^sha512=//p')",
-  );
-  script.line('  if [ -z "${bsd_nuget_version}" ] ||');
-  script.line('      [ -z "${bsd_nuget_url}" ] ||');
-  script.line('      [ -z "${bsd_nuget_sha512}" ]; then');
-  script.command("    printf", [
-    posixLiteral("%s\\n"),
-    posixLiteral("vcpkg NuGet tool metadata is incomplete"),
-  ]);
-  script.line("    exit 1");
-  script.line("  fi");
+  if (bsdTarget.nugetMetadata) {
+    script.line(
+      `  bsd_nuget_version=${quotePosixShellLiteral(
+        bsdTarget.nugetMetadata.version,
+      )}`,
+    );
+    script.line(
+      `  bsd_nuget_url=${quotePosixShellLiteral(bsdTarget.nugetMetadata.url)}`,
+    );
+    script.line(
+      `  bsd_nuget_sha512=${quotePosixShellLiteral(
+        bsdTarget.nugetMetadata.sha512,
+      )}`,
+    );
+  } else {
+    script.line('  if [ ! -f "${VCPKG_ROOT}/scripts/vcpkg-tools.json" ]; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("vcpkg tool metadata file is missing"),
+    ]);
+    script.line("    exit 1");
+    script.line("  fi");
+    script.line("  bsd_nuget_metadata=$(awk '");
+    script.line("    BEGIN { in_block = 0; found = 0 }");
+    script.line("    /^[[:space:]]*{[[:space:]]*$/ {");
+    script.line("      in_block = 1");
+    script.line(
+      '      name = ""; os = ""; version = ""; url = ""; sha512 = ""',
+    );
+    script.line("      next");
+    script.line("    }");
+    script.line("    in_block {");
+    script.line("      line = $0");
+    script.line('      if (line ~ /"name"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+    script.line("        value = line");
+    script.line(
+      '        sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", value)',
+    );
+    script.line('        sub(/".*$/, "", value)');
+    script.line("        name = value");
+    script.line("      }");
+    script.line('      if (line ~ /"os"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+    script.line("        value = line");
+    script.line('        sub(/^.*"os"[[:space:]]*:[[:space:]]*"/, "", value)');
+    script.line('        sub(/".*$/, "", value)');
+    script.line("        os = value");
+    script.line("      }");
+    script.line(
+      '      if (line ~ /"version"[[:space:]]*:[[:space:]]*"[^"]+"/) {',
+    );
+    script.line("        value = line");
+    script.line(
+      '        sub(/^.*"version"[[:space:]]*:[[:space:]]*"/, "", value)',
+    );
+    script.line('        sub(/".*$/, "", value)');
+    script.line("        version = value");
+    script.line("      }");
+    script.line('      if (line ~ /"url"[[:space:]]*:[[:space:]]*"[^"]+"/) {');
+    script.line("        value = line");
+    script.line('        sub(/^.*"url"[[:space:]]*:[[:space:]]*"/, "", value)');
+    script.line('        sub(/".*$/, "", value)');
+    script.line("        url = value");
+    script.line("      }");
+    script.line(
+      '      if (line ~ /"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/) {',
+    );
+    script.line("        value = line");
+    script.line(
+      '        sub(/^.*"sha512"[[:space:]]*:[[:space:]]*"/, "", value)',
+    );
+    script.line('        sub(/".*$/, "", value)');
+    script.line("        sha512 = value");
+    script.line("      }");
+    script.line("      if (line ~ /^[[:space:]]*}[,]?[[:space:]]*$/) {");
+    script.line('        if (name == "nuget" && os == "linux") {');
+    script.line(
+      '          if (version == "" || url == "" || sha512 == "") exit 1',
+    );
+    script.line(
+      '          printf "version=%s\\nurl=%s\\nsha512=%s\\n", version, url, sha512',
+    );
+    script.line("          found = 1");
+    script.line("          exit");
+    script.line("        }");
+    script.line("        in_block = 0");
+    script.line("      }");
+    script.line("    }");
+    script.line("    END { if (!found) exit 1 }");
+    script.line('  \' "${VCPKG_ROOT}/scripts/vcpkg-tools.json") || {');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("Unable to read vcpkg NuGet tool metadata"),
+    ]);
+    script.line("    exit 1");
+    script.line("  }");
+    script.line(
+      "  bsd_nuget_version=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^version=//p')",
+    );
+    script.line(
+      "  bsd_nuget_url=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^url=//p')",
+    );
+    script.line(
+      "  bsd_nuget_sha512=$(printf '%s\\n' \"${bsd_nuget_metadata}\" | sed -n 's/^sha512=//p')",
+    );
+    script.line('  if [ -z "${bsd_nuget_version}" ] ||');
+    script.line('      [ -z "${bsd_nuget_url}" ] ||');
+    script.line('      [ -z "${bsd_nuget_sha512}" ]; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral("vcpkg NuGet tool metadata is incomplete"),
+    ]);
+    script.line("    exit 1");
+    script.line("  fi");
+  }
   script.line("  export bsd_nuget_version bsd_nuget_url bsd_nuget_sha512");
   script.command("  printf", [
     posixLiteral("%s%s\\n"),
@@ -949,6 +1089,20 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line(
     `              "\\"os\\": \\"${bsdTarget.targetOs}\\"", bsd_block)`,
   );
+  if (bsdTarget.nugetMetadata) {
+    script.line('          sub(/"version"[[:space:]]*:[[:space:]]*"[^"]+"/,');
+    script.line(
+      `              "\\"version\\": \\"${bsdTarget.nugetMetadata.version}\\"", bsd_block)`,
+    );
+    script.line('          sub(/"url"[[:space:]]*:[[:space:]]*"[^"]+"/,');
+    script.line(
+      `              "\\"url\\": \\"${bsdTarget.nugetMetadata.url}\\"", bsd_block)`,
+    );
+    script.line('          sub(/"sha512"[[:space:]]*:[[:space:]]*"[^"]+"/,');
+    script.line(
+      `              "\\"sha512\\": \\"${bsdTarget.nugetMetadata.sha512}\\"", bsd_block)`,
+    );
+  }
   script.line('          printf "%s", bsd_block');
   script.line("          patched = 1");
   script.line("          next");
@@ -1223,6 +1377,9 @@ export function renderSetupScript(plan: SetupPlan): string {
         posixLiteral("%s\\n"),
         posixLiteral("Bootstrapping vcpkg"),
       ]);
+      if (bsdTarget.targetOs === "freebsd") {
+        script.line("  patch_freebsd_vcpkg_tool_bootstrap");
+      }
       script.line("  patch_netbsd_vcpkg_tool_bootstrap");
       script.line('  "${VCPKG_ROOT}/bootstrap-vcpkg.sh"');
       script.line("  publish_bsd_vcpkg_tool_package");
@@ -1233,6 +1390,9 @@ export function renderSetupScript(plan: SetupPlan): string {
         posixLiteral("Bootstrapping vcpkg"),
       ]);
       if (targetSettings) {
+        if (bsdTarget.targetOs === "freebsd") {
+          script.line("patch_freebsd_vcpkg_tool_bootstrap");
+        }
         script.line("patch_netbsd_vcpkg_tool_bootstrap");
       }
       script.line('"${VCPKG_ROOT}/bootstrap-vcpkg.sh"');

@@ -71,18 +71,33 @@ describe("setup script emission", () => {
     expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
     expect(script).toContain("set_bsd_nuget_metadata");
     expect(script).toContain("FreeBSD NuGet version: ");
-    expect(script).toContain("bsd_nuget_metadata=$(awk '");
+    expect(script).not.toContain("bsd_nuget_metadata=$(awk '");
+    expect(script).toContain("bsd_nuget_version='6.8.0'");
+    expect(script).toContain(
+      "bsd_nuget_url='https://dist.nuget.org/win-x86-commandline/v6.8.0/nuget.exe'",
+    );
+    expect(script).toContain(
+      "bsd_nuget_sha512='337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c'",
+    );
     expect(script).toContain("nuget-${bsd_nuget_version}-freebsd");
     expect(script).toContain(
       'curl -L -o "${nuget_exe}.tmp" "${bsd_nuget_url}"',
     );
     expect(script).toContain('expected_hash="${bsd_nuget_sha512}"');
-    expect(script).not.toContain('\\"version\\": \\"6.8.0\\"');
-    expect(script).not.toContain("/v6.8.0/nuget.exe");
-    expect(script).not.toContain(
+    expect(script).toContain('\\"version\\": \\"6.8.0\\"');
+    expect(script).toContain("/v6.8.0/nuget.exe");
+    expect(script).toContain(
       "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c",
     );
+    expect(script).toContain("patch_freebsd_vcpkg_tool_bootstrap");
+    expect(script).toContain(
+      "Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling",
+    );
+    expect(script).toContain(
+      "Unable to patch FreeBSD vcpkg-tool NuGet NoHttpCache handling",
+    );
     expect(script).toContain("set_bsd_vcpkg_tool_identity");
+    expect(script).toContain("printf '%s=%s\\n' 'schema' '2'");
     expect(script).toContain("VCPKG_TOOL_PACKAGE_ID=");
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
@@ -159,8 +174,13 @@ describe("setup script emission", () => {
     ).toHaveLength(1);
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added OpenBSD NuGet tool metadata to vcpkg");
+    expect(script).toContain("bsd_nuget_metadata=$(awk '");
     expect(script).toContain('nuget-${bsd_nuget_version}-openbsd"');
     expect(script).toContain('\\"os\\": \\"openbsd\\"');
+    expect(script).not.toContain("/v6.8.0/nuget.exe");
+    expect(script).not.toContain(
+      "Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling",
+    );
     expect(script).toContain("target-os openbsd");
     expect(script).toContain('openbsd-release "${bsd_release}"');
     expect(script).toContain("vcpkg-tool_openbsd-octo-repo-${tool_arch}");
@@ -226,8 +246,13 @@ describe("setup script emission", () => {
     expect(script).toContain("configure_github_nuget_source");
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added NetBSD NuGet tool metadata to vcpkg");
+    expect(script).toContain("bsd_nuget_metadata=$(awk '");
     expect(script).toContain('nuget-${bsd_nuget_version}-netbsd"');
     expect(script).toContain('\\"os\\": \\"netbsd\\"');
+    expect(script).not.toContain("/v6.8.0/nuget.exe");
+    expect(script).not.toContain(
+      "Patched FreeBSD vcpkg-tool NuGet NoHttpCache handling",
+    );
     expect(script).toContain("target-os netbsd");
     expect(script).toContain('netbsd-release "${bsd_release}"');
     expect(script).toContain("vcpkg-tool_netbsd-octo-repo-${tool_arch}");
