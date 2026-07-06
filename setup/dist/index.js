@@ -32365,6 +32365,7 @@ function renderSetupScript(plan) {
         posixLiteral(" "),
         posixRuntimeExpression('"${VCPKG_TOOL_PACKAGE_VERSION}"'),
     ]);
+    script.line("  run_nuget locals http-cache -clear || true");
     script.line("  if run_nuget install \\");
     script.line('      "${VCPKG_TOOL_PACKAGE_ID}" \\');
     script.line('      -Version "${VCPKG_TOOL_PACKAGE_VERSION}" \\');
