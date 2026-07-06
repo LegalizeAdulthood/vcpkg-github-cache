@@ -495,6 +495,58 @@ describe("cache diagnosis", () => {
     expect(diagnosis.diagnosis).not.toContain("upload failure");
   });
 
+  test("classifies BSD vcpkg tool publish failures as upload failures", () => {
+    const diagnosis = classifyCache({
+      buildLogFacts: {
+        authMessages: [
+          "WARNING: Your request could not be authenticated by the GitHub Packages service.",
+        ],
+        builtCount: 3,
+        builtPackages: [],
+        failedHttpStatuses: ["403"],
+        feeds: [],
+        nugetConfigPaths: [],
+        packageAbiHashes: [],
+        packageHandleTimes: [],
+        packageUploadStatuses: [
+          {
+            packageId: "fmt_x64-freebsd-vcpkg-github-cache",
+            packageSpec: "fmt:x64-freebsd-vcpkg-github-cache@12.2.0",
+            status: "already present",
+          },
+        ],
+        quotaMessages: [],
+        requestedCount: 3,
+        restoredCount: 0,
+        restoredPackages: [],
+        submissionsStarted: 1,
+        uploadedCount: undefined,
+        uploadsAttempted: 1,
+        vcpkgTool: {
+          packageId: "vcpkg-tool_freebsd-octo-repo-x64",
+          publishStatus: "failed",
+          status: "built-from-source",
+          version: "1.0.0-vcpkgtoolabcdef0123456789",
+        },
+        writeDeniedPackages: [],
+        zeroCacheSubmissions: 1,
+      },
+      liveProbes: liveProbes(),
+      requestedCount: 3,
+      restoreProbe: restoreProbe(
+        "failed",
+        "NuGet restore failed; restored 0/3 packages",
+        0,
+      ),
+      tokenKind: "github",
+    });
+
+    expect(diagnosis.cacheStatus).toBe("upload-failure");
+    expect(diagnosis.failureKind).toBe("upload-failure");
+    expect(diagnosis.diagnosis).toContain("vcpkg tool package publish failed");
+    expect(diagnosis.diagnosis).toContain("vcpkg-tool_freebsd-octo-repo-x64");
+  });
+
   test("classifies exact restore health without a build log", () => {
     const diagnosis = classifyCache({
       liveProbes: liveProbes(),

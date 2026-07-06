@@ -621,6 +621,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build.log
+          setup-log: setup.log
           fail-on: never
 
       - name: Assert fixture cache status
@@ -673,6 +674,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build-warm.log
+          setup-log: tool-warm.log
           fail-on: never
 
       - name: Assert warm fixture cache status
@@ -804,6 +806,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build.log
+          setup-log: setup.log
           fail-on: never
 
       - name: Assert fixture cache status
@@ -856,6 +859,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build-warm.log
+          setup-log: tool-warm.log
           fail-on: never
 
       - name: Assert warm fixture cache status
@@ -988,6 +992,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build.log
+          setup-log: setup.log
           fail-on: never
 
       - name: Assert fixture cache status
@@ -1040,6 +1045,7 @@ jobs:
           token: ${{ github.token }}
           vcpkg-root: vcpkg
           build-log: build-warm.log
+          setup-log: tool-warm.log
           fail-on: never
 
       - name: Assert warm fixture cache status

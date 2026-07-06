@@ -49,6 +49,7 @@ export interface SetupPlan {
   readonly feedUrl: string;
   readonly installMono: boolean;
   readonly installNuget: boolean;
+  readonly packageScope: string;
   readonly scriptDirectory: string;
   readonly sourceName: string;
   readonly targetOs: SetupTargetOs;
@@ -61,6 +62,19 @@ export interface SetupPlan {
 
 function defaultInput(value: string | undefined, defaultValue: string): string {
   return value?.trim() || defaultValue;
+}
+
+function packageScope(
+  repository: string | undefined,
+  feedOwner: string,
+): string {
+  return (
+    (repository?.trim() || feedOwner)
+      .trim()
+      .replace(/[^A-Za-z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "unknown"
+  );
 }
 
 export function buildSetupPlan(inputs: SetupPlanInputs): SetupPlan {
@@ -110,6 +124,7 @@ export function buildSetupPlan(inputs: SetupPlanInputs): SetupPlan {
     feedUrl,
     installMono,
     installNuget,
+    packageScope: packageScope(inputs.repository, feedOwner),
     scriptDirectory,
     sourceName,
     targetOs,

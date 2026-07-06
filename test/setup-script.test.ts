@@ -79,7 +79,7 @@ describe("setup script emission", () => {
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
     expect(script).toContain("publish_bsd_vcpkg_tool_package");
-    expect(script).toContain("vcpkg-tool_freebsd-${tool_arch}");
+    expect(script).toContain("vcpkg-tool_freebsd-octo-repo-${tool_arch}");
     expect(script).toContain("1.0.0-vcpkgtool${identity_hash}");
     expect(script).toContain("run_nuget install \\");
     expect(script).toContain("run_nuget pack \\");
@@ -155,7 +155,7 @@ describe("setup script emission", () => {
     expect(script).toContain('\\"os\\": \\"openbsd\\"');
     expect(script).toContain("target-os openbsd");
     expect(script).toContain('openbsd-release "${bsd_release}"');
-    expect(script).toContain("vcpkg-tool_openbsd-${tool_arch}");
+    expect(script).toContain("vcpkg-tool_openbsd-octo-repo-${tool_arch}");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
     expect(script).toContain("publish_bsd_vcpkg_tool_package");
     expect(script).toContain("Restoring OpenBSD vcpkg tool package: ");
@@ -222,7 +222,7 @@ describe("setup script emission", () => {
     expect(script).toContain('\\"os\\": \\"netbsd\\"');
     expect(script).toContain("target-os netbsd");
     expect(script).toContain('netbsd-release "${bsd_release}"');
-    expect(script).toContain("vcpkg-tool_netbsd-${tool_arch}");
+    expect(script).toContain("vcpkg-tool_netbsd-octo-repo-${tool_arch}");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
     expect(script).toContain("publish_bsd_vcpkg_tool_package");
     expect(script).toContain("Restoring NetBSD vcpkg tool package: ");
