@@ -142273,6 +142273,17 @@ function uploadFailureEvidence(buildLogFacts, packageMetadata, uploadedCount) {
             : "",
     ];
 }
+function vcpkgToolUploadFailureEvidence(buildLogFacts) {
+    const tool = buildLogFacts.vcpkgTool;
+    return [
+        "vcpkg tool package publish failed",
+        tool?.packageId ? `vcpkg tool package ${tool.packageId}` : "",
+        tool?.version ? `vcpkg tool version ${tool.version}` : "",
+        buildLogFacts.authMessages.length
+            ? `auth messages ${buildLogFacts.authMessages.length}`
+            : "",
+    ];
+}
 function cacheDisabled(buildLogFacts) {
     if (!buildLogFacts) {
         return false;
@@ -142315,6 +142326,12 @@ function classifyBuildLog(input) {
         return result("quota-failure", "quota", [
             ...baseEvidence,
             `quota messages ${input.buildLogFacts.quotaMessages.length}`,
+        ]);
+    }
+    if (input.buildLogFacts?.vcpkgTool?.publishStatus === "failed") {
+        return result("upload-failure", "upload-failure", [
+            ...baseEvidence,
+            ...vcpkgToolUploadFailureEvidence(input.buildLogFacts),
         ]);
     }
     if (!failedUploads && input.buildLogFacts?.authMessages.length) {
@@ -143561,14 +143578,24 @@ function logBuildLogFacts(buildLogFacts, deniedReports, missedReports, systemDep
         info(`Build log NuGet config: ${configPath}`);
     }
 }
-async function readBuildLogFacts(buildLog, workspace, traceLogger) {
-    if (!buildLog) {
+async function readLogContent(inputName, logPath, workspace, traceLogger) {
+    const resolvedPath = external_node_path_.resolve(workspace, logPath);
+    traceLogger.path(inputName, resolvedPath);
+    return await traceLogger.step(`read ${inputName}`, async () => (0,promises_.readFile)(resolvedPath, "utf8"));
+}
+async function readBuildLogFacts(buildLog, setupLog, workspace, traceLogger) {
+    if (!buildLog && !setupLog) {
         traceLogger.decision("build log", "not supplied");
         return undefined;
     }
-    const buildLogPath = external_node_path_.resolve(workspace, buildLog);
-    traceLogger.path("build log", buildLogPath);
-    const content = await traceLogger.step("read build log", async () => (0,promises_.readFile)(buildLogPath, "utf8"));
+    const logReads = [];
+    if (buildLog) {
+        logReads.push(readLogContent("build log", buildLog, workspace, traceLogger));
+    }
+    if (setupLog) {
+        logReads.push(readLogContent("setup log", setupLog, workspace, traceLogger));
+    }
+    const content = (await Promise.all(logReads)).join("\n");
     return await traceLogger.step("parse build log", async () => parseBuildLog(content));
 }
 async function writeSummary(diagnosis, cacheStatus, failureKind, feedUrl, liveProbes, restoreProbe, buildLogFacts, packageConfigCount, requestedCount, restoredCount, builtCount, uploadedCount, deniedReports, missedReports, systemDependencyReports, verbose) {
@@ -143639,6 +143666,7 @@ async function run() {
     const debug = parseBoolean(optionalInput("debug", "false"));
     const trace = parseBoolean(optionalInput("trace", "false"));
     const buildLog = optionalInput("build-log");
+    const setupLog = optionalInput("setup-log");
     const artifactName = optionalInput("artifact-name");
     const packageConfigGlob = optionalInput("package-config-glob", "**/packages.config");
     const failOn = optionalInput("fail-on", "never");
@@ -143658,6 +143686,7 @@ async function run() {
         traceLogger.input("username", username);
         traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
         traceLogger.input("build-log", buildLog);
+        traceLogger.input("setup-log", setupLog);
         traceLogger.input("artifact-name", artifactName);
         traceLogger.input("package-config-glob", packageConfigGlob);
         traceLogger.input("fail-on", failOn);
@@ -143668,7 +143697,7 @@ async function run() {
         traceLogger.path("vcpkg executable", vcpkg.executable);
     }
     const packageConfigs = await traceLogger.step("discover packages.config files", async () => discoverPackageConfigs(workspace, packageConfigGlob));
-    const buildLogFacts = await readBuildLogFacts(buildLog, workspace, traceLogger);
+    const buildLogFacts = await readBuildLogFacts(buildLog, setupLog, workspace, traceLogger);
     const liveProbes = await traceLogger.step("run live probes", async () => runAnalyzerLiveProbes({
         feedUrl,
         run: tracedRun,
@@ -143783,6 +143812,7 @@ async function run() {
         info(`vcpkg root: ${vcpkg.root}`);
         info(`vcpkg executable: ${vcpkg.executable}`);
         info(`build-log: ${buildLog}`);
+        info(`setup-log: ${setupLog}`);
         info(`artifact-name: ${artifactName}`);
         info(`package-config-glob: ${packageConfigGlob}`);
         info(`fail-on: ${failOn}`);

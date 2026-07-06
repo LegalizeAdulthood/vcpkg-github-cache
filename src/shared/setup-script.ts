@@ -721,7 +721,7 @@ export function renderSetupScript(plan: SetupPlan): string {
     '  identity_hash=$(sha512_file "${identity_file}" | cut -c 1-16)',
   );
   script.line(
-    `  VCPKG_TOOL_PACKAGE_ID="${bsdTarget.toolPackagePrefix}-\${tool_arch}"`,
+    `  VCPKG_TOOL_PACKAGE_ID="${bsdTarget.toolPackagePrefix}-${plan.packageScope}-\${tool_arch}"`,
   );
   script.line('  VCPKG_TOOL_PACKAGE_VERSION="1.0.0-vcpkgtool${identity_hash}"');
   script.line("  export VCPKG_TOOL_PACKAGE_ID");

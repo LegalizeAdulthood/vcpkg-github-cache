@@ -200,6 +200,7 @@ steps:
     with:
       token: ${{ github.token }}
       build-log: build.log
+      setup-log: setup.log
       artifact-name: freebsd-cache-${{ github.run_attempt }}
       fail-on: "never"
 ```
@@ -285,6 +286,7 @@ steps:
     with:
       token: ${{ github.token }}
       build-log: build.log
+      setup-log: setup.log
       artifact-name: openbsd-cache-${{ github.run_attempt }}
       fail-on: "never"
 
@@ -371,6 +373,7 @@ steps:
     with:
       token: ${{ github.token }}
       build-log: build.log
+      setup-log: setup.log
       artifact-name: netbsd-cache-${{ github.run_attempt }}
       fail-on: "never"
 
@@ -465,6 +468,7 @@ and `"false"` in workflow YAML.
 - `feed-owner`: optional.  GitHub owner that hosts the NuGet feed.
 - `vcpkg-root`: default `"vcpkg"`.  Path to the vcpkg checkout.
 - `build-log`: optional path to a captured build log.
+- `setup-log`: optional path to a captured setup log.
 - `artifact-name`: optional diagnostics artifact name.  Defaults to a
   generated name.
 - `package-config-glob`: default `"**/packages.config"`.  Glob used to find

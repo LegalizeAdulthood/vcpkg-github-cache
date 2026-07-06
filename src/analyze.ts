@@ -427,21 +427,46 @@ function logBuildLogFacts(
   }
 }
 
+async function readLogContent(
+  inputName: string,
+  logPath: string,
+  workspace: string,
+  traceLogger: TraceLogger,
+): Promise<string> {
+  const resolvedPath = path.resolve(workspace, logPath);
+  traceLogger.path(inputName, resolvedPath);
+
+  return await traceLogger.step(`read ${inputName}`, async () =>
+    readFile(resolvedPath, "utf8"),
+  );
+}
+
 async function readBuildLogFacts(
   buildLog: string,
+  setupLog: string,
   workspace: string,
   traceLogger: TraceLogger,
 ): Promise<BuildLogFacts | undefined> {
-  if (!buildLog) {
+  if (!buildLog && !setupLog) {
     traceLogger.decision("build log", "not supplied");
     return undefined;
   }
 
-  const buildLogPath = path.resolve(workspace, buildLog);
-  traceLogger.path("build log", buildLogPath);
-  const content = await traceLogger.step("read build log", async () =>
-    readFile(buildLogPath, "utf8"),
-  );
+  const logReads: Promise<string>[] = [];
+
+  if (buildLog) {
+    logReads.push(
+      readLogContent("build log", buildLog, workspace, traceLogger),
+    );
+  }
+
+  if (setupLog) {
+    logReads.push(
+      readLogContent("setup log", setupLog, workspace, traceLogger),
+    );
+  }
+
+  const content = (await Promise.all(logReads)).join("\n");
 
   return await traceLogger.step("parse build log", async () =>
     parseBuildLog(content),
@@ -552,6 +577,7 @@ export async function run(): Promise<void> {
   const debug = parseBoolean(optionalInput("debug", "false"));
   const trace = parseBoolean(optionalInput("trace", "false"));
   const buildLog = optionalInput("build-log");
+  const setupLog = optionalInput("setup-log");
   const artifactName = optionalInput("artifact-name");
   const packageConfigGlob = optionalInput(
     "package-config-glob",
@@ -578,6 +604,7 @@ export async function run(): Promise<void> {
     traceLogger.input("username", username);
     traceLogger.input("vcpkg-root", optionalInput("vcpkg-root", "vcpkg"));
     traceLogger.input("build-log", buildLog);
+    traceLogger.input("setup-log", setupLog);
     traceLogger.input("artifact-name", artifactName);
     traceLogger.input("package-config-glob", packageConfigGlob);
     traceLogger.input("fail-on", failOn);
@@ -594,6 +621,7 @@ export async function run(): Promise<void> {
   );
   const buildLogFacts = await readBuildLogFacts(
     buildLog,
+    setupLog,
     workspace,
     traceLogger,
   );
@@ -763,6 +791,7 @@ export async function run(): Promise<void> {
     core.info(`vcpkg root: ${vcpkg.root}`);
     core.info(`vcpkg executable: ${vcpkg.executable}`);
     core.info(`build-log: ${buildLog}`);
+    core.info(`setup-log: ${setupLog}`);
     core.info(`artifact-name: ${artifactName}`);
     core.info(`package-config-glob: ${packageConfigGlob}`);
     core.info(`fail-on: ${failOn}`);

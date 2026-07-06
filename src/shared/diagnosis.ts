@@ -209,6 +209,21 @@ function uploadFailureEvidence(
   ];
 }
 
+function vcpkgToolUploadFailureEvidence(
+  buildLogFacts: BuildLogFacts,
+): string[] {
+  const tool = buildLogFacts.vcpkgTool;
+
+  return [
+    "vcpkg tool package publish failed",
+    tool?.packageId ? `vcpkg tool package ${tool.packageId}` : "",
+    tool?.version ? `vcpkg tool version ${tool.version}` : "",
+    buildLogFacts.authMessages.length
+      ? `auth messages ${buildLogFacts.authMessages.length}`
+      : "",
+  ];
+}
+
 function cacheDisabled(buildLogFacts: BuildLogFacts | undefined): boolean {
   if (!buildLogFacts) {
     return false;
@@ -270,6 +285,13 @@ function classifyBuildLog(input: CacheDiagnosisInput): CacheDiagnosis {
     return result("quota-failure", "quota", [
       ...baseEvidence,
       `quota messages ${input.buildLogFacts.quotaMessages.length}`,
+    ]);
+  }
+
+  if (input.buildLogFacts?.vcpkgTool?.publishStatus === "failed") {
+    return result("upload-failure", "upload-failure", [
+      ...baseEvidence,
+      ...vcpkgToolUploadFailureEvidence(input.buildLogFacts),
     ]);
   }
 
