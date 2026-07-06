@@ -69,9 +69,17 @@ describe("setup script emission", () => {
     expect(script).toContain("has_bsd_nuget_tool");
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added FreeBSD NuGet tool metadata to vcpkg");
-    expect(script).toContain('\\"version\\": \\"6.8.0\\"');
-    expect(script).toContain("/v6.8.0/nuget.exe");
+    expect(script).toContain("set_bsd_nuget_metadata");
+    expect(script).toContain("FreeBSD NuGet version: ");
+    expect(script).toContain("bsd_nuget_metadata=$(awk '");
+    expect(script).toContain("nuget-${bsd_nuget_version}-freebsd");
     expect(script).toContain(
+      'curl -L -o "${nuget_exe}.tmp" "${bsd_nuget_url}"',
+    );
+    expect(script).toContain('expected_hash="${bsd_nuget_sha512}"');
+    expect(script).not.toContain('\\"version\\": \\"6.8.0\\"');
+    expect(script).not.toContain("/v6.8.0/nuget.exe");
+    expect(script).not.toContain(
       "337d517ae6459ebb140a0c5bedff9ed205f46fafcd9a4efb83c12b12118844ce239b35885defcac4271bb1e397385e02ef3b6f585e5af7ea0d4b8868ed32310c",
     );
     expect(script).toContain("set_bsd_vcpkg_tool_identity");
@@ -151,7 +159,7 @@ describe("setup script emission", () => {
     ).toHaveLength(1);
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added OpenBSD NuGet tool metadata to vcpkg");
-    expect(script).toContain('nuget-6.8.0-openbsd"');
+    expect(script).toContain('nuget-${bsd_nuget_version}-openbsd"');
     expect(script).toContain('\\"os\\": \\"openbsd\\"');
     expect(script).toContain("target-os openbsd");
     expect(script).toContain('openbsd-release "${bsd_release}"');
@@ -218,7 +226,7 @@ describe("setup script emission", () => {
     expect(script).toContain("configure_github_nuget_source");
     expect(script).toContain("enable_bsd_nuget_tool");
     expect(script).toContain("Added NetBSD NuGet tool metadata to vcpkg");
-    expect(script).toContain('nuget-6.8.0-netbsd"');
+    expect(script).toContain('nuget-${bsd_nuget_version}-netbsd"');
     expect(script).toContain('\\"os\\": \\"netbsd\\"');
     expect(script).toContain("target-os netbsd");
     expect(script).toContain('netbsd-release "${bsd_release}"');
