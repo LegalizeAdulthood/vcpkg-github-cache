@@ -115,9 +115,7 @@ describe("setup script emission", () => {
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
     expect(script).toContain("validate_restored_bsd_vcpkg_tool");
-    expect(script).toContain(
-      'VCPKG_FORCE_SYSTEM_BINARIES=1 "${vcpkg_exe}" fetch nuget',
-    );
+    expect(script).toContain('"${vcpkg_exe}" fetch nuget');
     expect(script).toContain(
       "FreeBSD vcpkg tool package is incompatible with this vcpkg checkout",
     );

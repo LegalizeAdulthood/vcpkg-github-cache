@@ -32380,7 +32380,7 @@ function renderSetupScript(plan, vcpkgCommit) {
     script.line("}");
     script.blank();
     script.line("validate_restored_bsd_vcpkg_tool() {");
-    script.line('  if VCPKG_FORCE_SYSTEM_BINARIES=1 "${vcpkg_exe}" fetch nuget >/dev/null 2>&1; then');
+    script.line('  if "${vcpkg_exe}" fetch nuget >/dev/null 2>&1; then');
     script.line("    return 0");
     script.line("  fi");
     script.command("  printf", [
