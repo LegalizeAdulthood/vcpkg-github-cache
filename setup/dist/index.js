@@ -11469,8 +11469,8 @@ module.exports = {
 const { Transform } = __nccwpck_require__(7075)
 const { Console } = __nccwpck_require__(7540)
 
-const PERSISTENT = process.versions.icu ? 'Y' : 'Y '
-const NOT_PERSISTENT = process.versions.icu ? 'N' : 'N '
+const PERSISTENT = process.versions.icu ? 'OK' : 'Y '
+const NOT_PERSISTENT = process.versions.icu ? 'NO' : 'N '
 
 /**
  * Gets the output of `console.table(...)` as a string.
@@ -15130,7 +15130,7 @@ function cloneBody (instance, body) {
 
   // https://fetch.spec.whatwg.org/#concept-body-clone
 
-  // 1. Let " out1, out2 " be the result of teeing body's stream.
+  // 1. Let << out1, out2 >> be the result of teeing body's stream.
   const [out1, out2] = body.stream.tee()
 
   // 2. Set body's stream to out1.
@@ -17770,7 +17770,7 @@ class Headers {
   getSetCookie () {
     webidl.brandCheck(this, Headers)
 
-    // 1. If this's header list does not contain `Set-Cookie`, then return " ".
+    // 1. If this's header list does not contain `Set-Cookie`, then return << >>.
     // 2. Return the values of all headers in this's header list whose name is
     //    a byte-case-insensitive match for `Set-Cookie`, in order.
 
@@ -18717,7 +18717,7 @@ function schemeFetch (fetchParams) {
   switch (scheme) {
     case 'about:': {
       // If request's current URL's path is the string "blank", then return a new response
-      // whose status message is `OK`, header list is " (`Content-Type`, `text/html;charset=utf-8`) ",
+      // whose status message is `OK`, header list is << (`Content-Type`, `text/html;charset=utf-8`) >>,
       // and body is the empty byte sequence as a body.
 
       // Otherwise, return a network error.
@@ -18775,7 +18775,7 @@ function schemeFetch (fetchParams) {
         // 3. Set response's body to bodyWithType's body.
         response.body = bodyWithType[0]
 
-        // 4. Set response's header list to " (`Content-Length`, serializedFullLength), (`Content-Type`, type) ".
+        // 4. Set response's header list to << (`Content-Length`, serializedFullLength), (`Content-Type`, type) >>.
         response.headersList.set('content-length', serializedFullLength, true)
         response.headersList.set('content-type', type, true)
       } else {
@@ -18841,8 +18841,8 @@ function schemeFetch (fetchParams) {
         // 14. Set response's status message to `Partial Content`.
         response.statusText = 'Partial Content'
 
-        // 15. Set response's header list to " (`Content-Length`, serializedSlicedLength),
-        //     (`Content-Type`, type), (`Content-Range`, contentRange) ".
+        // 15. Set response's header list to << (`Content-Length`, serializedSlicedLength),
+        //     (`Content-Type`, type), (`Content-Range`, contentRange) >>.
         response.headersList.set('content-length', serializedSlicedLength, true)
         response.headersList.set('content-type', type, true)
         response.headersList.set('content-range', contentRange, true)
@@ -18867,7 +18867,7 @@ function schemeFetch (fetchParams) {
       const mimeType = serializeAMimeType(dataURLStruct.mimeType)
 
       // 4. Return a response whose status message is `OK`,
-      //    header list is " (`Content-Type`, mimeType) ",
+      //    header list is << (`Content-Type`, mimeType) >>,
       //    and body is dataURLStruct's body as a body.
       return Promise.resolve(makeResponse({
         statusText: 'OK',
@@ -20454,7 +20454,7 @@ class Request {
       // 7. Set request's URL to request's current URL.
       request.url = request.urlList[request.urlList.length - 1]
 
-      // 8. Set request's URL list to " request's URL ".
+      // 8. Set request's URL list to << request's URL >>.
       request.urlList = [request.url]
     }
 
@@ -22067,7 +22067,7 @@ function setRequestReferrerPolicyOnRedirect (request, actualResponse) {
   //  updates request's referrer policy according to the Referrer-Policy
   //  header (if any) in actualResponse.
 
-  // 1. Let policy be the result of executing S 8.1 Parse a referrer policy
+  // 1. Let policy be the result of executing section 8.1 Parse a referrer policy
   // from a Referrer-Policy header on actualResponse.
 
   // 8.1 Parse a referrer policy from a Referrer-Policy header
@@ -22387,7 +22387,7 @@ function stripURLForReferrer (url, originOnly) {
 
   // 6. If the origin-only flag is true, then:
   if (originOnly) {
-    // 1. Set url's path to " the empty string ".
+    // 1. Set url's path to << the empty string >>.
     url.pathname = ''
 
     // 2. Set url's query to null.
@@ -22695,7 +22695,7 @@ function normalizeMethod (method) {
 
 // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-a-json-string
 function serializeJavascriptValueToJSONString (value) {
-  // 1. Let result be ? Call(%JSON.stringify%, undefined, " value ").
+  // 1. Let result be ? Call(%JSON.stringify%, undefined, << value >>).
   const result = JSON.stringify(value)
 
   // 2. If result is undefined, then throw a TypeError.
@@ -23665,7 +23665,7 @@ webidl.util.ConvertToInt = function (V, bitLength, signedness, opts) {
   // 6. If the conversion is to an IDL type associated
   //    with the [EnforceRange] extended attribute, then:
   if (opts?.enforceRange === true) {
-    // 1. If x is NaN, +Infinity, or -Infinity, then throw a TypeError.
+    // 1. If x is NaN, +infinity, or -infinity, then throw a TypeError.
     if (
       Number.isNaN(x) ||
       x === Number.POSITIVE_INFINITY ||
@@ -23713,7 +23713,7 @@ webidl.util.ConvertToInt = function (V, bitLength, signedness, opts) {
     return x
   }
 
-  // 8. If x is NaN, +0, +Infinity, or -Infinity, then return +0.
+  // 8. If x is NaN, +0, +infinity, or -infinity, then return +0.
   if (
     Number.isNaN(x) ||
     (x === 0 && Object.is(0, x)) ||
@@ -32059,6 +32059,69 @@ function renderSetupScript(plan, vcpkgCommit) {
     }
     script.line("}");
     script.blank();
+    script.line("patch_bsd_vcpkg_spdx_json_string_encode() {");
+    if (targetSettings) {
+        script.line('  spdx_file="${VCPKG_ROOT}/scripts/cmake/z_vcpkg_spdx.cmake"');
+        script.line('  if [ ! -f "${spdx_file}" ]; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral(`${bsdTarget.label} vcpkg SPDX patch skipped: helper missing`),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}"; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral(`${bsdTarget.label} vcpkg SPDX patch skipped: not needed`),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  if grep -q "vcpkg-github-cache JSON string fallback" "${spdx_file}"; then');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral(`${bsdTarget.label} vcpkg SPDX patch already applied`),
+        ]);
+        script.line("    return");
+        script.line("  fi");
+        script.line('  tmp_spdx_file="${spdx_file}.vcpkg-github-cache.tmp"');
+        script.line("  if ! awk '");
+        script.line('    /string\\(JSON value STRING_ENCODE "\\$\\{arg_NAME\\}"\\)/ {');
+        script.line('      print "    # vcpkg-github-cache JSON string fallback"');
+        script.line('      print "    set(value \\"\\\\\\"${arg_NAME}\\\\\\"\\")"');
+        script.line("      patched++");
+        script.line("      next");
+        script.line("    }");
+        script.line('    /string\\(JSON value STRING_ENCODE "\\$\\{arg_FILENAME\\}"\\)/ {');
+        script.line('      print "        set(value \\"\\\\\\"${arg_FILENAME}\\\\\\"\\")"');
+        script.line("      patched++");
+        script.line("      next");
+        script.line("    }");
+        script.line('    /string\\(JSON value STRING_ENCODE "\\$\\{arg_DOWNLOAD_LOCATION\\}"\\)/ {');
+        script.line('      print "    set(value \\"\\\\\\"${arg_DOWNLOAD_LOCATION}\\\\\\"\\")"');
+        script.line("      patched++");
+        script.line("      next");
+        script.line("    }");
+        script.line("    { print }");
+        script.line("    END { if (patched != 3) exit 1 }");
+        script.line('  \' "${spdx_file}" > "${tmp_spdx_file}"; then');
+        script.line('    rm -f "${tmp_spdx_file}"');
+        script.command("    printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral(`Unable to patch ${bsdTarget.label} vcpkg SPDX JSON string encoding`),
+        ]);
+        script.line("    exit 1");
+        script.line("  fi");
+        script.line('  mv "${tmp_spdx_file}" "${spdx_file}"');
+        script.command("  printf", [
+            posixLiteral("%s\\n"),
+            posixLiteral(`Patched ${bsdTarget.label} vcpkg SPDX JSON string encoding`),
+        ]);
+    }
+    else {
+        script.line("  :");
+    }
+    script.line("}");
+    script.blank();
     script.line("sha512_file() {");
     script.line("  if command_exists sha512; then");
     script.line('    sha512 -q "$1"');
@@ -32380,7 +32443,7 @@ function renderSetupScript(plan, vcpkgCommit) {
     script.line("}");
     script.blank();
     script.line("validate_restored_bsd_vcpkg_tool() {");
-    script.line('  if "${vcpkg_exe}" fetch nuget >/dev/null 2>&1; then');
+    script.line('  if "${vcpkg_exe}" version >/dev/null 2>&1; then');
     script.line("    return 0");
     script.line("  fi");
     script.command("  printf", [
@@ -32547,6 +32610,7 @@ function renderSetupScript(plan, vcpkgCommit) {
     script.blank();
     if (targetSettings) {
         script.line("ensure_netbsd_vcpkg_toolchain");
+        script.line("patch_bsd_vcpkg_spdx_json_string_encode");
         script.blank();
     }
     if (plan.installNuget && targetSettings) {

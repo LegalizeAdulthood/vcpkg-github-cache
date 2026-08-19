@@ -793,6 +793,86 @@ export function renderSetupScript(
   }
   script.line("}");
   script.blank();
+  script.line("patch_bsd_vcpkg_spdx_json_string_encode() {");
+  if (targetSettings) {
+    script.line('  spdx_file="${VCPKG_ROOT}/scripts/cmake/z_vcpkg_spdx.cmake"');
+    script.line('  if [ ! -f "${spdx_file}" ]; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(
+        `${bsdTarget.label} vcpkg SPDX patch skipped: helper missing`,
+      ),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}"; then');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(`${bsdTarget.label} vcpkg SPDX patch skipped: not needed`),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line(
+      '  if grep -q "vcpkg-github-cache JSON string fallback" "${spdx_file}"; then',
+    );
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(`${bsdTarget.label} vcpkg SPDX patch already applied`),
+    ]);
+    script.line("    return");
+    script.line("  fi");
+    script.line('  tmp_spdx_file="${spdx_file}.vcpkg-github-cache.tmp"');
+    script.line("  if ! awk '");
+    script.line(
+      '    /string\\(JSON value STRING_ENCODE "\\$\\{arg_NAME\\}"\\)/ {',
+    );
+    script.line('      print "    # vcpkg-github-cache JSON string fallback"');
+    script.line('      print "    set(value \\"\\\\\\"${arg_NAME}\\\\\\"\\")"');
+    script.line("      patched++");
+    script.line("      next");
+    script.line("    }");
+    script.line(
+      '    /string\\(JSON value STRING_ENCODE "\\$\\{arg_FILENAME\\}"\\)/ {',
+    );
+    script.line(
+      '      print "        set(value \\"\\\\\\"${arg_FILENAME}\\\\\\"\\")"',
+    );
+    script.line("      patched++");
+    script.line("      next");
+    script.line("    }");
+    script.line(
+      '    /string\\(JSON value STRING_ENCODE "\\$\\{arg_DOWNLOAD_LOCATION\\}"\\)/ {',
+    );
+    script.line(
+      '      print "    set(value \\"\\\\\\"${arg_DOWNLOAD_LOCATION}\\\\\\"\\")"',
+    );
+    script.line("      patched++");
+    script.line("      next");
+    script.line("    }");
+    script.line("    { print }");
+    script.line("    END { if (patched != 3) exit 1 }");
+    script.line('  \' "${spdx_file}" > "${tmp_spdx_file}"; then');
+    script.line('    rm -f "${tmp_spdx_file}"');
+    script.command("    printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(
+        `Unable to patch ${bsdTarget.label} vcpkg SPDX JSON string encoding`,
+      ),
+    ]);
+    script.line("    exit 1");
+    script.line("  fi");
+    script.line('  mv "${tmp_spdx_file}" "${spdx_file}"');
+    script.command("  printf", [
+      posixLiteral("%s\\n"),
+      posixLiteral(
+        `Patched ${bsdTarget.label} vcpkg SPDX JSON string encoding`,
+      ),
+    ]);
+  } else {
+    script.line("  :");
+  }
+  script.line("}");
+  script.blank();
   script.line("sha512_file() {");
   script.line("  if command_exists sha512; then");
   script.line('    sha512 -q "$1"');
@@ -1171,7 +1251,7 @@ export function renderSetupScript(
   script.line("}");
   script.blank();
   script.line("validate_restored_bsd_vcpkg_tool() {");
-  script.line('  if "${vcpkg_exe}" fetch nuget >/dev/null 2>&1; then');
+  script.line('  if "${vcpkg_exe}" version >/dev/null 2>&1; then');
   script.line("    return 0");
   script.line("  fi");
   script.command("  printf", [
@@ -1369,6 +1449,7 @@ export function renderSetupScript(
 
   if (targetSettings) {
     script.line("ensure_netbsd_vcpkg_toolchain");
+    script.line("patch_bsd_vcpkg_spdx_json_string_encode");
     script.blank();
   }
 

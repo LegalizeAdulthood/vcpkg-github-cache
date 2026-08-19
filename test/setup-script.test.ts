@@ -102,6 +102,9 @@ describe("setup script emission", () => {
     expect(script).toContain(
       "Unable to patch FreeBSD vcpkg-tool NuGet NoHttpCache handling",
     );
+    expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
+    expect(script).toContain("vcpkg-github-cache JSON string fallback");
+    expect(script).toContain("Patched FreeBSD vcpkg SPDX JSON string encoding");
     expect(script).toContain("set_bsd_vcpkg_tool_identity");
     expect(script).toContain("printf '%s=%s\\n' 'schema' '2'");
     expect(script).toContain("vcpkg_commit=$(resolve_bsd_vcpkg_commit)");
@@ -115,7 +118,7 @@ describe("setup script emission", () => {
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
     expect(script).toContain("validate_restored_bsd_vcpkg_tool");
-    expect(script).toContain('"${vcpkg_exe}" fetch nuget');
+    expect(script).toContain('"${vcpkg_exe}" version');
     expect(script).toContain(
       "FreeBSD vcpkg tool package is incompatible with this vcpkg checkout",
     );
@@ -212,6 +215,9 @@ describe("setup script emission", () => {
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
     expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
     expect(script).toContain("Patched OpenBSD vcpkg core Ninja handling");
+    expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
+    expect(script).toContain("vcpkg-github-cache JSON string fallback");
+    expect(script).toContain("Patched OpenBSD vcpkg SPDX JSON string encoding");
     expect(script).toContain("ports/vcpkg-cmake/vcpkg_cmake_configure.cmake");
     expect(script).toContain(
       "find_program(NINJA NAMES ninja ninja-build REQUIRED)",
@@ -275,6 +281,9 @@ describe("setup script emission", () => {
     expect(script).toContain("if(NOT _VCPKG_NETBSD_TOOLCHAIN)");
     expect(script).toContain("set(CMAKE_SYSTEM_NAME NetBSD CACHE STRING");
     expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
+    expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
+    expect(script).toContain("vcpkg-github-cache JSON string fallback");
+    expect(script).toContain("Patched NetBSD vcpkg SPDX JSON string encoding");
     expect(script).toContain("patch_netbsd_vcpkg_tool_bootstrap");
     expect(script).toContain("Patched NetBSD vcpkg-tool bootstrap");
     expect(script).toContain(
