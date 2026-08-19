@@ -14,6 +14,7 @@ import { describe, expect, test } from "vitest";
 import { buildSetupPlan } from "../src/shared/setup-plan";
 import {
   emitSetupFiles,
+  readVcpkgCommit,
   renderSetupEnvironment,
   renderSetupScript,
 } from "../src/shared/setup-script";
@@ -103,9 +104,23 @@ describe("setup script emission", () => {
     );
     expect(script).toContain("set_bsd_vcpkg_tool_identity");
     expect(script).toContain("printf '%s=%s\\n' 'schema' '2'");
+    expect(script).toContain("vcpkg_commit=$(resolve_bsd_vcpkg_commit)");
+    expect(script).toContain(
+      'if [ -n "${VCPKG_GITHUB_CACHE_VCPKG_COMMIT:-}" ]; then',
+    );
+    expect(script).toContain(
+      'git -C "${VCPKG_ROOT}" rev-parse HEAD 2>/dev/null',
+    );
     expect(script).toContain("VCPKG_TOOL_PACKAGE_ID=");
     expect(script).toContain("VCPKG_TOOL_PACKAGE_VERSION=");
     expect(script).toContain("restore_bsd_vcpkg_tool_package");
+    expect(script).toContain("validate_restored_bsd_vcpkg_tool");
+    expect(script).toContain(
+      'VCPKG_FORCE_SYSTEM_BINARIES=1 "${vcpkg_exe}" fetch nuget',
+    );
+    expect(script).toContain(
+      "FreeBSD vcpkg tool package is incompatible with this vcpkg checkout",
+    );
     expect(script).toContain("publish_bsd_vcpkg_tool_package");
     expect(script).toContain("vcpkg-tool_freebsd-octo-repo-${tool_arch}");
     expect(script).toContain("1.0.0-vcpkgtool${identity_hash}");
@@ -140,6 +155,25 @@ describe("setup script emission", () => {
       "run_nuget 'setapikey' \"${VCPKG_GITHUB_CACHE_TOKEN}\"",
     );
     expect(script).not.toContain("C:/host/repo");
+  });
+
+  test("renders BSD vcpkg commit into setup script", () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "freebsd",
+    });
+    const script = renderSetupScript(
+      plan,
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    expect(script).toContain(
+      "VCPKG_GITHUB_CACHE_VCPKG_COMMIT='0123456789abcdef0123456789abcdef01234567'",
+    );
+    expect(
+      script.indexOf("export VCPKG_GITHUB_CACHE_VCPKG_COMMIT"),
+    ).toBeLessThan(script.indexOf("vcpkg GitHub Packages cache setup script"));
   });
 
   test("emits a POSIX-valid FreeBSD setup script", async () => {
@@ -352,6 +386,47 @@ describe("setup script emission", () => {
     expect(env).toContain("https://nuget.pkg.github.com/octo/index.json");
     expect(env).toContain("readwrite");
     expect(env).not.toContain("VCPKG_GITHUB_CACHE_TOKEN");
+  });
+
+  test("renders BSD vcpkg commit environment", () => {
+    const plan = buildSetupPlan({
+      accessInput: "readwrite",
+      executionModeInput: "emit-script",
+      feedOwnerInput: "octo",
+      targetOsInput: "freebsd",
+    });
+    const env = renderSetupEnvironment(
+      plan,
+      "0123456789abcdef0123456789abcdef01234567",
+    );
+
+    expect(env).toContain(
+      "export VCPKG_GITHUB_CACHE_VCPKG_COMMIT='0123456789abcdef0123456789abcdef01234567'",
+    );
+  });
+
+  test("reads vcpkg commit from git", async () => {
+    const commit = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
+    const result = await readVcpkgCommit(
+      "vcpkg",
+      async (command, args, options) => {
+        expect(command).toBe("git");
+        expect(args).toEqual(["-C", "vcpkg", "rev-parse", "HEAD"]);
+        expect(options).toBeUndefined();
+
+        return { stderr: "", stdout: `${commit}\n` };
+      },
+    );
+
+    expect(result).toBe(commit.toLowerCase());
+  });
+
+  test("ignores unavailable vcpkg commit", async () => {
+    const result = await readVcpkgCommit("vcpkg", async () => {
+      throw new Error("git unavailable");
+    });
+
+    expect(result).toBeUndefined();
   });
 
   test("renders OpenBSD libcurl compatibility environment", () => {

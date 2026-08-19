@@ -7,6 +7,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
+import { runCommand, type CommandRunner } from "./command";
 import {
   posixLiteral,
   posixRuntimeExpression,
@@ -17,6 +18,7 @@ import { SetupPlan } from "./setup-plan";
 
 const SETUP_SCRIPT_NAME = "setup.sh";
 const SETUP_ENV_NAME = "setup.env";
+const VCPKG_COMMIT_ENV_NAME = "VCPKG_GITHUB_CACHE_VCPKG_COMMIT";
 const BSD_VCPKG_TOOL_SCHEMA_VERSION = "1";
 const FREEBSD_VCPKG_TOOL_SCHEMA_VERSION = "2";
 const FREEBSD_NUGET_VERSION = "6.8.0";
@@ -92,6 +94,27 @@ export interface EmittedSetupFiles {
   readonly setupScriptPath: string;
 }
 
+function parseVcpkgCommit(output: string): string | undefined {
+  const commit = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => /^[0-9a-fA-F]{40}$/.test(line));
+
+  return commit?.toLowerCase();
+}
+
+export async function readVcpkgCommit(
+  vcpkgRoot: string,
+  run: CommandRunner = runCommand,
+): Promise<string | undefined> {
+  try {
+    const result = await run("git", ["-C", vcpkgRoot, "rev-parse", "HEAD"]);
+    return parseVcpkgCommit(`${result.stdout}\n${result.stderr}`);
+  } catch {
+    return undefined;
+  }
+}
+
 function outputPath(directory: string, file: string): string {
   const normalized = directory.replaceAll("\\", "/").replace(/\/+$/, "");
 
@@ -131,7 +154,10 @@ function bsdTargetSettings(
   return undefined;
 }
 
-export function renderSetupScript(plan: SetupPlan): string {
+export function renderSetupScript(
+  plan: SetupPlan,
+  vcpkgCommit?: string,
+): string {
   const script = new PosixScript();
   const targetSettings = bsdTargetSettings(plan.targetOs);
   const bsdTarget = targetSettings ?? FREEBSD_TARGET;
@@ -799,9 +825,7 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.blank();
   script.line("set_bsd_vcpkg_tool_identity() {");
   script.line("  tool_arch=$(bsd_target_arch)");
-  script.line(
-    '  vcpkg_commit=$(git -C "${VCPKG_ROOT}" rev-parse HEAD 2>/dev/null || printf unknown)',
-  );
+  script.line("  vcpkg_commit=$(resolve_bsd_vcpkg_commit)");
   script.line("  bsd_release=$(uname -r 2>/dev/null || printf unknown)");
   script.line('  compiler_id=$(${CC:-cc} --version 2>/dev/null | sed -n "1p")');
   script.line('  if [ -z "${compiler_id}" ]; then');
@@ -833,6 +857,16 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line('  VCPKG_TOOL_PACKAGE_VERSION="1.0.0-vcpkgtool${identity_hash}"');
   script.line("  export VCPKG_TOOL_PACKAGE_ID");
   script.line("  export VCPKG_TOOL_PACKAGE_VERSION");
+  script.line("}");
+  script.blank();
+  script.line("resolve_bsd_vcpkg_commit() {");
+  script.line(`  if [ -n "\${${VCPKG_COMMIT_ENV_NAME}:-}" ]; then`);
+  script.line(`    printf '%s\\n' "\${${VCPKG_COMMIT_ENV_NAME}}"`);
+  script.line("    return");
+  script.line("  fi");
+  script.line(
+    '  git -C "${VCPKG_ROOT}" rev-parse HEAD 2>/dev/null || printf "%s\\n" unknown',
+  );
   script.line("}");
   script.blank();
   script.line("set_bsd_nuget_metadata() {");
@@ -1136,6 +1170,22 @@ export function renderSetupScript(plan: SetupPlan): string {
   ]);
   script.line("}");
   script.blank();
+  script.line("validate_restored_bsd_vcpkg_tool() {");
+  script.line(
+    '  if VCPKG_FORCE_SYSTEM_BINARIES=1 "${vcpkg_exe}" fetch nuget >/dev/null 2>&1; then',
+  );
+  script.line("    return 0");
+  script.line("  fi");
+  script.command("  printf", [
+    posixLiteral("%s\\n"),
+    posixLiteral(
+      `${bsdTarget.label} vcpkg tool package is incompatible with this vcpkg checkout`,
+    ),
+  ]);
+  script.line('  rm -f "${vcpkg_exe}"');
+  script.line("  return 1");
+  script.line("}");
+  script.blank();
   script.line("restore_bsd_vcpkg_tool_package() {");
   script.line("  set_bsd_vcpkg_tool_identity");
   script.line(
@@ -1165,6 +1215,10 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line('      mkdir -p "${VCPKG_ROOT}"');
   script.line('      cp "${restored_vcpkg}" "${vcpkg_exe}"');
   script.line('      chmod +x "${vcpkg_exe}"');
+  script.line("      if ! validate_restored_bsd_vcpkg_tool; then");
+  script.line("        vcpkg_tool_restored=0");
+  script.line("        return");
+  script.line("      fi");
   script.line("      vcpkg_tool_restored=1");
   script.command("      printf", [
     posixLiteral("%s\\n"),
@@ -1281,6 +1335,14 @@ export function renderSetupScript(plan: SetupPlan): string {
   script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
   script.line("fi");
   script.line("export VCPKG_ROOT");
+  if (targetSettings && vcpkgCommit) {
+    script.line(`if [ -z "\${${VCPKG_COMMIT_ENV_NAME}:-}" ]; then`);
+    script.line(
+      `  ${VCPKG_COMMIT_ENV_NAME}=${quotePosixShellLiteral(vcpkgCommit)}`,
+    );
+    script.line("fi");
+    script.line(`export ${VCPKG_COMMIT_ENV_NAME}`);
+  }
   script.blank();
   script.command("printf", [
     posixLiteral("%s\\n"),
@@ -1556,7 +1618,10 @@ export function renderSetupScript(plan: SetupPlan): string {
   return script.render();
 }
 
-export function renderSetupEnvironment(plan: SetupPlan): string {
+export function renderSetupEnvironment(
+  plan: SetupPlan,
+  vcpkgCommit?: string,
+): string {
   const script = new PosixScript();
   const targetSettings = bsdTargetSettings(plan.targetOs);
   const bsdLibcurlCompatTarget =
@@ -1569,6 +1634,11 @@ export function renderSetupEnvironment(plan: SetupPlan): string {
   script.line(
     `export VCPKG_BINARY_SOURCES=${quotePosixShellLiteral(plan.binarySources)}`,
   );
+  if (targetSettings && vcpkgCommit) {
+    script.line(
+      `export ${VCPKG_COMMIT_ENV_NAME}=${quotePosixShellLiteral(vcpkgCommit)}`,
+    );
+  }
   if (bsdLibcurlCompatTarget) {
     script.line('if [ -z "${VCPKG_ROOT:-}" ]; then');
     script.line(`  VCPKG_ROOT=${quotePosixShellLiteral(plan.vcpkgRootInput)}`);
@@ -1606,10 +1676,22 @@ export async function emitSetupFiles(
   const directory = resolveScriptDirectory(plan.scriptDirectory, workspace);
   const setupScriptPath = path.join(directory, SETUP_SCRIPT_NAME);
   const setupEnvPath = path.join(directory, SETUP_ENV_NAME);
+  const targetSettings = bsdTargetSettings(plan.targetOs);
+  const vcpkgCommit = targetSettings
+    ? await readVcpkgCommit(plan.vcpkg.root)
+    : undefined;
 
   await mkdir(directory, { recursive: true });
-  await writeFile(setupScriptPath, renderSetupScript(plan), "utf8");
-  await writeFile(setupEnvPath, renderSetupEnvironment(plan), "utf8");
+  await writeFile(
+    setupScriptPath,
+    renderSetupScript(plan, vcpkgCommit),
+    "utf8",
+  );
+  await writeFile(
+    setupEnvPath,
+    renderSetupEnvironment(plan, vcpkgCommit),
+    "utf8",
+  );
 
   return {
     setupEnvOutput: outputPath(plan.scriptDirectory, SETUP_ENV_NAME),
