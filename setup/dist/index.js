@@ -31716,7 +31716,7 @@ function renderSetupScript(plan, vcpkgCommit) {
     const targetSettings = bsdTargetSettings(plan.targetOs);
     const bsdTarget = targetSettings ?? FREEBSD_TARGET;
     const unzipPackageName = bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
-    const openBsdTarget = bsdTarget.targetOs === "openbsd";
+    const bsdNinjaPatchTarget = bsdTarget.targetOs === "freebsd" || bsdTarget.targetOs === "openbsd";
     const bsdLibcurlCompatTarget = bsdTarget.targetOs === "netbsd" || bsdTarget.targetOs === "openbsd";
     script.line("#!/bin/sh");
     script.line("set -eu");
@@ -31865,20 +31865,21 @@ function renderSetupScript(plan, vcpkgCommit) {
     }
     script.line("}");
     script.blank();
-    script.line("patch_openbsd_vcpkg_cmake_ninja() {");
-    if (openBsdTarget) {
+    script.line("patch_bsd_vcpkg_cmake_ninja() {");
+    if (bsdNinjaPatchTarget) {
         script.line('  core_cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_configure_cmake.cmake"');
         script.line('  if [ -f "${core_cmake_file}" ]; then');
-        script.line('    if grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${core_cmake_file}"; then');
+        script.line('    if grep -q "AND NOT VCPKG_HOST_IS_FREEBSD" "${core_cmake_file}" && grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${core_cmake_file}"; then');
         script.command("      printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("OpenBSD vcpkg core Ninja patch already applied"),
+            posixLiteral("BSD vcpkg core Ninja patch already applied"),
         ]);
         script.line("    else");
         script.line('      tmp_core_cmake_file="${core_cmake_file}.vcpkg-github-cache.tmp"');
         script.line("      if ! awk '");
         script.line('        /if\\("\\$\\{generator\\}" STREQUAL "Ninja" AND NOT DEFINED ENV\\{VCPKG_FORCE_SYSTEM_BINARIES\\}\\)/ {');
-        script.line('          sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")');
+        script.line('          if ($0 !~ /VCPKG_HOST_IS_OPENBSD/) sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")');
+        script.line('          if ($0 !~ /VCPKG_HOST_IS_FREEBSD/) sub(/\\)$/, " AND NOT VCPKG_HOST_IS_FREEBSD)")');
         script.line("          patched = 1");
         script.line("        }");
         script.line("        { print }");
@@ -31887,35 +31888,35 @@ function renderSetupScript(plan, vcpkgCommit) {
         script.line('        rm -f "${tmp_core_cmake_file}"');
         script.command("        printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("Unable to patch OpenBSD vcpkg core Ninja handling"),
+            posixLiteral("Unable to patch BSD vcpkg core Ninja handling"),
         ]);
         script.line("        exit 1");
         script.line("      fi");
         script.line('      mv "${tmp_core_cmake_file}" "${core_cmake_file}"');
         script.command("      printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("Patched OpenBSD vcpkg core Ninja handling"),
+            posixLiteral("Patched BSD vcpkg core Ninja handling"),
         ]);
         script.line("  fi");
         script.line("  else");
         script.command("    printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("OpenBSD vcpkg core Ninja patch skipped: CMake helper missing"),
+            posixLiteral("BSD vcpkg core Ninja patch skipped: CMake helper missing"),
         ]);
         script.line("  fi");
         script.line('  port_cmake_file="${VCPKG_ROOT}/ports/vcpkg-cmake/vcpkg_cmake_configure.cmake"');
         script.line('  if [ -f "${port_cmake_file}" ]; then');
-        script.line('    if grep -q "find_program(NINJA NAMES ninja ninja-build REQUIRED)" "${port_cmake_file}"; then');
+        script.line('    if grep -q "VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD" "${port_cmake_file}"; then');
         script.command("      printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("OpenBSD vcpkg-cmake Ninja patch already applied"),
+            posixLiteral("BSD vcpkg-cmake Ninja patch already applied"),
         ]);
         script.line("    else");
         script.line('      tmp_port_cmake_file="${port_cmake_file}.vcpkg-github-cache.tmp"');
         script.line("      if ! awk '");
         script.line("        /^[[:space:]]*vcpkg_find_acquire_program\\(NINJA\\)[[:space:]]*$/ {");
         script.line('          indent = substr($0, 1, index($0, "vcpkg_find_acquire_program") - 1)');
-        script.line('          print indent "if(VCPKG_HOST_IS_OPENBSD)"');
+        script.line('          print indent "if(VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD)"');
         script.line('          print indent "    find_program(NINJA NAMES ninja ninja-build REQUIRED)"');
         script.line('          print indent "else()"');
         script.line('          print indent "    vcpkg_find_acquire_program(NINJA)"');
@@ -31929,20 +31930,20 @@ function renderSetupScript(plan, vcpkgCommit) {
         script.line('        rm -f "${tmp_port_cmake_file}"');
         script.command("        printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("Unable to patch OpenBSD vcpkg-cmake Ninja handling"),
+            posixLiteral("Unable to patch BSD vcpkg-cmake Ninja handling"),
         ]);
         script.line("        exit 1");
         script.line("      fi");
         script.line('      mv "${tmp_port_cmake_file}" "${port_cmake_file}"');
         script.command("      printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("Patched OpenBSD vcpkg-cmake Ninja handling"),
+            posixLiteral("Patched BSD vcpkg-cmake Ninja handling"),
         ]);
         script.line("  fi");
         script.line("  else");
         script.command("    printf", [
             posixLiteral("%s\\n"),
-            posixLiteral("OpenBSD vcpkg-cmake Ninja patch skipped: port helper missing"),
+            posixLiteral("BSD vcpkg-cmake Ninja patch skipped: port helper missing"),
         ]);
         script.line("  fi");
     }
@@ -32052,7 +32053,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         script.line("  if ! awk '");
         script.line("    {");
         script.line("      print");
-        script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtractArchive "\\$archivePath" "\\$srcBaseDir"[[:space:]]*$/) {');
+        script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtract(Archive|Tar) "\\$(archivePath|tarballPath)" "\\$srcBaseDir"[[:space:]]*$/) {');
         script.line('        print "    # vcpkg-github-cache NetBSD vcpkg-tool isfinite patch"');
         script.line('        print "    if [ \\"$(uname -s)\\" = \\"NetBSD\\" ]; then"');
         script.line('        print "        json_cpp=\\"$srcDir/src/vcpkg/base/json.cpp\\""');
@@ -32071,7 +32072,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         script.line('        print "        metrics_cpp=\\"$srcDir/src/vcpkg/metrics.cpp\\""');
         script.line('        print "        if [ -f \\"$metrics_cpp\\" ]; then"');
         script.line('        print "            tmp_metrics_cpp=\\"${metrics_cpp}.vcpkg-github-cache.tmp\\""');
-        script.line('        print "            if sed \\"s/if (!isfinite(value) || value < 0[.]0)/if (!std::isfinite(value) || value < 0.0)/\\" \\"$metrics_cpp\\" > \\"$tmp_metrics_cpp\\" && ! cmp -s \\"$metrics_cpp\\" \\"$tmp_metrics_cpp\\"; then"');
+        script.line('        print "            if sed -e \\"s/if (!isfinite(value) || value < 0[.]0)/if (!std::isfinite(value) || value < 0.0)/\\" -e \\"s/if (!isfinite(value) || value <= 0[.]0)/if (!std::isfinite(value) || value <= 0.0)/\\" \\"$metrics_cpp\\" > \\"$tmp_metrics_cpp\\" && ! cmp -s \\"$metrics_cpp\\" \\"$tmp_metrics_cpp\\"; then"');
         script.line('        print "                mv \\"$tmp_metrics_cpp\\" \\"$metrics_cpp\\""');
         script.line('        print "                printf \\"%s\\\\n\\" \\"Patched NetBSD vcpkg-tool metrics isfinite handling\\""');
         script.line('        print "            else"');
@@ -32139,7 +32140,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         script.line("  if ! awk '");
         script.line("    {");
         script.line("      print");
-        script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtractArchive "\\$archivePath" "\\$srcBaseDir"[[:space:]]*$/) {');
+        script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtract(Archive|Tar) "\\$(archivePath|tarballPath)" "\\$srcBaseDir"[[:space:]]*$/) {');
         script.line('        print "    # vcpkg-github-cache FreeBSD vcpkg-tool NuGet NoHttpCache patch"');
         script.line('        print "    if [ \\"$(uname -s)\\" = \\"FreeBSD\\" ]; then"');
         script.line('        print "        binarycaching_cpp=\\"$srcDir/src/vcpkg/binarycaching.cpp\\""');
@@ -32740,7 +32741,7 @@ function renderSetupScript(plan, vcpkgCommit) {
     if (plan.installNuget && targetSettings) {
         script.line("ensure_bsd_bootstrap_packages");
         script.line("ensure_bsd_libcurl_compat");
-        script.line("patch_openbsd_vcpkg_cmake_ninja");
+        script.line("patch_bsd_vcpkg_cmake_ninja");
         if (plan.installMono) {
             script.command("printf", [
                 posixLiteral("%s\\n"),
@@ -32787,7 +32788,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         if (targetSettings && !plan.installNuget) {
             script.line("ensure_bsd_bootstrap_packages");
             script.line("ensure_bsd_libcurl_compat");
-            script.line("patch_openbsd_vcpkg_cmake_ninja");
+            script.line("patch_bsd_vcpkg_cmake_ninja");
         }
         if (targetSettings && plan.installNuget && bsdTarget.cacheToolPackage) {
             script.line('if [ "${vcpkg_tool_restored}" -eq 1 ]; then');

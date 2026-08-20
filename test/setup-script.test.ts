@@ -102,6 +102,15 @@ describe("setup script emission", () => {
     expect(script).toContain(
       "Unable to patch FreeBSD vcpkg-tool NuGet NoHttpCache handling",
     );
+    expect(script).toContain("patch_bsd_vcpkg_cmake_ninja");
+    expect(script).toContain("AND NOT VCPKG_HOST_IS_FREEBSD");
+    expect(script).toContain("Patched BSD vcpkg core Ninja handling");
+    expect(script).toContain(
+      "if(VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD)",
+    );
+    expect(script).toContain("Patched BSD vcpkg-cmake Ninja handling");
+    expect(script).toContain("vcpkgExtract(Archive|Tar)");
+    expect(script).toContain("\\$(archivePath|tarballPath)");
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
     expect(script).toContain("vcpkg-github-cache JSON string fallback");
     expect(script).toContain("Patched FreeBSD vcpkg SPDX JSON string encoding");
@@ -212,9 +221,10 @@ describe("setup script emission", () => {
     expect(script).toContain('bsd_library_path="${compat_dir}:${libcurl_dir}"');
     expect(script).toContain('LD_LIBRARY_PATH="${bsd_library_path}"');
     expect(script).toContain("ensure_bsd_libcurl_compat");
-    expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja");
+    expect(script).toContain("patch_bsd_vcpkg_cmake_ninja");
     expect(script).toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
-    expect(script).toContain("Patched OpenBSD vcpkg core Ninja handling");
+    expect(script).toContain("AND NOT VCPKG_HOST_IS_FREEBSD");
+    expect(script).toContain("Patched BSD vcpkg core Ninja handling");
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
     expect(script).toContain("vcpkg-github-cache JSON string fallback");
     expect(script).toContain("Patched OpenBSD vcpkg SPDX JSON string encoding");
@@ -222,7 +232,7 @@ describe("setup script emission", () => {
     expect(script).toContain(
       "find_program(NINJA NAMES ninja ninja-build REQUIRED)",
     );
-    expect(script).toContain("Patched OpenBSD vcpkg-cmake Ninja handling");
+    expect(script).toContain("Patched BSD vcpkg-cmake Ninja handling");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
@@ -280,7 +290,7 @@ describe("setup script emission", () => {
     expect(script).toContain("Added NetBSD vcpkg toolchain file");
     expect(script).toContain("if(NOT _VCPKG_NETBSD_TOOLCHAIN)");
     expect(script).toContain("set(CMAKE_SYSTEM_NAME NetBSD CACHE STRING");
-    expect(script).toContain("patch_openbsd_vcpkg_cmake_ninja() {\n  :\n}");
+    expect(script).toContain("patch_bsd_vcpkg_cmake_ninja() {\n  :\n}");
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
     expect(script).toContain("vcpkg-github-cache JSON string fallback");
     expect(script).toContain("Patched NetBSD vcpkg SPDX JSON string encoding");
@@ -291,6 +301,7 @@ describe("setup script emission", () => {
     );
     expect(script).toContain("std::isfinite(d)");
     expect(script).toContain("std::isfinite(value)");
+    expect(script).toContain("std::isfinite(value) || value <= 0.0");
     expect(script).toContain(
       "Patched NetBSD vcpkg-tool metrics isfinite handling",
     );
@@ -338,6 +349,7 @@ describe("setup script emission", () => {
       'VCPKG_GITHUB_CACHE_NUGET_COMMAND="mono ${nuget_exe}"',
     );
     expect(script).not.toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
+    expect(script).not.toContain("AND NOT VCPKG_HOST_IS_FREEBSD");
     expect(script).not.toContain("NuGet fetch skipped");
   });
 
