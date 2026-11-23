@@ -31759,12 +31759,21 @@ async function runCommand(command, args, options = {}) {
     });
 }
 
+;// CONCATENATED MODULE: external "node:fs/promises"
+const promises_namespaceObject = require("node:fs/promises");
+;// CONCATENATED MODULE: external "node:os"
+const external_node_os_namespaceObject = require("node:os");
+;// CONCATENATED MODULE: external "node:path"
+const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/mono.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * Copyright 2026 Richard Thomson
  */
+
+
+
 
 function monoIsRequired(platform) {
     return platform !== "win32";
@@ -31793,6 +31802,21 @@ async function monoIsAvailable(run) {
         return false;
     }
 }
+async function ensureLinuxMonoTrustStore(configDir = process.env.XDG_CONFIG_HOME || (0,external_node_path_namespaceObject.join)((0,external_node_os_namespaceObject.homedir)(), ".config"), systemCertDir = "/etc/ssl/certs") {
+    const bundle = await (0,promises_namespaceObject.stat)((0,external_node_path_namespaceObject.join)(systemCertDir, "ca-certificates.crt")).catch((error) => {
+        if (error.code !== "ENOENT")
+            throw error;
+    });
+    if (!bundle?.isFile())
+        return;
+    // Ubuntu 26.04 omits Mono's CA sync. BTLS reads the hashed CA directory.
+    const userStore = (0,external_node_path_namespaceObject.join)(configDir, ".mono", "new-certs");
+    await (0,promises_namespaceObject.mkdir)(userStore, { recursive: true });
+    await (0,promises_namespaceObject.symlink)(systemCertDir, (0,external_node_path_namespaceObject.join)(userStore, "Trust"), "dir").catch((error) => {
+        if (error.code !== "EEXIST")
+            throw error;
+    });
+}
 async function ensureMonoAvailable(install, platform = process.platform, run = runCommand) {
     if (!monoIsRequired(platform)) {
         return { installed: false, required: false };
@@ -31813,10 +31837,6 @@ async function ensureMonoAvailable(install, platform = process.platform, run = r
     return { installed: true, required: true };
 }
 
-;// CONCATENATED MODULE: external "node:fs/promises"
-const promises_namespaceObject = require("node:fs/promises");
-;// CONCATENATED MODULE: external "node:path"
-const external_node_path_namespaceObject = require("node:path");
 ;// CONCATENATED MODULE: ./src/shared/nuget-config-paths.ts
 /*
  * SPDX-License-Identifier: GPL-3.0-only
@@ -32564,7 +32584,8 @@ function renderSetupScript(plan, vcpkgCommit) {
         ]);
         script.line("    return");
         script.line("  fi");
-        script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}"; then');
+        script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}" ||');
+        script.line('      grep -q "^[[:space:]]*function(z_vcpkg_spdx_json_string_encode_compat[[:space:]]" "${spdx_file}"; then');
         script.command("    printf", [
             posixLiteral("%s\\n"),
             posixLiteral(`${bsdTarget.label} vcpkg SPDX patch skipped: not needed`),
@@ -33943,6 +33964,9 @@ async function run() {
     if (plan.installNuget) {
         traceLogger.decision("NuGet setup", "enabled by input");
         const mono = await traceLogger.step("ensure Mono", async () => ensureMonoAvailable(plan.installMono, process.platform, tracedRun));
+        if (process.platform === "linux" && plan.installMono) {
+            await traceLogger.step("ensure Mono certificate trust", () => ensureLinuxMonoTrustStore());
+        }
         const nugetPath = await traceLogger.step("fetch NuGet", async () => fetchNuget(plan.vcpkg, tracedRun));
         const nuget = buildNugetCommand(nugetPath);
         nugetCommand = nuget.display;

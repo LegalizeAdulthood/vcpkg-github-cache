@@ -809,7 +809,10 @@ export function renderSetupScript(
     ]);
     script.line("    return");
     script.line("  fi");
-    script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}"; then');
+    script.line('  if ! grep -q "STRING_ENCODE" "${spdx_file}" ||');
+    script.line(
+      '      grep -q "^[[:space:]]*function(z_vcpkg_spdx_json_string_encode_compat[[:space:]]" "${spdx_file}"; then',
+    );
     script.command("    printf", [
       posixLiteral("%s\\n"),
       posixLiteral(`${bsdTarget.label} vcpkg SPDX patch skipped: not needed`),

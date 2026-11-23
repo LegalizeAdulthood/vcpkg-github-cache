@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 
@@ -199,6 +199,66 @@ describe("setup script emission", () => {
     await writeFile(setupScript, script, "utf8");
     execFileSync("sh", ["-n", setupScript], { stdio: "pipe" });
   });
+
+  test.each(["legacy", "upstream fallback"])(
+    "runs BSD setup with the %s SPDX helper",
+    async (helper) => {
+      const workspace = await mkdtemp(path.join(tmpdir(), "vc-cache-"));
+      try {
+        const cmakeDir = path.join(workspace, "scripts", "cmake");
+        const spdxFile = path.join(cmakeDir, "z_vcpkg_spdx.cmake");
+        const legacy = helper === "legacy";
+        const source = legacy
+          ? [
+              '    string(JSON value STRING_ENCODE "${arg_NAME}")',
+              '        string(JSON value STRING_ENCODE "${arg_FILENAME}")',
+              '    string(JSON value STRING_ENCODE "${arg_DOWNLOAD_LOCATION}")',
+              "",
+            ].join("\n")
+          : [
+              "function(z_vcpkg_spdx_json_string_encode_compat out_var value)",
+              "endfunction()",
+              "function(z_vcpkg_spdx_json_string_encode out_var value)",
+              '    if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.3")',
+              '        string(JSON encoded STRING_ENCODE "${value}")',
+              "    else()",
+              '        z_vcpkg_spdx_json_string_encode_compat(encoded "${value}")',
+              "    endif()",
+              "endfunction()",
+              "",
+            ].join("\n");
+        await mkdir(cmakeDir, { recursive: true });
+        await writeFile(spdxFile, source, "utf8");
+
+        const plan = buildSetupPlan({
+          bootstrapInput: "false",
+          executionModeInput: "emit-script",
+          installNugetInput: "false",
+          repository: "octo/repo",
+          targetOsInput: "freebsd",
+        });
+        execFileSync("sh", ["-s"], {
+          cwd: workspace,
+          env: {
+            ...process.env,
+            VCPKG_GITHUB_CACHE_TOKEN: "test-token",
+            VCPKG_ROOT: ".",
+          },
+          input: renderSetupScript(plan),
+        });
+
+        const result = await readFile(spdxFile, "utf8");
+        if (legacy) {
+          expect(result).toContain("vcpkg-github-cache JSON string fallback");
+          expect(result).not.toContain("STRING_ENCODE");
+        } else {
+          expect(result).toBe(source);
+        }
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("renders OpenBSD target-side vcpkg bootstrap and NuGet fetch", () => {
     const plan = buildSetupPlan({

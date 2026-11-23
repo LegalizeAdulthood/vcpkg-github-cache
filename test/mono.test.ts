@@ -4,10 +4,14 @@
  * Copyright 2026 Richard Thomson
  */
 
+import { mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { CommandResult } from "../src/shared/command";
 import {
+  ensureLinuxMonoTrustStore,
   ensureMonoAvailable,
   monoInstallCommands,
   monoIsRequired,
@@ -23,6 +27,34 @@ function result(): CommandResult {
 }
 
 describe("mono helpers", () => {
+  test.skipIf(process.platform === "win32")(
+    "uses system CAs for a missing Mono trust store and preserves an existing store",
+    async () => {
+      const workspace = await mkdtemp(join(tmpdir(), "vc-cache-mono-"));
+      try {
+        const systemCertDir = join(workspace, "system-certs");
+        const configDir = join(workspace, "config");
+        const trustDir = join(configDir, ".mono", "new-certs", "Trust");
+        await mkdir(systemCertDir);
+        await writeFile(join(systemCertDir, "ca-certificates.crt"), "");
+
+        await ensureLinuxMonoTrustStore(configDir, systemCertDir);
+        expect(await readlink(trustDir)).toBe(systemCertDir);
+        await ensureLinuxMonoTrustStore(configDir, systemCertDir);
+        expect(await readlink(trustDir)).toBe(systemCertDir);
+
+        await rm(trustDir);
+        await mkdir(trustDir);
+        await ensureLinuxMonoTrustStore(configDir, systemCertDir);
+        await expect(readlink(trustDir)).rejects.toMatchObject({
+          code: "EINVAL",
+        });
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    },
+  );
+
   test("requires Mono on Unix platforms", () => {
     expect(monoIsRequired("win32")).toBe(false);
     expect(monoIsRequired("linux")).toBe(true);

@@ -4,6 +4,10 @@
  * Copyright 2026 Richard Thomson
  */
 
+import { mkdir, stat, symlink } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
 import { CommandRunner, runCommand } from "./command";
 
 export interface MonoInstallCommand {
@@ -49,6 +53,27 @@ async function monoIsAvailable(run: CommandRunner): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function ensureLinuxMonoTrustStore(
+  configDir = process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
+  systemCertDir = "/etc/ssl/certs",
+): Promise<void> {
+  const bundle = await stat(join(systemCertDir, "ca-certificates.crt")).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    },
+  );
+  if (!bundle?.isFile()) return;
+
+  // Ubuntu 26.04 omits Mono's CA sync. BTLS reads the hashed CA directory.
+  const userStore = join(configDir, ".mono", "new-certs");
+  await mkdir(userStore, { recursive: true });
+  await symlink(systemCertDir, join(userStore, "Trust"), "dir").catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    },
+  );
 }
 
 export async function ensureMonoAvailable(

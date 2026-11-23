@@ -7,7 +7,7 @@
 import * as core from "@actions/core";
 
 import { runCommand } from "./shared/command";
-import { ensureMonoAvailable } from "./shared/mono";
+import { ensureLinuxMonoTrustStore, ensureMonoAvailable } from "./shared/mono";
 import { configureNugetSource } from "./shared/nuget";
 import { emitSetupFiles } from "./shared/setup-script";
 import { setupOutput } from "./shared/setup-output";
@@ -233,6 +233,11 @@ export async function run(): Promise<void> {
     const mono = await traceLogger.step("ensure Mono", async () =>
       ensureMonoAvailable(plan.installMono, process.platform, tracedRun),
     );
+    if (process.platform === "linux" && plan.installMono) {
+      await traceLogger.step("ensure Mono certificate trust", () =>
+        ensureLinuxMonoTrustStore(),
+      );
+    }
     const nugetPath = await traceLogger.step("fetch NuGet", async () =>
       fetchNuget(plan.vcpkg, tracedRun),
     );
