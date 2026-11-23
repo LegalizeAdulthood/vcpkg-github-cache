@@ -8,6 +8,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
 import { runCommand, type CommandRunner } from "./command";
+import { NETBSD_LEGACY_TOOL_PATCH } from "./netbsd-legacy-tool-patch";
 import {
   posixLiteral,
   posixRuntimeExpression,
@@ -163,8 +164,12 @@ export function renderSetupScript(
   const bsdTarget = targetSettings ?? FREEBSD_TARGET;
   const unzipPackageName =
     bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
-  const bsdNinjaPatchTarget =
-    bsdTarget.targetOs === "freebsd" || bsdTarget.targetOs === "openbsd";
+  const netBsdNinjaHost = 'CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD"';
+  const ninjaHosts =
+    bsdTarget.targetOs === "netbsd"
+      ? [netBsdNinjaHost]
+      : ["VCPKG_HOST_IS_OPENBSD", "VCPKG_HOST_IS_FREEBSD"];
+  const ninjaPortCondition = ninjaHosts.join(" OR ");
   const bsdLibcurlCompatTarget =
     bsdTarget.targetOs === "netbsd" || bsdTarget.targetOs === "openbsd";
 
@@ -321,14 +326,18 @@ export function renderSetupScript(
   script.line("}");
   script.blank();
   script.line("patch_bsd_vcpkg_cmake_ninja() {");
-  if (bsdNinjaPatchTarget) {
+  if (targetSettings) {
     script.line(
       '  core_cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_configure_cmake.cmake"',
     );
     script.line('  if [ -f "${core_cmake_file}" ]; then');
-    script.line(
-      '    if grep -q "AND NOT VCPKG_HOST_IS_FREEBSD" "${core_cmake_file}" && grep -q "AND NOT VCPKG_HOST_IS_OPENBSD" "${core_cmake_file}"; then',
-    );
+    const corePatched = ninjaHosts
+      .map(
+        (host) =>
+          `grep -Fq ${quotePosixShellLiteral(`AND NOT ${host}`)} "\${core_cmake_file}"`,
+      )
+      .join(" && ");
+    script.line(`    if ${corePatched}; then`);
     script.command("      printf", [
       posixLiteral("%s\\n"),
       posixLiteral("BSD vcpkg core Ninja patch already applied"),
@@ -341,12 +350,11 @@ export function renderSetupScript(
     script.line(
       '        /if\\("\\$\\{generator\\}" STREQUAL "Ninja" AND NOT DEFINED ENV\\{VCPKG_FORCE_SYSTEM_BINARIES\\}\\)/ {',
     );
-    script.line(
-      '          if ($0 !~ /VCPKG_HOST_IS_OPENBSD/) sub(/\\)$/, " AND NOT VCPKG_HOST_IS_OPENBSD)")',
-    );
-    script.line(
-      '          if ($0 !~ /VCPKG_HOST_IS_FREEBSD/) sub(/\\)$/, " AND NOT VCPKG_HOST_IS_FREEBSD)")',
-    );
+    for (const host of ninjaHosts) {
+      script.line(
+        `          sub(/\\)$/, ${JSON.stringify(` AND NOT ${host})`)})`,
+      );
+    }
     script.line("          patched = 1");
     script.line("        }");
     script.line("        { print }");
@@ -378,7 +386,7 @@ export function renderSetupScript(
     );
     script.line('  if [ -f "${port_cmake_file}" ]; then');
     script.line(
-      '    if grep -q "VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD" "${port_cmake_file}"; then',
+      `    if grep -Fq ${quotePosixShellLiteral(`if(${ninjaPortCondition})`)} "\${port_cmake_file}"; then`,
     );
     script.command("      printf", [
       posixLiteral("%s\\n"),
@@ -396,7 +404,7 @@ export function renderSetupScript(
       '          indent = substr($0, 1, index($0, "vcpkg_find_acquire_program") - 1)',
     );
     script.line(
-      '          print indent "if(VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD)"',
+      `          print indent ${JSON.stringify(`if(${ninjaPortCondition})`)}`,
     );
     script.line(
       '          print indent "    find_program(NINJA NAMES ninja ninja-build REQUIRED)"',
@@ -568,7 +576,7 @@ export function renderSetupScript(
     script.line("    return");
     script.line("  fi");
     script.line(
-      '  if grep -q "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch" "${bootstrap_file}"; then',
+      '  if grep -q "vcpkg-github-cache NetBSD legacy tool patch" "${bootstrap_file}"; then',
     );
     script.command("    printf", [
       posixLiteral("%s\\n"),
@@ -576,15 +584,40 @@ export function renderSetupScript(
     ]);
     script.line("    return");
     script.line("  fi");
+    script.line("  add_math_patch=1");
+    script.line(
+      '  if grep -q "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch" "${bootstrap_file}"; then',
+    );
+    script.line("    add_math_patch=0");
+    script.line("  fi");
     script.line(
       '  tmp_bootstrap_file="${bootstrap_file}.vcpkg-github-cache.tmp"',
     );
-    script.line("  if ! awk '");
+    script.line('  if ! awk -v add_math_patch="${add_math_patch}" \'');
     script.line("    {");
     script.line("      print");
     script.line(
       '      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtract(Archive|Tar) "\\$(archivePath|tarballPath)" "\\$srcBaseDir"[[:space:]]*$/) {',
     );
+    const legacyPatch = [
+      "    # vcpkg-github-cache NetBSD legacy tool patch",
+      '    if [ "$(uname -s)" = "NetBSD" ]; then',
+      '        case "$VCPKG_TOOL_RELEASE_TAG" in',
+      "        2025-07-21|2025-09-03)",
+      "            echo 'Backporting NetBSD support to vcpkg-tool'",
+      '            patch --posix -s -f -F 0 -p1 -d "$srcDir" <<\\VCPKG_NETBSD_TOOL_PATCH || exit 1',
+      NETBSD_LEGACY_TOOL_PATCH,
+      "VCPKG_NETBSD_TOOL_PATCH",
+      "            ;;",
+      "        esac",
+      "    fi",
+    ];
+    for (const line of legacyPatch.join("\n").split("\n")) {
+      script.line(
+        `        print ${JSON.stringify(line).replaceAll("'", "\\047")}`,
+      );
+    }
+    script.line("        if (add_math_patch) {");
     script.line(
       '        print "    # vcpkg-github-cache NetBSD vcpkg-tool isfinite patch"',
     );
@@ -675,6 +708,7 @@ export function renderSetupScript(
     );
     script.line('        print "        fi"');
     script.line('        print "    fi"');
+    script.line("        }");
     script.line("        patched = 1");
     script.line("      }");
     script.line("    }");

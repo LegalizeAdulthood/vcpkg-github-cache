@@ -350,12 +350,16 @@ describe("setup script emission", () => {
     expect(script).toContain("Added NetBSD vcpkg toolchain file");
     expect(script).toContain("if(NOT _VCPKG_NETBSD_TOOLCHAIN)");
     expect(script).toContain("set(CMAKE_SYSTEM_NAME NetBSD CACHE STRING");
-    expect(script).toContain("patch_bsd_vcpkg_cmake_ninja() {\n  :\n}");
+    expect(script).toContain("patch_bsd_vcpkg_cmake_ninja");
+    expect(script).toContain(
+      'AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD"',
+    );
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
     expect(script).toContain("vcpkg-github-cache JSON string fallback");
     expect(script).toContain("Patched NetBSD vcpkg SPDX JSON string encoding");
     expect(script).toContain("patch_netbsd_vcpkg_tool_bootstrap");
     expect(script).toContain("Patched NetBSD vcpkg-tool bootstrap");
+    expect(script).toContain("2025-07-21|2025-09-03)");
     expect(script).toContain(
       "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch",
     );
@@ -411,6 +415,53 @@ describe("setup script emission", () => {
     expect(script).not.toContain("AND NOT VCPKG_HOST_IS_OPENBSD");
     expect(script).not.toContain("AND NOT VCPKG_HOST_IS_FREEBSD");
     expect(script).not.toContain("NuGet fetch skipped");
+  });
+
+  test("uses system Ninja for NetBSD and reapplies setup cleanly", async () => {
+    const plan = buildSetupPlan({
+      executionModeInput: "emit-script",
+      repository: "octo/repo",
+      targetOsInput: "netbsd",
+    });
+    const script = renderSetupScript(plan);
+    const start = script.indexOf("patch_bsd_vcpkg_cmake_ninja() {");
+    const end = script.indexOf("\n}\n", start);
+    const patch = script.slice(start, end + 3);
+    const workspace = await mkdtemp(path.join(tmpdir(), "vc-cache-"));
+    try {
+      const coreDir = path.join(workspace, "scripts", "cmake");
+      const portDir = path.join(workspace, "ports", "vcpkg-cmake");
+      const coreFile = path.join(coreDir, "vcpkg_configure_cmake.cmake");
+      const portFile = path.join(portDir, "vcpkg_cmake_configure.cmake");
+      await mkdir(coreDir, { recursive: true });
+      await mkdir(portDir, { recursive: true });
+      await writeFile(
+        coreFile,
+        'if("${generator}" STREQUAL "Ninja" AND NOT DEFINED ENV{VCPKG_FORCE_SYSTEM_BINARIES})\n',
+      );
+      await writeFile(portFile, "  vcpkg_find_acquire_program(NINJA)\n");
+
+      const apply = () =>
+        execFileSync("sh", ["-s"], {
+          cwd: workspace,
+          input: `set -eu\nVCPKG_ROOT=.\n${patch}\npatch_bsd_vcpkg_cmake_ninja\n`,
+        });
+      apply();
+      const core = await readFile(coreFile, "utf8");
+      const port = await readFile(portFile, "utf8");
+      expect(core).toContain(
+        'AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD")',
+      );
+      expect(port).toContain(
+        'if(CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD")\n' +
+          "      find_program(NINJA NAMES ninja ninja-build REQUIRED)",
+      );
+      apply();
+      await expect(readFile(coreFile, "utf8")).resolves.toBe(core);
+      await expect(readFile(portFile, "utf8")).resolves.toBe(port);
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
+    }
   });
 
   test("honors skipped Mono install when NuGet is fetched", () => {
