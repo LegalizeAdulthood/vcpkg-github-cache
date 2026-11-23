@@ -35,6 +35,13 @@ Then push `develop` and wait for the repository workflows to pass:
 The `develop` Integration run is intentionally bounded.  It should exercise
 all supported platform families against a small vcpkg ref set.
 
+macOS runs on both arm64 (`macos-15`) and x64 (`macos-15-intel`) runners.
+Both architectures build the fixture, analyze its cache status, and require a
+warm cache hit on the second pass in `readwrite` mode.  For a selected manual
+run, set `platforms: macos` to test both architectures; combine it with other
+platforms using commas, or use `all` for every platform.  Push, scheduled,
+and full release runs include both macOS architectures automatically.
+
 ## Full Matrix
 
 Run the `Integration` workflow manually with the full release matrix:
@@ -53,7 +60,7 @@ missing-dependency-probe: none
 The expected matrix is:
 
 ```text
-5 platforms * 12 vcpkg release tags = 60 jobs
+7 platform/architecture pairs * 12 vcpkg release tags = 84 jobs
 ```
 
 Each extra explicit ref adds one job per platform.
