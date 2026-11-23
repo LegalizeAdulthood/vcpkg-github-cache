@@ -189,6 +189,14 @@ The setup action should:
 On Windows, run the vcpkg-fetched `nuget.exe` directly.  On Linux and
 macOS, run it as `mono /path/to/nuget.exe`.
 
+For BSD `emit-script` setup, patch the shared vcpkg program acquisition
+helper to require native Ninja before accepting a cached tool path or
+downloading a binary.  This covers both generator selection and parallel
+configuration through versioned registry helpers installed after setup.
+Other programs and non-BSD hosts retain their existing acquisition behavior.
+Repeated setup must leave the patch unchanged.  Missing native Ninja must
+fail clearly rather than fall back to a Linux executable.
+
 If `install-mono` is enabled and Mono is missing:
 
 - on Ubuntu, install Mono with `apt-get`;

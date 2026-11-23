@@ -4,7 +4,7 @@
  * Copyright 2026 Richard Thomson
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
@@ -106,9 +106,9 @@ describe("setup script emission", () => {
     expect(script).toContain("AND NOT VCPKG_HOST_IS_FREEBSD");
     expect(script).toContain("Patched BSD vcpkg core Ninja handling");
     expect(script).toContain(
-      "if(VCPKG_HOST_IS_OPENBSD OR VCPKG_HOST_IS_FREEBSD)",
+      'CMAKE_HOST_SYSTEM_NAME MATCHES \\"^(FreeBSD|OpenBSD|NetBSD)$\\"',
     );
-    expect(script).toContain("Patched BSD vcpkg-cmake Ninja handling");
+    expect(script).toContain("Patched BSD vcpkg Ninja acquisition");
     expect(script).toContain("vcpkgExtract(Archive|Tar)");
     expect(script).toContain("\\$(archivePath|tarballPath)");
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
@@ -288,11 +288,11 @@ describe("setup script emission", () => {
     expect(script).toContain("patch_bsd_vcpkg_spdx_json_string_encode");
     expect(script).toContain("vcpkg-github-cache JSON string fallback");
     expect(script).toContain("Patched OpenBSD vcpkg SPDX JSON string encoding");
-    expect(script).toContain("ports/vcpkg-cmake/vcpkg_cmake_configure.cmake");
+    expect(script).toContain("scripts/cmake/vcpkg_find_acquire_program.cmake");
     expect(script).toContain(
       "find_program(NINJA NAMES ninja ninja-build REQUIRED)",
     );
-    expect(script).toContain("Patched BSD vcpkg-cmake Ninja handling");
+    expect(script).toContain("Patched BSD vcpkg Ninja acquisition");
     expect(script).toContain("pkg_add -I mono");
     expect(script).toContain("ensure_bsd_nuget_command");
     expect(script).toContain("configure_github_nuget_source");
@@ -430,16 +430,20 @@ describe("setup script emission", () => {
     const workspace = await mkdtemp(path.join(tmpdir(), "vc-cache-"));
     try {
       const coreDir = path.join(workspace, "scripts", "cmake");
-      const portDir = path.join(workspace, "ports", "vcpkg-cmake");
       const coreFile = path.join(coreDir, "vcpkg_configure_cmake.cmake");
-      const portFile = path.join(portDir, "vcpkg_cmake_configure.cmake");
+      const acquireFile = path.join(
+        coreDir,
+        "vcpkg_find_acquire_program.cmake",
+      );
       await mkdir(coreDir, { recursive: true });
-      await mkdir(portDir, { recursive: true });
       await writeFile(
         coreFile,
         'if("${generator}" STREQUAL "Ninja" AND NOT DEFINED ENV{VCPKG_FORCE_SYSTEM_BINARIES})\n',
       );
-      await writeFile(portFile, "  vcpkg_find_acquire_program(NINJA)\n");
+      await writeFile(
+        acquireFile,
+        "function(vcpkg_find_acquire_program program)\nendfunction()\n",
+      );
 
       const apply = () =>
         execFileSync("sh", ["-s"], {
@@ -448,21 +452,168 @@ describe("setup script emission", () => {
         });
       apply();
       const core = await readFile(coreFile, "utf8");
-      const port = await readFile(portFile, "utf8");
+      const acquire = await readFile(acquireFile, "utf8");
       expect(core).toContain(
         'AND NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD")',
       );
-      expect(port).toContain(
-        'if(CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD")\n' +
-          "      find_program(NINJA NAMES ninja ninja-build REQUIRED)",
+      expect(acquire).toContain(
+        "        find_program(NINJA NAMES ninja ninja-build REQUIRED)",
       );
       apply();
       await expect(readFile(coreFile, "utf8")).resolves.toBe(core);
-      await expect(readFile(portFile, "utf8")).resolves.toBe(port);
+      await expect(readFile(acquireFile, "utf8")).resolves.toBe(acquire);
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }
   });
+
+  test.each(["freebsd", "openbsd", "netbsd"])(
+    "uses native Ninja from helpers installed after %s setup",
+    async (targetOs) => {
+      const plan = buildSetupPlan({
+        executionModeInput: "emit-script",
+        repository: "octo/repo",
+        targetOsInput: targetOs,
+      });
+      const script = renderSetupScript(plan);
+      const start = script.indexOf("patch_bsd_vcpkg_cmake_ninja() {");
+      const patch = script.slice(start, script.indexOf("\n}\n", start) + 3);
+      const workspace = await mkdtemp(path.join(tmpdir(), "vc-cache-"));
+      try {
+        const cmakeDir = path.join(workspace, "scripts", "cmake");
+        const acquireFile = path.join(
+          cmakeDir,
+          "vcpkg_find_acquire_program.cmake",
+        );
+        const nativeDir = path.join(workspace, "native");
+        const ninjaName = process.platform === "win32" ? "ninja.exe" : "ninja";
+        await mkdir(cmakeDir, { recursive: true });
+        await mkdir(nativeDir);
+        await writeFile(path.join(nativeDir, ninjaName), "native Ninja", {
+          mode: 0o755,
+        });
+        await writeFile(
+          acquireFile,
+          [
+            "function(vcpkg_find_acquire_program program)",
+            "    if(${program})",
+            "        return()",
+            "    endif()",
+            '    set("${program}" "${linux_ninja}" PARENT_SCOPE)',
+            "endfunction()",
+            "",
+          ].join("\n"),
+        );
+        const apply = () =>
+          execFileSync("sh", ["-s"], {
+            cwd: workspace,
+            input: `set -eu\nVCPKG_ROOT=.\n${patch}\npatch_bsd_vcpkg_cmake_ninja\n`,
+          });
+        apply();
+        const patched = await readFile(acquireFile, "utf8");
+        apply();
+        await expect(readFile(acquireFile, "utf8")).resolves.toBe(patched);
+
+        // A registry helper arrives after setup, without a working-tree port.
+        const installedDir = path.join(
+          workspace,
+          "installed",
+          "share",
+          "vcpkg-cmake",
+        );
+        await mkdir(installedDir, { recursive: true });
+        const helperFile = path.join(
+          installedDir,
+          "vcpkg_cmake_configure.cmake",
+        );
+        const helper = [
+          "function(vcpkg_cmake_configure)",
+          '    if(generator STREQUAL "Ninja")',
+          "        vcpkg_find_acquire_program(NINJA)",
+          '        set(make_program "${NINJA}" PARENT_SCOPE)',
+          "    endif()",
+          "    vcpkg_find_acquire_program(NINJA)",
+          '    set(parallel_program "${NINJA}" PARENT_SCOPE)',
+          "endfunction()",
+          "",
+        ].join("\n");
+        await writeFile(helperFile, helper);
+        const cmakeTest = path.join(workspace, "test.cmake");
+        await writeFile(
+          cmakeTest,
+          [
+            "cmake_minimum_required(VERSION 3.21)",
+            'set(CMAKE_HOST_SYSTEM_NAME "${host}")',
+            'set(CMAKE_PROGRAM_PATH "${CMAKE_CURRENT_LIST_DIR}/native")',
+            "set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH FALSE)",
+            "set(CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH FALSE)",
+            "set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH FALSE)",
+            'if(seed STREQUAL "missing")',
+            '    set(CMAKE_PROGRAM_PATH "${CMAKE_CURRENT_LIST_DIR}/missing")',
+            "endif()",
+            'set(linux_ninja "${CMAKE_CURRENT_LIST_DIR}/downloads/tools/ninja/1.12.1-linux/ninja")',
+            'if(seed STREQUAL "normal")',
+            '    set(NINJA "${linux_ninja}")',
+            'elseif(seed STREQUAL "cache")',
+            '    set(NINJA "${linux_ninja}" CACHE FILEPATH "")',
+            "endif()",
+            'include("${CMAKE_CURRENT_LIST_DIR}/scripts/cmake/vcpkg_find_acquire_program.cmake")',
+            'include("${CMAKE_CURRENT_LIST_DIR}/installed/share/vcpkg-cmake/vcpkg_cmake_configure.cmake")',
+            "vcpkg_cmake_configure()",
+            'if(NOT host STREQUAL "Linux")',
+            `    set(expected "\${CMAKE_CURRENT_LIST_DIR}/native/${ninjaName}")`,
+            "else()",
+            '    set(expected "${linux_ninja}")',
+            "endif()",
+            'if(NOT parallel_program STREQUAL expected OR (generator STREQUAL "Ninja" AND NOT make_program STREQUAL expected))',
+            '    message(FATAL_ERROR "Wrong Ninja: ${make_program};${parallel_program}")',
+            "endif()",
+            "vcpkg_find_acquire_program(OTHER)",
+            "if(NOT OTHER STREQUAL linux_ninja)",
+            '    message(FATAL_ERROR "Changed unrelated program acquisition")',
+            "endif()",
+            "",
+          ].join("\n"),
+        );
+        const host = targetOs
+          .replace("bsd", "BSD")
+          .replace(/^./, (c) => c.toUpperCase());
+        for (const generator of ["Ninja", "Unix Makefiles"]) {
+          for (const seed of ["unset", "normal", "cache"]) {
+            execFileSync("cmake", [
+              `-Dhost=${host}`,
+              `-Dgenerator=${generator}`,
+              `-Dseed=${seed}`,
+              "-P",
+              cmakeTest,
+            ]);
+          }
+        }
+        execFileSync("cmake", [
+          "-Dhost=Linux",
+          "-Dgenerator=Ninja",
+          "-P",
+          cmakeTest,
+        ]);
+        const missing = spawnSync(
+          "cmake",
+          [
+            `-Dhost=${host}`,
+            "-Dgenerator=Ninja",
+            "-Dseed=missing",
+            "-P",
+            cmakeTest,
+          ],
+          { encoding: "utf8" },
+        );
+        expect(missing.status).not.toBe(0);
+        expect(missing.stderr).toContain("Could not find NINJA");
+        await expect(readFile(helperFile, "utf8")).resolves.toBe(helper);
+      } finally {
+        await rm(workspace, { recursive: true, force: true });
+      }
+    },
+  );
 
   test("honors skipped Mono install when NuGet is fetched", () => {
     const plan = buildSetupPlan({

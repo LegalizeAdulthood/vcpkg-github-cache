@@ -169,7 +169,6 @@ export function renderSetupScript(
     bsdTarget.targetOs === "netbsd"
       ? [netBsdNinjaHost]
       : ["VCPKG_HOST_IS_OPENBSD", "VCPKG_HOST_IS_FREEBSD"];
-  const ninjaPortCondition = ninjaHosts.join(" OR ");
   const bsdLibcurlCompatTarget =
     bsdTarget.targetOs === "netbsd" || bsdTarget.targetOs === "openbsd";
 
@@ -382,63 +381,62 @@ export function renderSetupScript(
     ]);
     script.line("  fi");
     script.line(
-      '  port_cmake_file="${VCPKG_ROOT}/ports/vcpkg-cmake/vcpkg_cmake_configure.cmake"',
+      '  acquire_cmake_file="${VCPKG_ROOT}/scripts/cmake/vcpkg_find_acquire_program.cmake"',
     );
-    script.line('  if [ -f "${port_cmake_file}" ]; then');
+    script.line('  if [ -f "${acquire_cmake_file}" ]; then');
     script.line(
-      `    if grep -Fq ${quotePosixShellLiteral(`if(${ninjaPortCondition})`)} "\${port_cmake_file}"; then`,
+      '    if grep -Fq "# vcpkg-github-cache BSD system Ninja" "${acquire_cmake_file}"; then',
     );
     script.command("      printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("BSD vcpkg-cmake Ninja patch already applied"),
+      posixLiteral("BSD vcpkg Ninja acquisition patch already applied"),
     ]);
     script.line("    else");
     script.line(
-      '      tmp_port_cmake_file="${port_cmake_file}.vcpkg-github-cache.tmp"',
+      '      tmp_acquire_cmake_file="${acquire_cmake_file}.vcpkg-github-cache.tmp"',
     );
     script.line("      if ! awk '");
-    script.line(
-      "        /^[[:space:]]*vcpkg_find_acquire_program\\(NINJA\\)[[:space:]]*$/ {",
-    );
-    script.line(
-      '          indent = substr($0, 1, index($0, "vcpkg_find_acquire_program") - 1)',
-    );
-    script.line(
-      `          print indent ${JSON.stringify(`if(${ninjaPortCondition})`)}`,
-    );
-    script.line(
-      '          print indent "    find_program(NINJA NAMES ninja ninja-build REQUIRED)"',
-    );
-    script.line('          print indent "else()"');
-    script.line(
-      '          print indent "    vcpkg_find_acquire_program(NINJA)"',
-    );
-    script.line('          print indent "endif()"');
-    script.line("          patched = 1");
-    script.line("          next");
-    script.line("        }");
     script.line("        { print }");
+    script.line(
+      "        /^[[:space:]]*function\\(vcpkg_find_acquire_program[[:space:]]+program\\)[[:space:]]*$/ {",
+    );
+    script.line('          print "    # vcpkg-github-cache BSD system Ninja"');
+    script.line(
+      `          print ${JSON.stringify('    if(program STREQUAL "NINJA" AND CMAKE_HOST_SYSTEM_NAME MATCHES "^(FreeBSD|OpenBSD|NetBSD)$")')}`,
+    );
+    script.line('          print "        unset(NINJA)"');
+    script.line('          print "        unset(NINJA CACHE)"');
+    script.line(
+      '          print "        find_program(NINJA NAMES ninja ninja-build REQUIRED)"',
+    );
+    script.line(
+      '          print "        set(NINJA \\"${NINJA}\\" PARENT_SCOPE)"',
+    );
+    script.line('          print "        return()"');
+    script.line('          print "    endif()"');
+    script.line("          patched = 1");
+    script.line("        }");
     script.line("        END { if (!patched) exit 1 }");
     script.line(
-      '      \' "${port_cmake_file}" > "${tmp_port_cmake_file}"; then',
+      '      \' "${acquire_cmake_file}" > "${tmp_acquire_cmake_file}"; then',
     );
-    script.line('        rm -f "${tmp_port_cmake_file}"');
+    script.line('        rm -f "${tmp_acquire_cmake_file}"');
     script.command("        printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("Unable to patch BSD vcpkg-cmake Ninja handling"),
+      posixLiteral("Unable to patch BSD vcpkg Ninja acquisition"),
     ]);
     script.line("        exit 1");
     script.line("      fi");
-    script.line('      mv "${tmp_port_cmake_file}" "${port_cmake_file}"');
+    script.line('      mv "${tmp_acquire_cmake_file}" "${acquire_cmake_file}"');
     script.command("      printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("Patched BSD vcpkg-cmake Ninja handling"),
+      posixLiteral("Patched BSD vcpkg Ninja acquisition"),
     ]);
     script.line("  fi");
     script.line("  else");
     script.command("    printf", [
       posixLiteral("%s\\n"),
-      posixLiteral("BSD vcpkg-cmake Ninja patch skipped: port helper missing"),
+      posixLiteral("BSD vcpkg Ninja patch skipped: acquisition helper missing"),
     ]);
     script.line("  fi");
   } else {

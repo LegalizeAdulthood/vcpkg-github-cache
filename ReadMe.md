@@ -302,14 +302,17 @@ steps:
 
 The emitted OpenBSD setup script also handles OpenBSD-specific vcpkg tool
 setup, NuGet metadata, Ninja handling, and runtime library path setup.
+The shared vcpkg program acquisition helper requires native Ninja on BSD,
+including parallel configuration through versioned registry helpers
+installed after setup.  Install Ninja in the VM before building.
 Project prerequisites remain the caller workflow's responsibility.
 
 ### NetBSD VM Build
 
 NetBSD uses the same `emit-script` pattern as the other BSD VMs.  The
 emitted setup script handles generic BSD setup, target-side NuGet metadata,
-and vcpkg tool package caching.  It does not emit the OpenBSD-specific
-runtime library path or Ninja patches.
+and vcpkg tool package caching.  Ninja acquisition uses the native BSD tool;
+runtime library paths use the NetBSD compatibility setup.
 
 ```yaml
 permissions:
