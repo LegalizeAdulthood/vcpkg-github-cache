@@ -1079,7 +1079,7 @@ jobs:
           target-os: netbsd
 
       - name: Build fixture on NetBSD
-        uses: vmactions/netbsd-vm@99816dccf75edf233ed6cd00a159e3a5b85ea373 # v1
+        uses: vmactions/netbsd-vm@5957cf330aef2e6ddc63c604364c99ce2e02b91d # v1.5.3
         env:
           CACHE_MODE: ${{ needs.plan.outputs.cache_mode }}
           FIXTURE_REQUIRE_BISON: >-
@@ -1089,7 +1089,7 @@ jobs:
           VCPKG_ROOT: vcpkg
         with:
           release: "10.1"
-          usesh: true
+          debug: true
           sync: rsync
           copyback: true
           envs: >-
