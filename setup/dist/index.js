@@ -32099,6 +32099,114 @@ const NETBSD_LEGACY_TOOL_PATCH = `
 +#endif
          if (!data)
 `.trim();
+// Backport for 2025-06-02, before Solaris tool metadata was added.
+const NETBSD_2025_06_TOOL_PATCH = `
+--- a/include/vcpkg/tools.test.h
++++ b/include/vcpkg/tools.test.h
+@@ -49,2 +49,3 @@
+-        OpenBsd,
+-    };
++        OpenBsd,
++        NetBsd,
++    };
+--- a/src/vcpkg-test/tools.cpp
++++ b/src/vcpkg-test/tools.cpp
+@@ -258,1 +258,1 @@
+-        "Expected one of: windows, osx, linux, freebsd, openbsd" == invalid_os.error());
++        "Expected one of: windows, osx, linux, freebsd, openbsd, netbsd" == invalid_os.error());
+--- a/src/vcpkg/base/system.cpp
++++ b/src/vcpkg/base/system.cpp
+@@ -770,2 +770,4 @@
+-#elif defined(__OpenBSD__)
+-        return "openbsd";
++#elif defined(__OpenBSD__)
++        return "openbsd";
++#elif defined(__NetBSD__)
++        return "netbsd";
+@@ -777,2 +779,2 @@
+-        return "unknown"
+-#endif
++        return "unknown";
++#endif
+--- a/src/vcpkg/base/system.mac.cpp
++++ b/src/vcpkg/base/system.mac.cpp
+@@ -12,2 +12,2 @@
+-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+-#include <ifaddrs.h>
++#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
++#include <ifaddrs.h>
+@@ -153,2 +153,2 @@
+-#elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+-        // The getifaddrs(ifaddrs** ifap) function creates a linked list of structures
++#elif defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
++        // The getifaddrs(ifaddrs** ifap) function creates a linked list of structures
+@@ -194,2 +194,2 @@
+-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+-            auto address = reinterpret_cast<sockaddr_dl*>(interface->ifa_addr);
++#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
++            auto address = reinterpret_cast<sockaddr_dl*>(interface->ifa_addr);
+--- a/src/vcpkg/base/system.process.cpp
++++ b/src/vcpkg/base/system.process.cpp
+@@ -23,2 +23,2 @@
+-#if defined(__FreeBSD__) || defined(__OpenBSD__)
+-extern char** environ;
++#if defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
++extern char** environ;
+--- a/src/vcpkg/commands.build.cpp
++++ b/src/vcpkg/commands.build.cpp
+@@ -994,4 +994,8 @@
+-        else if (cmake_system_name == "OpenBSD")
+-        {
+-            return m_paths.scripts / "toolchains/openbsd.cmake";
+-        }
++        else if (cmake_system_name == "OpenBSD")
++        {
++            return m_paths.scripts / "toolchains/openbsd.cmake";
++        }
++        else if (cmake_system_name == "NetBSD")
++        {
++            return m_paths.scripts / "toolchains/netbsd.cmake";
++        }
+--- a/src/vcpkg/platform-expression.cpp
++++ b/src/vcpkg/platform-expression.cpp
+@@ -29,2 +29,3 @@
+-        openbsd,
+-        osx,
++        openbsd,
++        netbsd,
++        osx,
+@@ -60,2 +61,3 @@
+-            {"openbsd", Identifier::openbsd},
+-            {"osx", Identifier::osx},
++            {"openbsd", Identifier::openbsd},
++            {"netbsd", Identifier::netbsd},
++            {"osx", Identifier::osx},
+@@ -562,1 +564,2 @@
+-                        case Identifier::openbsd: return true_if_exists_and_equal("VCPKG_CMAKE_SYSTEM_NAME", "OpenBSD");
++                        case Identifier::openbsd: return true_if_exists_and_equal("VCPKG_CMAKE_SYSTEM_NAME", "OpenBSD");
++                        case Identifier::netbsd: return true_if_exists_and_equal("VCPKG_CMAKE_SYSTEM_NAME", "NetBSD");
+--- a/src/vcpkg/tools.cpp
++++ b/src/vcpkg/tools.cpp
+@@ -40,2 +40,3 @@
+-        {"openbsd", ToolOs::OpenBsd},
+-    };
++        {"openbsd", ToolOs::OpenBsd},
++        {"netbsd", ToolOs::NetBsd},
++    };
+@@ -177,5 +178,7 @@
+-#elif defined(__OpenBSD__)
+-        auto data = get_raw_tool_data(tool_data_table, tool, hp, ToolOs::OpenBsd);
+-#else
+-        return nullopt;
+-#endif
++#elif defined(__OpenBSD__)
++        auto data = get_raw_tool_data(tool_data_table, tool, hp, ToolOs::OpenBsd);
++#elif defined(__NetBSD__)
++        auto data = get_raw_tool_data(tool_data_table, tool, hp, ToolOs::NetBsd);
++#else
++        ToolDataEntry* data = nullptr;
++#endif
+`.trim();
 
 ;// CONCATENATED MODULE: ./src/shared/posix-script.ts
 /*
@@ -32586,22 +32694,43 @@ function renderSetupScript(plan, vcpkgCommit) {
         ]);
         script.line("    return");
         script.line("  fi");
-        script.line('  if grep -q "vcpkg-github-cache NetBSD legacy tool patch" "${bootstrap_file}"; then');
+        script.line('  if grep -q "vcpkg-github-cache NetBSD legacy tool patch v2" "${bootstrap_file}"; then');
         script.command("    printf", [
             posixLiteral("%s\\n"),
             posixLiteral("NetBSD vcpkg-tool bootstrap patch already applied"),
         ]);
         script.line("    return");
         script.line("  fi");
+        script.line("  add_legacy_patch=1");
+        script.line('  if grep -q "vcpkg-github-cache NetBSD legacy tool patch" "${bootstrap_file}"; then');
+        script.line("    add_legacy_patch=0");
+        script.line("  fi");
         script.line("  add_math_patch=1");
         script.line('  if grep -q "vcpkg-github-cache NetBSD vcpkg-tool isfinite patch" "${bootstrap_file}"; then');
         script.line("    add_math_patch=0");
         script.line("  fi");
         script.line('  tmp_bootstrap_file="${bootstrap_file}.vcpkg-github-cache.tmp"');
-        script.line('  if ! awk -v add_math_patch="${add_math_patch}" \'');
+        script.line('  if ! awk -v add_legacy_patch="${add_legacy_patch}" -v add_math_patch="${add_math_patch}" \'');
         script.line("    {");
         script.line("      print");
         script.line('      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtract(Archive|Tar) "\\$(archivePath|tarballPath)" "\\$srcBaseDir"[[:space:]]*$/) {');
+        const junePatch = [
+            "    # vcpkg-github-cache NetBSD legacy tool patch v2",
+            '    if [ "$(uname -s)" = "NetBSD" ]; then',
+            '        case "$VCPKG_TOOL_RELEASE_TAG" in',
+            "        2025-06-02)",
+            "            echo 'Backporting NetBSD support to vcpkg-tool 2025-06-02'",
+            '            patch --posix -s -f -F 0 -p1 -d "$srcDir" <<\\VCPKG_NETBSD_JUNE_TOOL_PATCH || exit 1',
+            NETBSD_2025_06_TOOL_PATCH,
+            "VCPKG_NETBSD_JUNE_TOOL_PATCH",
+            "            ;;",
+            "        esac",
+            "    fi",
+        ];
+        for (const line of junePatch.join("\n").split("\n")) {
+            script.line(`        print ${JSON.stringify(line).replaceAll("'", "\\047")}`);
+        }
+        script.line("        if (add_legacy_patch) {");
         const legacyPatch = [
             "    # vcpkg-github-cache NetBSD legacy tool patch",
             '    if [ "$(uname -s)" = "NetBSD" ]; then',
@@ -32618,6 +32747,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         for (const line of legacyPatch.join("\n").split("\n")) {
             script.line(`        print ${JSON.stringify(line).replaceAll("'", "\\047")}`);
         }
+        script.line("        }");
         script.line("        if (add_math_patch) {");
         script.line('        print "    # vcpkg-github-cache NetBSD vcpkg-tool isfinite patch"');
         script.line('        print "    if [ \\"$(uname -s)\\" = \\"NetBSD\\" ]; then"');

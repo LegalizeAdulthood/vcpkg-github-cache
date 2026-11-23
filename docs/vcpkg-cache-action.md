@@ -197,6 +197,14 @@ Other programs and non-BSD hosts retain their existing acquisition behavior.
 Repeated setup must leave the patch unchanged.  Missing native Ninja must
 fail clearly rather than fall back to a Linux executable.
 
+For NetBSD cold bootstrap, backport tool releases `2025-06-02`,
+`2025-07-21`, and `2025-09-03` after source extraction and before compilation.
+The June release needs its own patch because its source predates Solaris
+support.  Cover host OS detection, process environment declarations, native
+MAC address APIs, tool metadata, platform expressions, and toolchain selection.
+Upgrade previously patched bootstrap helpers without duplicating existing
+backports or math fixes.  A warm tool cache must not be required.
+
 If `install-mono` is enabled and Mono is missing:
 
 - on Ubuntu, install Mono with `apt-get`;

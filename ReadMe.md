@@ -313,6 +313,9 @@ NetBSD uses the same `emit-script` pattern as the other BSD VMs.  The
 emitted setup script handles generic BSD setup, target-side NuGet metadata,
 and vcpkg tool package caching.  Ninja acquisition uses the native BSD tool;
 runtime library paths use the NetBSD compatibility setup.
+Cold bootstrap backports NetBSD support to vcpkg-tool `2025-06-02`,
+`2025-07-21`, and `2025-09-03` before compilation.  These releases do not
+require a previously cached tool.
 
 ```yaml
 permissions:

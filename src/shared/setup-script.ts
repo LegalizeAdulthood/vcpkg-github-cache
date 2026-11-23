@@ -8,7 +8,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
 import { runCommand, type CommandRunner } from "./command";
-import { NETBSD_LEGACY_TOOL_PATCH } from "./netbsd-legacy-tool-patch";
+import {
+  NETBSD_2025_06_TOOL_PATCH,
+  NETBSD_LEGACY_TOOL_PATCH,
+} from "./netbsd-legacy-tool-patch";
 import {
   posixLiteral,
   posixRuntimeExpression,
@@ -574,13 +577,19 @@ export function renderSetupScript(
     script.line("    return");
     script.line("  fi");
     script.line(
-      '  if grep -q "vcpkg-github-cache NetBSD legacy tool patch" "${bootstrap_file}"; then',
+      '  if grep -q "vcpkg-github-cache NetBSD legacy tool patch v2" "${bootstrap_file}"; then',
     );
     script.command("    printf", [
       posixLiteral("%s\\n"),
       posixLiteral("NetBSD vcpkg-tool bootstrap patch already applied"),
     ]);
     script.line("    return");
+    script.line("  fi");
+    script.line("  add_legacy_patch=1");
+    script.line(
+      '  if grep -q "vcpkg-github-cache NetBSD legacy tool patch" "${bootstrap_file}"; then',
+    );
+    script.line("    add_legacy_patch=0");
     script.line("  fi");
     script.line("  add_math_patch=1");
     script.line(
@@ -591,12 +600,33 @@ export function renderSetupScript(
     script.line(
       '  tmp_bootstrap_file="${bootstrap_file}.vcpkg-github-cache.tmp"',
     );
-    script.line('  if ! awk -v add_math_patch="${add_math_patch}" \'');
+    script.line(
+      '  if ! awk -v add_legacy_patch="${add_legacy_patch}" -v add_math_patch="${add_math_patch}" \'',
+    );
     script.line("    {");
     script.line("      print");
     script.line(
       '      if (!patched && $0 ~ /^[[:space:]]*vcpkgExtract(Archive|Tar) "\\$(archivePath|tarballPath)" "\\$srcBaseDir"[[:space:]]*$/) {',
     );
+    const junePatch = [
+      "    # vcpkg-github-cache NetBSD legacy tool patch v2",
+      '    if [ "$(uname -s)" = "NetBSD" ]; then',
+      '        case "$VCPKG_TOOL_RELEASE_TAG" in',
+      "        2025-06-02)",
+      "            echo 'Backporting NetBSD support to vcpkg-tool 2025-06-02'",
+      '            patch --posix -s -f -F 0 -p1 -d "$srcDir" <<\\VCPKG_NETBSD_JUNE_TOOL_PATCH || exit 1',
+      NETBSD_2025_06_TOOL_PATCH,
+      "VCPKG_NETBSD_JUNE_TOOL_PATCH",
+      "            ;;",
+      "        esac",
+      "    fi",
+    ];
+    for (const line of junePatch.join("\n").split("\n")) {
+      script.line(
+        `        print ${JSON.stringify(line).replaceAll("'", "\\047")}`,
+      );
+    }
+    script.line("        if (add_legacy_patch) {");
     const legacyPatch = [
       "    # vcpkg-github-cache NetBSD legacy tool patch",
       '    if [ "$(uname -s)" = "NetBSD" ]; then',
@@ -615,6 +645,7 @@ export function renderSetupScript(
         `        print ${JSON.stringify(line).replaceAll("'", "\\047")}`,
       );
     }
+    script.line("        }");
     script.line("        if (add_math_patch) {");
     script.line(
       '        print "    # vcpkg-github-cache NetBSD vcpkg-tool isfinite patch"',
