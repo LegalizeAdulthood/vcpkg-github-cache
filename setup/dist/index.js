@@ -32285,8 +32285,6 @@ const FREEBSD_TARGET = {
         url: FREEBSD_NUGET_URL,
         version: FREEBSD_NUGET_VERSION,
     },
-    packageInstallCommand: "pkg install -y",
-    packageInstallerLabel: "pkg",
     releaseKey: "freebsd-release",
     targetOs: "freebsd",
     toolPackagePrefix: "vcpkg-tool_freebsd",
@@ -32296,8 +32294,6 @@ const NETBSD_TARGET = {
     cacheToolPackage: true,
     label: "NetBSD",
     nugetDirectorySuffix: "netbsd",
-    packageInstallCommand: "/usr/sbin/pkg_add -u",
-    packageInstallerLabel: "pkg_add",
     releaseKey: "netbsd-release",
     targetOs: "netbsd",
     toolPackagePrefix: "vcpkg-tool_netbsd",
@@ -32307,8 +32303,6 @@ const OPENBSD_TARGET = {
     cacheToolPackage: true,
     label: "OpenBSD",
     nugetDirectorySuffix: "openbsd",
-    packageInstallCommand: "pkg_add -I",
-    packageInstallerLabel: "pkg_add",
     releaseKey: "openbsd-release",
     targetOs: "openbsd",
     toolPackagePrefix: "vcpkg-tool_openbsd",
@@ -32359,6 +32353,12 @@ function renderSetupScript(plan, vcpkgCommit) {
     const script = new PosixScript();
     const targetSettings = bsdTargetSettings(plan.targetOs);
     const bsdTarget = targetSettings ?? FREEBSD_TARGET;
+    const packageManager = plan.packageManager ?? "pkg";
+    const packageInstallCommand = {
+        pkg: "pkg install -y",
+        pkg_add: bsdTarget.targetOs === "netbsd" ? "/usr/sbin/pkg_add -u" : "pkg_add -I",
+        pkgin: "pkgin -y install",
+    }[packageManager];
     const unzipPackageName = bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
     const netBsdNinjaHost = 'CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD"';
     const ninjaHosts = bsdTarget.targetOs === "netbsd"
@@ -32423,7 +32423,7 @@ function renderSetupScript(plan, vcpkgCommit) {
         posixLiteral(`Installing ${bsdTarget.label} vcpkg bootstrap packages:`),
         posixRuntimeExpression('"${missing_packages}"'),
     ]);
-    script.line(`    ${bsdTarget.packageInstallCommand} \${missing_packages}`);
+    script.line(`    ${packageInstallCommand} \${missing_packages}`);
     script.line("  fi");
     script.line("}");
     script.blank();
@@ -32436,7 +32436,7 @@ function renderSetupScript(plan, vcpkgCommit) {
             posixLiteral("%s\\n"),
             posixLiteral("Installing NetBSD root certificates"),
         ]);
-        script.line("    /usr/sbin/pkg_add -u mozilla-rootcerts-openssl");
+        script.line(`    ${packageInstallCommand} mozilla-rootcerts-openssl`);
         script.line("  fi");
         script.line("  if [ -x /usr/pkg/sbin/mozilla-rootcerts ]; then");
         script.line("    /usr/pkg/sbin/mozilla-rootcerts install || true");
@@ -33452,9 +33452,9 @@ function renderSetupScript(plan, vcpkgCommit) {
             script.line("else");
             script.command("  printf", [
                 posixLiteral("%s\\n"),
-                posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
+                posixLiteral(`Installing Mono with ${packageManager}`),
             ]);
-            script.line(`  ${bsdTarget.packageInstallCommand} mono`);
+            script.line(`  ${packageInstallCommand} mono`);
             script.line("fi");
         }
         else {
@@ -33541,9 +33541,9 @@ function renderSetupScript(plan, vcpkgCommit) {
             script.line("else");
             script.command("  printf", [
                 posixLiteral("%s\\n"),
-                posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
+                posixLiteral(`Installing Mono with ${packageManager}`),
             ]);
-            script.line(`  ${bsdTarget.packageInstallCommand} mono`);
+            script.line(`  ${packageInstallCommand} mono`);
             script.line("fi");
         }
         else {
@@ -33802,6 +33802,24 @@ function normalizeSetupTargetOs(value) {
     }
     throw new Error(`Unsupported target-os: ${value}`);
 }
+function resolveSetupPackageManager(value, targetOs) {
+    const supported = {
+        current: [],
+        freebsd: ["pkg"],
+        netbsd: ["pkg_add", "pkgin"],
+        openbsd: ["pkg_add"],
+    };
+    const allowed = supported[targetOs];
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized) {
+        return allowed[0];
+    }
+    if (allowed.includes(normalized)) {
+        return normalized;
+    }
+    throw new Error(`Unsupported package-manager '${value}' for target-os=${targetOs}; ` +
+        `supported values: ${allowed.join(", ") || "none (BSD targets only)"}`);
+}
 function ownerFromRepository(repository) {
     const [owner, name] = (repository ?? "").split("/");
     if (!owner || !name) {
@@ -33990,6 +34008,7 @@ function buildSetupPlan(inputs) {
         feedUrl,
         installMono,
         installNuget,
+        packageManager: resolveSetupPackageManager(inputs.packageManagerInput, targetOs),
         packageScope: packageScope(inputs.repository, feedOwner),
         scriptDirectory,
         sourceName,
@@ -34021,6 +34040,7 @@ function setupEmitSummaryItems(input) {
     return [
         summaryItem("Diagnosis", input.diagnosis),
         summaryItem("Target OS", input.targetOs),
+        summaryItem("Package manager", input.packageManager),
         summaryItem("Setup script", input.setupScript),
         summaryItem("Setup environment", input.setupEnv),
         summaryItem("Feed", input.feedUrl),
@@ -34135,20 +34155,20 @@ function createTraceLogger(options) {
 
 
 const BINARY_SOURCES_ENV = "VCPKG_BINARY_SOURCES";
-async function writeSetupSummary(diagnosis, items, verbose) {
+async function writeSetupSummary(diagnosis, items, verbose, compactItems = []) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
     const summary = summary_summary.addHeading(setupStatusHeading(diagnosis), 3);
-    if (verbose) {
-        summary.addList([...items]);
+    if (verbose || compactItems.length > 0) {
+        summary.addList([...(verbose ? items : compactItems)]);
     }
     await summary.write();
 }
 function binarySourceMode(installNuget, access) {
     return installNuget ? access : "clear";
 }
-async function writeEmitSummary(diagnosis, feedUrl, targetOs, setupScript, setupEnv, binaryMode, verbose) {
+async function writeEmitSummary(diagnosis, feedUrl, targetOs, packageManager, setupScript, setupEnv, binaryMode, verbose) {
     if (!process.env.GITHUB_STEP_SUMMARY) {
         return;
     }
@@ -34156,10 +34176,11 @@ async function writeEmitSummary(diagnosis, feedUrl, targetOs, setupScript, setup
         binarySourceMode: binaryMode,
         diagnosis,
         feedUrl,
+        packageManager,
         setupEnv,
         setupScript,
         targetOs,
-    }), verbose);
+    }), verbose, [`Package manager: ${packageManager}`]);
 }
 async function writeRunSummary(diagnosis, feedUrl, nugetCommand, vcpkgRoot, vcpkgVersion, verbose) {
     await writeSetupSummary(diagnosis, setupRunSummaryItems({
@@ -34182,6 +34203,7 @@ async function run() {
         feedOwnerInput: getInput("feed-owner"),
         installMonoInput: getInput("install-mono"),
         installNugetInput: getInput("install-nuget"),
+        packageManagerInput: getInput("package-manager"),
         repository: process.env.GITHUB_REPOSITORY,
         scriptDirectoryInput: getInput("script-directory"),
         sourceNameInput: getInput("source-name"),
@@ -34215,6 +34237,7 @@ async function run() {
         traceLogger.input("access", plan.access);
         traceLogger.input("execution-mode", plan.executionMode);
         traceLogger.input("target-os", plan.targetOs);
+        traceLogger.input("package-manager", plan.packageManager ?? "");
         traceLogger.input("script-directory", plan.scriptDirectory);
         traceLogger.value("platform", `${process.platform}/${process.arch}`);
         traceLogger.value("feed URL", plan.feedUrl);
@@ -34241,7 +34264,7 @@ async function run() {
         setOutput("setup-script", files.setupScriptOutput);
         setOutput("setup-env", files.setupEnvOutput);
         info(diagnosis);
-        await writeEmitSummary(diagnosis, plan.feedUrl, plan.targetOs, files.setupScriptOutput, files.setupEnvOutput, binarySourceMode(plan.installNuget, plan.access), plan.debug);
+        await writeEmitSummary(diagnosis, plan.feedUrl, plan.targetOs, plan.packageManager ?? "none", files.setupScriptOutput, files.setupEnvOutput, binarySourceMode(plan.installNuget, plan.access), plan.debug);
         if (plan.debug || plan.trace) {
             info(`Token path: ${plan.tokenKind === "github" ? "GITHUB_TOKEN" : "PAT"}`);
             info(`Feed owner: ${plan.feedOwner}`);

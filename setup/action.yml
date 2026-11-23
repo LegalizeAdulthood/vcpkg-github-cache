@@ -39,6 +39,8 @@ inputs:
   target-os:
     description: "Target OS for emitted setup script: current, freebsd, netbsd, or openbsd."
     default: current
+  package-manager:
+    description: "BSD package manager: pkg, pkg_add, or pkgin. Defaults from target-os."
   script-directory:
     description: Directory where generated setup files are written.
     default: .vcpkg-github-cache

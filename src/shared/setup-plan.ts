@@ -11,8 +11,10 @@ import {
   normalizeTokenKind,
   parseBoolean,
   resolveFeedOwner,
+  resolveSetupPackageManager,
   resolveUsername,
   SetupExecutionMode,
+  SetupPackageManager,
   SetupTargetOs,
   TokenKind,
 } from "./inputs";
@@ -28,6 +30,7 @@ export interface SetupPlanInputs {
   readonly feedOwnerInput?: string;
   readonly installMonoInput?: string;
   readonly installNugetInput?: string;
+  readonly packageManagerInput?: string;
   readonly repository?: string;
   readonly scriptDirectoryInput?: string;
   readonly sourceNameInput?: string;
@@ -49,6 +52,7 @@ export interface SetupPlan {
   readonly feedUrl: string;
   readonly installMono: boolean;
   readonly installNuget: boolean;
+  readonly packageManager: SetupPackageManager | undefined;
   readonly packageScope: string;
   readonly scriptDirectory: string;
   readonly sourceName: string;
@@ -124,6 +128,10 @@ export function buildSetupPlan(inputs: SetupPlanInputs): SetupPlan {
     feedUrl,
     installMono,
     installNuget,
+    packageManager: resolveSetupPackageManager(
+      inputs.packageManagerInput,
+      targetOs,
+    ),
     packageScope: packageScope(inputs.repository, feedOwner),
     scriptDirectory,
     sourceName,

@@ -42,8 +42,6 @@ interface BsdTargetSettings {
   readonly label: string;
   readonly nugetDirectorySuffix: string;
   readonly nugetMetadata?: BsdNugetMetadata;
-  readonly packageInstallCommand: string;
-  readonly packageInstallerLabel: string;
   readonly releaseKey: string;
   readonly targetOs: string;
   readonly toolPackagePrefix: string;
@@ -59,8 +57,6 @@ const FREEBSD_TARGET: BsdTargetSettings = {
     url: FREEBSD_NUGET_URL,
     version: FREEBSD_NUGET_VERSION,
   },
-  packageInstallCommand: "pkg install -y",
-  packageInstallerLabel: "pkg",
   releaseKey: "freebsd-release",
   targetOs: "freebsd",
   toolPackagePrefix: "vcpkg-tool_freebsd",
@@ -71,8 +67,6 @@ const NETBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "NetBSD",
   nugetDirectorySuffix: "netbsd",
-  packageInstallCommand: "/usr/sbin/pkg_add -u",
-  packageInstallerLabel: "pkg_add",
   releaseKey: "netbsd-release",
   targetOs: "netbsd",
   toolPackagePrefix: "vcpkg-tool_netbsd",
@@ -83,8 +77,6 @@ const OPENBSD_TARGET: BsdTargetSettings = {
   cacheToolPackage: true,
   label: "OpenBSD",
   nugetDirectorySuffix: "openbsd",
-  packageInstallCommand: "pkg_add -I",
-  packageInstallerLabel: "pkg_add",
   releaseKey: "openbsd-release",
   targetOs: "openbsd",
   toolPackagePrefix: "vcpkg-tool_openbsd",
@@ -165,6 +157,13 @@ export function renderSetupScript(
   const script = new PosixScript();
   const targetSettings = bsdTargetSettings(plan.targetOs);
   const bsdTarget = targetSettings ?? FREEBSD_TARGET;
+  const packageManager = plan.packageManager ?? "pkg";
+  const packageInstallCommand = {
+    pkg: "pkg install -y",
+    pkg_add:
+      bsdTarget.targetOs === "netbsd" ? "/usr/sbin/pkg_add -u" : "pkg_add -I",
+    pkgin: "pkgin -y install",
+  }[packageManager];
   const unzipPackageName =
     bsdTarget.targetOs === "openbsd" ? "unzip--" : "unzip";
   const netBsdNinjaHost = 'CMAKE_HOST_SYSTEM_NAME STREQUAL "NetBSD"';
@@ -234,7 +233,7 @@ export function renderSetupScript(
     posixLiteral(`Installing ${bsdTarget.label} vcpkg bootstrap packages:`),
     posixRuntimeExpression('"${missing_packages}"'),
   ]);
-  script.line(`    ${bsdTarget.packageInstallCommand} \${missing_packages}`);
+  script.line(`    ${packageInstallCommand} \${missing_packages}`);
   script.line("  fi");
   script.line("}");
   script.blank();
@@ -249,7 +248,7 @@ export function renderSetupScript(
       posixLiteral("%s\\n"),
       posixLiteral("Installing NetBSD root certificates"),
     ]);
-    script.line("    /usr/sbin/pkg_add -u mozilla-rootcerts-openssl");
+    script.line(`    ${packageInstallCommand} mozilla-rootcerts-openssl`);
     script.line("  fi");
     script.line("  if [ -x /usr/pkg/sbin/mozilla-rootcerts ]; then");
     script.line("    /usr/pkg/sbin/mozilla-rootcerts install || true");
@@ -1540,9 +1539,9 @@ export function renderSetupScript(
       script.line("else");
       script.command("  printf", [
         posixLiteral("%s\\n"),
-        posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
+        posixLiteral(`Installing Mono with ${packageManager}`),
       ]);
-      script.line(`  ${bsdTarget.packageInstallCommand} mono`);
+      script.line(`  ${packageInstallCommand} mono`);
       script.line("fi");
     } else {
       script.command("printf", [
@@ -1632,9 +1631,9 @@ export function renderSetupScript(
       script.line("else");
       script.command("  printf", [
         posixLiteral("%s\\n"),
-        posixLiteral(`Installing Mono with ${bsdTarget.packageInstallerLabel}`),
+        posixLiteral(`Installing Mono with ${packageManager}`),
       ]);
-      script.line(`  ${bsdTarget.packageInstallCommand} mono`);
+      script.line(`  ${packageInstallCommand} mono`);
       script.line("fi");
     } else {
       script.command("printf", [

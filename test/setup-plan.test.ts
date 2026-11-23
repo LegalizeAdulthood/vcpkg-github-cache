@@ -28,6 +28,7 @@ describe("setup plan", () => {
       feedUrl: "https://nuget.pkg.github.com/octo/index.json",
       installMono: true,
       installNuget: true,
+      packageManager: undefined,
       packageScope: "octo-repo",
       scriptDirectory: ".vcpkg-github-cache",
       sourceName: "GitHubPackages",
@@ -70,6 +71,7 @@ describe("setup plan", () => {
       feedUrl: "https://nuget.pkg.github.com/packages/index.json",
       installMono: false,
       installNuget: false,
+      packageManager: "pkg",
       packageScope: "packages",
       scriptDirectory: "out/cache",
       sourceName: "Cache",
@@ -94,6 +96,7 @@ describe("setup plan", () => {
       executionMode: "emit-script",
       feedOwner: "octo",
       targetOs: "openbsd",
+      packageManager: "pkg_add",
     });
   });
 
@@ -109,6 +112,7 @@ describe("setup plan", () => {
       executionMode: "emit-script",
       feedOwner: "octo",
       targetOs: "netbsd",
+      packageManager: "pkg_add",
     });
   });
 });

@@ -317,6 +317,25 @@ Cold bootstrap backports NetBSD support to vcpkg-tool `2025-06-02`,
 `2025-07-21`, and `2025-09-03` before compilation.  These releases do not
 require a previously cached tool.
 
+For a NetBSD VM configured for `pkgin`, select it explicitly:
+
+```yaml
+- id: vc
+  uses: LegalizeAdulthood/vcpkg-github-cache@v1
+  with:
+    token: ${{ github.token }}
+    execution-mode: emit-script
+    target-os: netbsd
+    package-manager: pkgin
+    bootstrap: "true"
+    install-nuget: "true"
+    install-mono: "true"
+```
+
+The VM must already provide the selected manager and configured package
+repositories.  The action uses that manager for curl, zip, unzip, Mono,
+and root certificate packages.  It does not detect or switch managers.
+
 ```yaml
 permissions:
   contents: read
@@ -451,6 +470,11 @@ and `"false"` in workflow YAML.
 - `execution-mode`: default `"run"`.  Setup mode: `run` or `emit-script`.
 - `target-os`: default `"current"`.  Target OS for emitted setup scripts:
   `current`, `freebsd`, `netbsd`, or `openbsd`.
+- `package-manager`: optional BSD dependency installer.  FreeBSD supports
+  `pkg`; OpenBSD supports `pkg_add`; NetBSD supports `pkg_add` or `pkgin`.
+  Defaults to `pkg` on FreeBSD and `pkg_add` on NetBSD and OpenBSD.
+  Explicit values require a BSD `target-os`; invalid combinations fail
+  before script emission.  The setup summary reports the selected manager.
 - `script-directory`: default `".vcpkg-github-cache"`.  Directory for
   generated setup files.
 - `debug`: default `"false"`.  Emit additional diagnostics.

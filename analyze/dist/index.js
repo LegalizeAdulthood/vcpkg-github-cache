@@ -140937,6 +140937,24 @@ function normalizeSetupTargetOs(value) {
     }
     throw new Error(`Unsupported target-os: ${value}`);
 }
+function resolveSetupPackageManager(value, targetOs) {
+    const supported = {
+        current: [],
+        freebsd: ["pkg"],
+        netbsd: ["pkg_add", "pkgin"],
+        openbsd: ["pkg_add"],
+    };
+    const allowed = supported[targetOs];
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized) {
+        return allowed[0];
+    }
+    if (allowed.includes(normalized)) {
+        return normalized;
+    }
+    throw new Error(`Unsupported package-manager '${value}' for target-os=${targetOs}; ` +
+        `supported values: ${allowed.join(", ") || "none (BSD targets only)"}`);
+}
 function ownerFromRepository(repository) {
     const [owner, name] = (repository ?? "").split("/");
     if (!owner || !name) {

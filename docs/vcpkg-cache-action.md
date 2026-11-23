@@ -127,6 +127,10 @@ whether the actual build was a warm hit, partial hit, or cold seed.
 - `bootstrap`: optional.  Defaults to `true`.
 - `install-nuget`: optional.  Defaults to `true`.
 - `install-mono`: optional.  Defaults to `true`.
+- `package-manager`: optional BSD dependency installer.  FreeBSD supports
+  `pkg`, OpenBSD supports `pkg_add`, and NetBSD supports `pkg_add` or `pkgin`.
+  The default is `pkg` on FreeBSD and `pkg_add` on NetBSD and OpenBSD.
+  Reject explicit values with `target-os: current` and unsupported pairs.
 - `source-name`: optional.  Defaults to `GitHubPackages`.
 - `access`: optional.  Defaults to `readwrite`.
 - `debug`: optional.  Defaults to `false`.
@@ -171,6 +175,15 @@ Otherwise the setup action emits a configured NuGet binary source after the
 NuGet source credentials and API key are configured.
 
 ## Setup Behavior
+
+Resolve `package-manager` in the setup plan before emitting files.  Use it
+for every automatic BSD package install, including bootstrap dependencies,
+Mono, and NetBSD root certificates.  Preserve target-specific package names
+and options: FreeBSD uses `pkg install -y`, NetBSD uses either
+`/usr/sbin/pkg_add -u` or `pkgin -y install`, and OpenBSD uses `pkg_add -I`.
+The caller provides the selected manager and repository configuration; do
+not detect an alternative at runtime.  Include the selected manager in the
+setup summary even when debug output is disabled.
 
 The setup action should:
 

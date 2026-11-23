@@ -8,6 +8,7 @@ export interface SetupEmitSummaryInput {
   readonly binarySourceMode: string;
   readonly diagnosis: string;
   readonly feedUrl: string;
+  readonly packageManager: string;
   readonly setupEnv: string;
   readonly setupScript: string;
   readonly targetOs: string;
@@ -39,6 +40,7 @@ export function setupEmitSummaryItems(
   return [
     summaryItem("Diagnosis", input.diagnosis),
     summaryItem("Target OS", input.targetOs),
+    summaryItem("Package manager", input.packageManager),
     summaryItem("Setup script", input.setupScript),
     summaryItem("Setup environment", input.setupEnv),
     summaryItem("Feed", input.feedUrl),

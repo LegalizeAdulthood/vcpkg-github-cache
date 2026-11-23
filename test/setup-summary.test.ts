@@ -33,11 +33,13 @@ describe("setup summary", () => {
       setupEnv: ".vcpkg-github-cache/setup.env",
       setupScript: ".vcpkg-github-cache/setup.sh",
       targetOs: "freebsd",
+      packageManager: "pkg",
     });
 
     expect(items).toEqual([
       "Diagnosis: vcpkg GitHub Packages cache setup script emitted",
       "Target OS: freebsd",
+      "Package manager: pkg",
       "Setup script: .vcpkg-github-cache/setup.sh",
       "Setup environment: .vcpkg-github-cache/setup.env",
       "Feed: https://nuget.pkg.github.com/octo/index.json",
@@ -54,6 +56,7 @@ describe("setup summary", () => {
         setupEnv: ".vcpkg-github-cache/setup.env",
         setupScript: ".vcpkg-github-cache/setup.sh",
         targetOs: "openbsd",
+        packageManager: "pkg_add",
       }),
     ).toContain("Target OS: openbsd");
     expect(
@@ -64,6 +67,7 @@ describe("setup summary", () => {
         setupEnv: ".vcpkg-github-cache/setup.env",
         setupScript: ".vcpkg-github-cache/setup.sh",
         targetOs: "netbsd",
+        packageManager: "pkgin",
       }),
     ).toContain("Target OS: netbsd");
   });

@@ -32,6 +32,7 @@ async function writeSetupSummary(
   diagnosis: string,
   items: readonly string[],
   verbose: boolean,
+  compactItems: readonly string[] = [],
 ): Promise<void> {
   if (!process.env.GITHUB_STEP_SUMMARY) {
     return;
@@ -39,8 +40,8 @@ async function writeSetupSummary(
 
   const summary = core.summary.addHeading(setupStatusHeading(diagnosis), 3);
 
-  if (verbose) {
-    summary.addList([...items]);
+  if (verbose || compactItems.length > 0) {
+    summary.addList([...(verbose ? items : compactItems)]);
   }
 
   await summary.write();
@@ -54,6 +55,7 @@ async function writeEmitSummary(
   diagnosis: string,
   feedUrl: string,
   targetOs: string,
+  packageManager: string,
   setupScript: string,
   setupEnv: string,
   binaryMode: string,
@@ -69,11 +71,13 @@ async function writeEmitSummary(
       binarySourceMode: binaryMode,
       diagnosis,
       feedUrl,
+      packageManager,
       setupEnv,
       setupScript,
       targetOs,
     }),
     verbose,
+    [`Package manager: ${packageManager}`],
   );
 }
 
@@ -111,6 +115,7 @@ export async function run(): Promise<void> {
     feedOwnerInput: core.getInput("feed-owner"),
     installMonoInput: core.getInput("install-mono"),
     installNugetInput: core.getInput("install-nuget"),
+    packageManagerInput: core.getInput("package-manager"),
     repository: process.env.GITHUB_REPOSITORY,
     scriptDirectoryInput: core.getInput("script-directory"),
     sourceNameInput: core.getInput("source-name"),
@@ -146,6 +151,7 @@ export async function run(): Promise<void> {
     traceLogger.input("access", plan.access);
     traceLogger.input("execution-mode", plan.executionMode);
     traceLogger.input("target-os", plan.targetOs);
+    traceLogger.input("package-manager", plan.packageManager ?? "");
     traceLogger.input("script-directory", plan.scriptDirectory);
     traceLogger.value("platform", `${process.platform}/${process.arch}`);
     traceLogger.value("feed URL", plan.feedUrl);
@@ -185,6 +191,7 @@ export async function run(): Promise<void> {
       diagnosis,
       plan.feedUrl,
       plan.targetOs,
+      plan.packageManager ?? "none",
       files.setupScriptOutput,
       files.setupEnvOutput,
       binarySourceMode(plan.installNuget, plan.access),

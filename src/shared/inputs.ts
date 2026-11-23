@@ -7,6 +7,7 @@
 export type TokenKind = "github" | "pat";
 export type SetupExecutionMode = "run" | "emit-script";
 export type SetupTargetOs = "current" | "freebsd" | "netbsd" | "openbsd";
+export type SetupPackageManager = "pkg" | "pkg_add" | "pkgin";
 
 const TRUE_VALUES = new Set(["1", "on", "true", "yes"]);
 
@@ -66,6 +67,30 @@ export function normalizeSetupTargetOs(
   }
 
   throw new Error(`Unsupported target-os: ${value}`);
+}
+
+export function resolveSetupPackageManager(
+  value: string | undefined,
+  targetOs: SetupTargetOs,
+): SetupPackageManager | undefined {
+  const supported: Record<SetupTargetOs, readonly SetupPackageManager[]> = {
+    current: [],
+    freebsd: ["pkg"],
+    netbsd: ["pkg_add", "pkgin"],
+    openbsd: ["pkg_add"],
+  };
+  const allowed = supported[targetOs];
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return allowed[0];
+  }
+  if (allowed.includes(normalized as SetupPackageManager)) {
+    return normalized as SetupPackageManager;
+  }
+  throw new Error(
+    `Unsupported package-manager '${value}' for target-os=${targetOs}; ` +
+      `supported values: ${allowed.join(", ") || "none (BSD targets only)"}`,
+  );
 }
 
 export function ownerFromRepository(
